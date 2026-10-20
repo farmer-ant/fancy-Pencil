@@ -1,0 +1,4 @@
+#!/bin/sh
+# LispDraft launcher.  Usage: ./lispdraft [--tty] [file.lsp ...] [drawing.dxf]
+DIR=$(cd "$(dirname "$0")" && pwd)
+exec sbcl --noinform --disable-debugger --load "$DIR/load.lisp" --eval '(lispdraft:main)' --end-toplevel-options "$@"
