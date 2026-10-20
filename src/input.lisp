@@ -3,7 +3,6 @@
 
 (in-package :lispdraft)
 
-(defvar *ui* :tty "Either :TTY or :GUI.")
 (defvar *initget-bits* 0)
 (defvar *initget-keywords* nil)
 (defvar *osnap-override* nil "One-shot osnap bits typed at a point prompt (END, MID ...).")
@@ -339,9 +338,9 @@
   (let ((best nil) (bd nil))
     (dolist (e (entities-near p tol) best)
       (dolist (pc (entity-pieces e))
-        (let ((dd (if (eq (first pc) :gseg)
-                      (if (point-in-text-box-p p e) 0d0 (piece-dist pc p))
-                      (piece-dist pc p))))
+        (let ((dd (cond ((eq (first pc) :gseg) (if (point-in-text-box-p p e) 0d0 (piece-dist pc p)))
+                        ((equal (ent-type e) "HATCH") (if (point-in-hatch-p p (ent-data e)) (* 0.5 tol) (piece-dist pc p)))
+                        (t (piece-dist pc p)))))
           (when (and (<= dd tol) (or (null bd) (< dd bd))) (setf best e bd dd)))))))
 
 (defun point-in-text-box-p (p e)

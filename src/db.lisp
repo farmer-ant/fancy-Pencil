@@ -10,7 +10,9 @@
   handle data (deleted nil))
 
 (defstruct layer
-  name (color 7) (ltype "CONTINUOUS") (on t) (frozen nil) (locked nil))
+  name (color 7) (ltype "CONTINUOUS") (on t) (frozen nil) (locked nil) (lineweight -3))
+
+(defstruct ltype name (desc "") (pattern nil))
 
 (defstruct block-def name (base (pt 0 0)) (entities nil))
 
@@ -19,6 +21,8 @@
   (next-handle #x30)
   (layers (list (make-layer :name "0")))
   (blocks nil)
+  (ltypes nil)
+  (dimstyles nil)
   (modcount 0)
   (saved-modcount 0)
   (filename nil)
@@ -55,7 +59,14 @@
               "LASTPOINT" (pt 0 0) "HIGHLIGHT" 1 "BLIPMODE" 0 "ERRNO" 0
               "PICKFIRST" 1 "MIRRTEXT" 0 "TEXTSTYLE" "Standard" "CTAB" "Model"
               "INSUNITS" 1 "MEASUREMENT" 0 "PLINEWID" 0d0 "LIMMIN" (list 0d0 0d0)
-              "LIMMAX" (list 12d0 9d0) "OSNAPZ" 0 "EXPERT" 0 "FILEDIA" 1)
+              "LIMMAX" (list 12d0 9d0) "OSNAPZ" 0 "EXPERT" 0 "FILEDIA" 1
+              "CELTYPE" "BYLAYER" "CELWEIGHT" -1 "LTSCALE" 1d0 "CELTSCALE" 1d0 "LWDISPLAY" 0
+              "PLINEGEN" 0 "HPNAME" "ANSI31" "HPSCALE" 1d0 "HPANG" 0d0 "GRIPS" 1 "GRIPOBJLIMIT" 100 "GRIPSIZE" 5
+              "SAVEFORMAT" "2000" "PEDITFUZZ" 0d0 "REVCLOUDARC" 0.5d0 "BRKLSIZE" 1d0
+              "DIMSTYLE" "Standard" "DIMSCALE" 1d0 "DIMASZ" 0.18d0 "DIMTXT" 0.18d0 "DIMEXO" 0.0625d0
+              "DIMEXE" 0.18d0 "DIMGAP" 0.09d0 "DIMDEC" 4 "DIMTAD" 1 "DIMTSZ" 0d0 "DIMCLRD" 0 "DIMCLRE" 0
+              "DIMCLRT" 0 "DIMLFAC" 1d0 "DIMPOST" "" "DIMCEN" 0.09d0 "DIMDLI" 0.38d0 "DIMTIH" 0 "DIMADEC" 0
+              "DIMBLK" "")
         by #'cddr do (setf (gethash k *sysvars*) v)))
 (reset-sysvars)
 
@@ -86,6 +97,13 @@
       (when (and (not (assoc 62 data)) (stringp cecolor) (every #'digit-char-p cecolor)
                  (plusp (length cecolor)))
         (setf data (append data (list (cons 62 (parse-integer cecolor)))))))
+    (let ((lt (sysvar "CELTYPE")) (lw (sysvar "CELWEIGHT")) (ls (sysvar "CELTSCALE")))
+      (when (and (not (assoc 6 data)) (stringp lt) (not (string-equal lt "BYLAYER")))
+        (setf data (append data (list (cons 6 lt)))))
+      (when (and (not (assoc 370 data)) (integerp lw) (/= lw -1))
+        (setf data (append data (list (cons 370 lw)))))
+      (when (and (not (assoc 48 data)) (realp ls) (/= ls 1))
+        (setf data (append data (list (cons 48 (d ls)))))))
     (ensure-layer (dxf 8 data))
     data))
 
@@ -148,10 +166,12 @@
         (mapcar #'copy-layer (drawing-layers *dwg*))
         (copy-list (drawing-blocks *dwg*))
         (drawing-next-handle *dwg*)
-        (sysvar "CLAYER")))
+        (sysvar "CLAYER")
+        (copy-list (drawing-ltypes *dwg*))))
 
 (defun restore-snapshot (snap)
-  (destructuring-bind (ents states layers blocks nh clayer) snap
+  (destructuring-bind (ents states layers blocks nh clayer ltypes) snap
+    (setf (drawing-ltypes *dwg*) ltypes)
     (let ((v (make-array (max 64 (length ents)) :adjustable t :fill-pointer 0)))
       (loop for e across ents do (vector-push-extend e v))
       (setf (drawing-entities *dwg*) v))
@@ -271,6 +291,7 @@
            (let ((*insert-depth* (1+ *insert-depth*)))
              (loop for sub in (block-def-entities b) append (data-pieces sub))))))
       ((equal type "ELLIPSE") (ellipse-pieces data))
+      ((equal type "HATCH") (hatch-pieces data))
       ((equal type "SPLINE") (spline-pieces data))
       ((equal type "SOLID")
        (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
@@ -416,6 +437,7 @@
        (let ((d1 (map-points data '(10 11 13 14 15 16) fp)))
          (if (dxf 50 data) (set-dxf 50 (funcall fa (dxf 50 data)) d1) d1)))
       ((equal type "SOLID") (map-points data '(10 11 12 13) fp))
+      ((equal type "HATCH") (xform-hatch data xf))
       ((equal type "SPLINE") (map-points data '(10 11 12 13) fp))
       (t (map-points data '(10 11) fp)))))
 

@@ -80,7 +80,7 @@ proc mcmd {m label cmd {accel ""}} {
 }
 proc menucmd {cmd} { emit MENU $cmd; focus .cmd.e }
 
-foreach {name label} {file File edit Edit view View draw Draw modify Modify format Format tools Tools help Help} {
+foreach {name label} {file File edit Edit view View draw Draw dim Dimension modify Modify format Format tools Tools express Express help Help} {
     menu .mb.$name
     .mb add cascade -label $label -menu .mb.$name
 }
@@ -119,25 +119,43 @@ mcmd .mb.draw "Arc: 3 Points" ARC
 mcmd .mb.draw "Arc: Center, Start, End" "ARC C"
 mcmd .mb.draw "Ellipse (polyline)" ELLIPSE
 .mb.draw add separator
+mcmd .mb.draw "Hatch..." HATCH
+mcmd .mb.draw "Revision Cloud" REVCLOUD
 mcmd .mb.draw "Point" POINT
 mcmd .mb.draw "Single Line Text" TEXT
 mcmd .mb.draw "Block: Make" BLOCK
 mcmd .mb.draw "Block: Insert" INSERT
 
-foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offset OFFSET Stretch STRETCH \
+foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offset OFFSET Stretch STRETCH "Edit Polyline" PEDIT "Edit Hatch" HATCHEDIT \
                Trim TRIM Extend EXTEND Fillet FILLET Chamfer CHAMFER Break BREAK Explode EXPLODE Join JOIN \
                "Array (rectangular)" ARRAYRECT "Array (polar)" ARRAYPOLAR Erase ERASE} {
     mcmd .mb.modify $l $c
 }
 mcmd .mb.format "Layer..." LAYER
+mcmd .mb.format "Linetype..." LINETYPE
+mcmd .mb.format "Lineweight..." LWEIGHT
+mcmd .mb.format "Dimension Style..." DIMSTYLE
+mcmd .mb.format "Hatch Settings..." HPSET
 mcmd .mb.format "Text Size" TEXTSIZE
 mcmd .mb.format "Point Style" PDMODE
+mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
+mcmd .mb.tools "Edit Command Aliases..." ALIASEDIT
+mcmd .mb.tools "Reload Aliases" REINIT
 mcmd .mb.tools "Object Snap Settings" OSNAP
 mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
 mcmd .mb.tools "List" LIST
 mcmd .mb.tools "Area" AREA
+foreach {l c} {Linear DIMLINEAR Aligned DIMALIGNED Radius DIMRADIUS Diameter DIMDIAMETER Angular DIMANGULAR \
+               Continue DIMCONTINUE Baseline DIMBASELINE "Dimension Style..." DIMSTYLE} { mcmd .mb.dim $l $c }
+foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pick)" LAYOFF "Layer Freeze (pick)" LAYFRZ
+               "Layers On" LAYON "Layers Thaw" LAYTHW "Layer Lock (pick)" LAYLCK "Layer Unlock (pick)" LAYULK
+               "Change to Current Layer" LAYCUR "Match Object Layer" LAYMCH "Merge Layers" LAYMRG "Delete Layer" LAYDEL
+               "Overkill (delete duplicates)" OVERKILL "Break Line Symbol" BREAKLINE "Extended Trim" EXTRIM
+               "Multiple Pedit" MPEDIT "Text Case" TCASE "Text Number (TCOUNT)" TCOUNT "Text to MText" TXT2MTXT
+               "Move/Copy/Rotate (MOCORO)" MOCORO "Copy Multiple (COPYM)" COPYM "Flatten" FLATTEN
+               "Select Similar" SELECTSIMILAR "List nested (XLIST)" XLIST "Burst" BURST} { mcmd .mb.express $l $c }
 mcmd .mb.help "Command Reference" HELP
 mcmd .mb.help "About LispDraft" ABOUT
 
@@ -181,11 +199,82 @@ pack $lf.t -side top
 pack $lf -side left -anchor n
 ttk::separator .tb.slayers -orient vertical
 pack .tb.slayers -side left -fill y -padx 3
+set pf [ttk::frame .tb.props -padding {2 0 6 0}]
+foreach {w lbl key wd} {color Color COLOR 12 ltype Linetype LTYPE 14 lweight Lineweight LWEIGHT 10} {
+    set r [ttk::frame $pf.$w]
+    ttk::label $r.l -text $lbl -width 9 -style Dim.TLabel
+    ttk::combobox $r.cb -width $wd -state readonly -takefocus 0
+    bind $r.cb <<ComboboxSelected>> [list propcombo $key $r.cb]
+    pack $r.l $r.cb -side left
+    pack $r -side top -anchor w
+}
+ttk::label $pf.t -text Properties -style Group.TLabel
+pack $pf.t -side top
+pack $pf -side left -anchor n
+ttk::separator .tb.sprops -orient vertical
+pack .tb.sprops -side left -fill y -padx 3
+proc propcombo {key cb} { emit CURPROP $key [$cb get]; focus .cmd.e }
+proc setcurprops {colors color ltypes ltype lweights lweight} {
+    .tb.props.color.cb configure -values $colors;   .tb.props.color.cb set $color
+    .tb.props.ltype.cb configure -values $ltypes;   .tb.props.ltype.cb set $ltype
+    .tb.props.lweight.cb configure -values $lweights; .tb.props.lweight.cb set $lweight
+}
 tbgroup view View {Extents "ZOOM E" Window "ZOOM W" Undo U Redo REDO}
 
 # ---------------------------------------------------------------- canvas
+ttk::frame .main
+pack .main -side top -fill both -expand 1
 canvas .c -background $bg -highlightthickness 0 -cursor none -borderwidth 0
-pack .c -side top -fill both -expand 1
+pack .c -in .main -side left -fill both -expand 1
+
+# Properties palette (PROPERTIES / Ctrl+1)
+frame .pal -background $panel -width 290
+pack propagate .pal 0
+label .pal.title -text "Properties" -background $panel2 -foreground $fg -anchor w -padx 8 -pady 4 -font {Helvetica 10 bold}
+label .pal.what -text "No selection" -background $panel -foreground $accent -anchor w -padx 8 -pady 3
+frame .pal.rows -background $panel
+pack .pal.title -side top -fill x
+pack .pal.what -side top -fill x
+pack .pal.rows -side top -fill both -expand 1 -padx 4
+set ::palshown 0
+proc palette_toggle {} {
+    if {$::palshown} { pack forget .pal; set ::palshown 0 } else { pack .pal -in .main -side right -fill y -before .c; set ::palshown 1 }
+    emit PALETTE $::palshown
+}
+proc palette_set {what rows} {
+    .pal.what configure -text $what
+    foreach w [winfo children .pal.rows] { destroy $w }
+    set i 0
+    foreach r $rows {
+        lassign $r key label value kind choices
+        if {$kind eq "head"} {
+            label .pal.rows.h$i -text $label -background $::panel -foreground $::dim -anchor w -font {Helvetica 8 bold}
+            grid .pal.rows.h$i -row $i -column 0 -columnspan 2 -sticky ew -pady {6 1}
+            incr i; continue
+        }
+        label .pal.rows.l$i -text $label -background $::panel -foreground $::fg -anchor w -font {Helvetica 9}
+        switch -- $kind {
+            ro { label .pal.rows.v$i -text $value -background $::panel -foreground $::dim -anchor w -font {Helvetica 9} }
+            combo {
+                ttk::combobox .pal.rows.v$i -values $choices -width 16 -state readonly -takefocus 0
+                .pal.rows.v$i set $value
+                bind .pal.rows.v$i <<ComboboxSelected>> [list palemit $key .pal.rows.v$i]
+            }
+            default {
+                entry .pal.rows.v$i -background $::panel2 -foreground $::fg -insertbackground $::fg -relief flat -width 16 -font {Helvetica 9}
+                .pal.rows.v$i insert 0 $value
+                bind .pal.rows.v$i <Return> [list palemit $key .pal.rows.v$i]
+                bind .pal.rows.v$i <KP_Enter> [list palemit $key .pal.rows.v$i]
+            }
+        }
+        grid .pal.rows.l$i -row $i -column 0 -sticky ew -padx {4 6} -pady 1
+        grid .pal.rows.v$i -row $i -column 1 -sticky ew -pady 1
+        incr i
+    }
+    grid columnconfigure .pal.rows 1 -weight 1
+}
+proc palemit {key w} { emit PROP $key [$w get]; focus .cmd.e }
+bind all <Control-Key-1> {palette_toggle; break}
 
 bind .c <Motion> {emit M %x %y}
 bind .c <ButtonPress-1> {emit B %x %y; focus .cmd.e}
@@ -220,7 +309,7 @@ label .st.xy -text "0.0000, 0.0000, 0.0000" -background $panel -foreground $fg -
 pack .st.xy -side left
 ttk::label .st.model -text "MODEL" -style Dim.TLabel
 pack .st.model -side right -padx 6
-foreach {t k} {OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
+foreach {t k} {LWT LWT OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
     ttk::button .st.[string tolower $t] -text $t -style Toggle.TButton -takefocus 0 -command [list togglekey $k]
     pack .st.[string tolower $t] -side right -padx 1
 }
@@ -284,8 +373,8 @@ proc setprompt {s spaces} {
     focus .cmd.e
 }
 proc setxy {s} { .st.xy configure -text $s }
-proc settoggles {grid snap ortho osnap} {
-    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap] {
+proc settoggles {grid snap ortho osnap {lwt 0}} {
+    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt] {
         .st.$w configure -style [expr {$v ? "On.Toggle.TButton" : "Toggle.TButton"}]
     }
 }
@@ -302,12 +391,12 @@ proc ask {id script} {
 proc setgrread {v} { set ::grread $v }
 
 # ---------------------------------------------------------------- layer dialog
-proc layerdlg {rows} {
+proc layerdlg {rows {ltypes {}} {lweights {}}} {
     set w .ld
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Layer Properties Manager"
-        wm geometry $w 640x380+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
+        wm geometry $w 720x420+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
         wm transient $w .
         ttk::frame $w.tb -padding 6
         foreach {lbl act} {"New Layer" new "Delete" delete "Set Current" current} {
@@ -319,8 +408,17 @@ proc layerdlg {rows} {
         ttk::button $w.tb.cs -text "Set Color" -command {layeract color [.ld.tb.ce get]}
         pack $w.tb.cl $w.tb.ce $w.tb.cs -side left -padx 2
         pack $w.tb -side top -fill x
-        ttk::treeview $w.t -columns {status name on freeze lock color} -show headings -selectmode browse
-        foreach {c t wd} {status "" 30 name Name 220 on On 60 freeze Freeze 70 lock Lock 60 color Color 70} {
+        ttk::frame $w.tb2 -padding {6 0 6 6}
+        ttk::label $w.tb2.ll -text "Linetype:"
+        ttk::combobox $w.tb2.lt -width 14 -state readonly
+        ttk::button $w.tb2.ls -text "Set Linetype" -command {layeract ltype [.ld.tb2.lt get]}
+        ttk::label $w.tb2.wl -text "   Lineweight:"
+        ttk::combobox $w.tb2.lw -width 10 -state readonly
+        ttk::button $w.tb2.ws -text "Set Lineweight" -command {layeract lweight [.ld.tb2.lw get]}
+        pack $w.tb2.ll $w.tb2.lt $w.tb2.ls $w.tb2.wl $w.tb2.lw $w.tb2.ws -side left -padx 2
+        pack $w.tb2 -side top -fill x
+        ttk::treeview $w.t -columns {status name on freeze lock color ltype lweight} -show headings -selectmode browse
+        foreach {c t wd} {status "" 26 name Name 170 on On 50 freeze Freeze 60 lock Lock 60 color Color 50 ltype Linetype 100 lweight Lineweight 80} {
             $w.t heading $c -text $t
             $w.t column $c -width $wd -anchor [expr {$c eq "name" ? "w" : "center"}]
         }
@@ -334,15 +432,17 @@ proc layerdlg {rows} {
         bind $w.t <Double-Button-1> {layeract current}
         bind $w <Escape> {destroy .ld; focus .cmd.e; break}
     }
+    $w.tb2.lt configure -values $ltypes
+    $w.tb2.lw configure -values $lweights
     set sel [$w.t selection]
     set selname ""
     if {$sel ne ""} { set selname [lindex [$w.t item $sel -values] 1] }
     $w.t delete [$w.t children {}]
     foreach r $rows {
-        lassign $r name on frz lck color cur
+        lassign $r name on frz lck color cur ltype lweight
         if {$cur} { set mark "\u2713" } else { set mark "" }
         set id [$w.t insert {} end -values [list $mark $name \
-                    [expr {$on ? "On" : "off"}] [expr {$frz ? "Frozen" : "-"}] [expr {$lck ? "Locked" : "-"}] $color]]
+                    [expr {$on ? "On" : "off"}] [expr {$frz ? "Frozen" : "-"}] [expr {$lck ? "Locked" : "-"}] $color $ltype $lweight]]
         if {$name eq $selname} { $w.t selection set $id }
     }
     raise $w
@@ -365,11 +465,123 @@ proc layerclick {x y} {
     }
 }
 proc layeract {act {arg ""}} {
-    if {$act eq "color"} {
+    if {$act in {ltype lweight}} {
+        if {$arg ne ""} { emit LAYERACT $act [string map {" " "_"} $arg] [layersel] }
+    } elseif {$act eq "color"} {
         emit LAYERACT color [expr {$arg eq "" ? 7 : $arg}] [layersel]
     } else {
         emit LAYERACT $act [layersel]
     }
+}
+# ---------------------------------------------------------------- generic form dialog
+# rows: {key label value kind choices}; returns key\x1evalue\x1f... or "" when cancelled
+proc formdlg {title rows oklabel} {
+    set w .form
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w $title
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 10]
+    pack $f -fill both -expand 1
+    set i 0
+    set ::formkeys {}
+    foreach r $rows {
+        lassign $r key label value kind choices
+        ttk::label $f.l$i -text $label
+        if {$kind eq "combo"} {
+            ttk::combobox $f.v$i -values $choices -width 22
+            $f.v$i set $value
+        } else {
+            ttk::entry $f.v$i -width 24
+            $f.v$i insert 0 $value
+        }
+        grid $f.l$i -row $i -column 0 -sticky w -padx {0 10} -pady 2
+        grid $f.v$i -row $i -column 1 -sticky ew -pady 2
+        lappend ::formkeys [list $key $f.v$i]
+        incr i
+    }
+    set b [ttk::frame $f.b]
+    ttk::button $b.ok -text $oklabel -command {formdone 1}
+    ttk::button $b.cancel -text Cancel -command {formdone 0}
+    pack $b.cancel $b.ok -side right -padx 3
+    grid $b -row $i -column 0 -columnspan 2 -sticky e -pady {10 0}
+    bind $w <Return> {formdone 1}
+    bind $w <Escape> {formdone 0}
+    set ::formresult ""
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
+    focus $f.v0
+    grab $w
+    tkwait window $w
+    return $::formresult
+}
+proc formdone {ok} {
+    set ::formresult ""
+    if {$ok} {
+        set parts {}
+        foreach kv $::formkeys { lassign $kv key wdg; lappend parts "$key\x1e[$wdg get]" }
+        set ::formresult [join $parts "\x1f"]
+        if {$::formresult eq ""} { set ::formresult "\x1e" }
+    }
+    destroy .form
+}
+
+# ---------------------------------------------------------------- alias editor
+# pairs: flat list alias command ...; returns the edited flat list joined by \x1f, or "" if cancelled
+proc aliasdlg {pairs} {
+    set w .alias
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Edit Command Aliases"
+    wm transient $w .
+    wm geometry $w 520x520+[expr {[winfo rootx .] + 160}]+[expr {[winfo rooty .] + 80}]
+    set f [ttk::frame $w.f -padding 8]
+    pack $f -fill both -expand 1
+    ttk::treeview $f.t -columns {alias command} -show headings -selectmode browse
+    $f.t heading alias -text Alias; $f.t column alias -width 120
+    $f.t heading command -text "AutoCAD-style command"; $f.t column command -width 300
+    ttk::scrollbar $f.s -command [list $f.t yview]
+    $f.t configure -yscrollcommand [list $f.s set]
+    foreach {a c} $pairs { $f.t insert {} end -values [list $a $c] }
+    grid $f.t -row 0 -column 0 -columnspan 4 -sticky nsew
+    grid $f.s -row 0 -column 4 -sticky ns
+    ttk::label $f.la -text Alias:
+    ttk::entry $f.a -width 12
+    ttk::label $f.lc -text Command:
+    ttk::entry $f.c -width 24
+    grid $f.la -row 1 -column 0 -sticky w -pady 6
+    grid $f.a -row 1 -column 1 -sticky w
+    grid $f.lc -row 1 -column 2 -sticky e
+    grid $f.c -row 1 -column 3 -sticky ew
+    set b [ttk::frame $f.b]
+    ttk::button $b.add -text "Add / Update" -command {
+        set a [string toupper [string trim [.alias.f.a get]]]; set c [string toupper [string trim [.alias.f.c get]]]
+        if {$a ne "" && $c ne ""} {
+            foreach id [.alias.f.t children {}] { if {[lindex [.alias.f.t item $id -values] 0] eq $a} { .alias.f.t delete $id } }
+            .alias.f.t insert {} 0 -values [list $a $c]
+        }
+    }
+    ttk::button $b.del -text "Delete" -command { foreach id [.alias.f.t selection] { .alias.f.t delete $id } }
+    ttk::button $b.ok -text "Save" -command {
+        set out {}
+        foreach id [.alias.f.t children {}] { lassign [.alias.f.t item $id -values] a c; lappend out "$a\x1e$c" }
+        set ::aliasresult [join $out "\x1f"]; if {$::aliasresult eq ""} { set ::aliasresult "\x1e" }
+        destroy .alias
+    }
+    ttk::button $b.cancel -text Cancel -command { set ::aliasresult ""; destroy .alias }
+    pack $b.add $b.del -side left -padx 2
+    pack $b.cancel $b.ok -side right -padx 2
+    grid $b -row 2 -column 0 -columnspan 5 -sticky ew -pady {6 0}
+    grid rowconfigure $f 0 -weight 1
+    grid columnconfigure $f 3 -weight 1
+    bind $f.t <<TreeviewSelect>> {
+        set id [.alias.f.t selection]
+        if {$id ne ""} { lassign [.alias.f.t item $id -values] a c
+            .alias.f.a delete 0 end; .alias.f.a insert 0 $a; .alias.f.c delete 0 end; .alias.f.c insert 0 $c }
+    }
+    set ::aliasresult ""
+    grab $w
+    tkwait window $w
+    return $::aliasresult
 }
 emit READY
 # test hook: LISPDRAFT_TEST_TCL=script.tcl is sourced after startup (used by the automated GUI tests)
