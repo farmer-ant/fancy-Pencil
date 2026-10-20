@@ -1,0 +1,453 @@
+;;;; db.lisp — the drawing database.
+;;;; Every entity is stored as a DXF association list exactly like the one
+;;;; AutoLISP's ENTGET returns (minus the (-1 . ename) pair), so ENTGET/ENTMOD
+;;;; are nearly free. Angles inside the database are radians (as in AutoLISP);
+;;;; the DXF reader/writer converts to and from degrees.
+
+(in-package :lispdraft)
+
+(defstruct (ename (:constructor %make-ename (handle data)))
+  handle data (deleted nil))
+
+(defstruct layer
+  name (color 7) (ltype "CONTINUOUS") (on t) (frozen nil) (locked nil))
+
+(defstruct block-def name (base (pt 0 0)) (entities nil))
+
+(defstruct drawing
+  (entities (make-array 64 :adjustable t :fill-pointer 0))
+  (next-handle #x30)
+  (layers (list (make-layer :name "0")))
+  (blocks nil)
+  (modcount 0)
+  (saved-modcount 0)
+  (filename nil)
+  (undo nil) (redo nil))
+
+(defvar *dwg* (make-drawing))
+(defvar *sysvars* (make-hash-table :test #'equalp))
+
+(defun dxf (code data) (cdr (assoc code data)))
+(defun set-dxf (code val data)
+  (if (assoc code data)
+      (let ((done nil))
+        (mapcar (lambda (pair)
+                  (if (and (not done) (consp pair) (eql (car pair) code))
+                      (progn (setf done t) (cons code val))
+                      pair))
+                data))
+      (append data (list (cons code val)))))
+(defun rem-dxf (code data) (remove code data :key (lambda (x) (and (consp x) (car x)))))
+
+(defun touch () (incf (drawing-modcount *dwg*)))
+
+(defun sysvar (name) (gethash name *sysvars*))
+(defun (setf sysvar) (val name) (setf (gethash name *sysvars*) val))
+
+(defun reset-sysvars ()
+  (clrhash *sysvars*)
+  (loop for (k v) on
+        (list "CLAYER" "0" "CECOLOR" "BYLAYER" "OSMODE" 4133 "ORTHOMODE" 0
+              "SNAPMODE" 0 "GRIDMODE" 1 "SNAPUNIT" (list 0.5d0 0.5d0) "GRIDUNIT" (list 0.5d0 0.5d0)
+              "TEXTSIZE" 0.2d0 "LUPREC" 4 "AUPREC" 0 "LUNITS" 2 "AUNITS" 0
+              "CMDECHO" 1 "PICKBOX" 5 "APERTURE" 10 "PDMODE" 0 "PDSIZE" 0d0
+              "FILLETRAD" 0d0 "OFFSETDIST" -1d0 "ANGBASE" 0d0 "ANGDIR" 0
+              "LASTPOINT" (pt 0 0) "HIGHLIGHT" 1 "BLIPMODE" 0 "ERRNO" 0
+              "PICKFIRST" 1 "MIRRTEXT" 0 "TEXTSTYLE" "Standard" "CTAB" "Model"
+              "INSUNITS" 1 "MEASUREMENT" 0 "PLINEWID" 0d0 "LIMMIN" (list 0d0 0d0)
+              "LIMMAX" (list 12d0 9d0) "OSNAPZ" 0 "EXPERT" 0 "FILEDIA" 1)
+        by #'cddr do (setf (gethash k *sysvars*) v)))
+(reset-sysvars)
+
+;;; ---------- layers ----------
+
+(defun find-layer (name)
+  (find name (drawing-layers *dwg*) :key #'layer-name :test #'string-equal))
+(defun ensure-layer (name)
+  (or (find-layer name)
+      (let ((l (make-layer :name name)))
+        (setf (drawing-layers *dwg*) (append (drawing-layers *dwg*) (list l)))
+        l)))
+(defun layer-visible-p (l) (and l (layer-on l) (not (layer-frozen l))))
+
+(defun find-block (name)
+  (find name (drawing-blocks *dwg*) :key #'block-def-name :test #'string-equal))
+
+;;; ---------- entities ----------
+
+(defun new-handle ()
+  (format nil "~X" (incf (drawing-next-handle *dwg*))))
+
+(defun normalize-entity-data (data)
+  "Fill in defaults (layer, handle) and coerce numbers so stored data is clean."
+  (let ((data (copy-tree data)))
+    (unless (assoc 8 data) (setf data (append data (list (cons 8 (sysvar "CLAYER"))))))
+    (let ((cecolor (sysvar "CECOLOR")))
+      (when (and (not (assoc 62 data)) (stringp cecolor) (every #'digit-char-p cecolor)
+                 (plusp (length cecolor)))
+        (setf data (append data (list (cons 62 (parse-integer cecolor)))))))
+    (ensure-layer (dxf 8 data))
+    data))
+
+(defun add-entity (data)
+  (let* ((data (normalize-entity-data data))
+         (h (new-handle))
+         (data (cons (assoc 0 data) (cons (cons 5 h) (rem-dxf 0 (rem-dxf 5 data)))))
+         (data (if (equal (dxf 0 data) "DIMENSION") (maybe-rebuild-dimension data) data))
+         (e (%make-ename h data)))
+    (vector-push-extend e (drawing-entities *dwg*))
+    (touch)
+    e))
+
+(defun ent-data (e) (ename-data e))
+(defun ent-type (e) (dxf 0 (ename-data e)))
+(defun ent-layer (e) (dxf 8 (ename-data e)))
+(defun ent-live-p (e) (and (ename-p e) (not (ename-deleted e))))
+
+(defun live-entities ()
+  (loop for e across (drawing-entities *dwg*) unless (ename-deleted e) collect e))
+(defun last-entity ()
+  (loop for i from (1- (length (drawing-entities *dwg*))) downto 0
+        for e = (aref (drawing-entities *dwg*) i)
+        unless (ename-deleted e) return e))
+(defun next-entity (e)
+  (let ((v (drawing-entities *dwg*)))
+    (if (null e)
+        (find-if-not #'ename-deleted v)
+        (let ((i (position e v)))
+          (and i (find-if-not #'ename-deleted v :start (1+ i)))))))
+(defun entity-by-handle (h)
+  (find h (drawing-entities *dwg*) :key #'ename-handle :test #'string-equal))
+
+(defun set-entity-data (e data)
+  (setf (ename-data e) (copy-tree data))
+  (when (equal (dxf 0 data) "DIMENSION")
+    (setf (ename-data e) (maybe-rebuild-dimension (ename-data e))))
+  (ensure-layer (dxf 8 data))
+  (touch))
+(defun delete-entity (e) (setf (ename-deleted e) t) (touch))
+(defun undelete-entity (e) (setf (ename-deleted e) nil) (touch))
+
+(defun entity-editable-p (e)
+  (let ((l (find-layer (ent-layer e)))) (not (and l (layer-locked l)))))
+(defun entity-visible-p (e)
+  (and (ent-live-p e) (layer-visible-p (find-layer (ent-layer e)))))
+
+(defun entity-aci (data)
+  "Resolved AutoCAD Color Index for drawing."
+  (let ((c (dxf 62 data)))
+    (cond ((and c (/= c 256) (/= c 0)) (abs c))
+          (t (let ((l (find-layer (dxf 8 data)))) (if l (abs (layer-color l)) 7))))))
+
+;;; ---------- undo ----------
+
+(defun take-snapshot ()
+  (list (copy-seq (drawing-entities *dwg*))
+        (loop for e across (drawing-entities *dwg*)
+              collect (list e (ename-data e) (ename-deleted e)))
+        (mapcar #'copy-layer (drawing-layers *dwg*))
+        (copy-list (drawing-blocks *dwg*))
+        (drawing-next-handle *dwg*)
+        (sysvar "CLAYER")))
+
+(defun restore-snapshot (snap)
+  (destructuring-bind (ents states layers blocks nh clayer) snap
+    (let ((v (make-array (max 64 (length ents)) :adjustable t :fill-pointer 0)))
+      (loop for e across ents do (vector-push-extend e v))
+      (setf (drawing-entities *dwg*) v))
+    (loop for (e data del) in states do (setf (ename-data e) data (ename-deleted e) del))
+    (setf (drawing-layers *dwg*) (mapcar #'copy-layer layers)
+          (drawing-blocks *dwg*) blocks
+          (drawing-next-handle *dwg*) nh
+          (sysvar "CLAYER") clayer)
+    (touch)))
+
+;;; ---------- polylines ----------
+
+(defun lwpoly-vertices (data)
+  "List of (point bulge) for an LWPOLYLINE alist."
+  (let ((verts nil))
+    (dolist (pair data)
+      (when (consp pair)
+        (case (car pair)
+          (10 (push (list (pt (second pair) (third pair)) 0d0) verts))
+          (42 (when verts (setf (second (first verts)) (d (cdr pair))))))))
+    (nreverse verts)))
+
+(defun lwpoly-closed-p (data) (logtest 1 (or (dxf 70 data) 0)))
+
+(defun make-lwpoly-data (verts closed &key (layer nil) (width nil))
+  "VERTS is a list of points or (point bulge) entries."
+  (append (list (cons 0 "LWPOLYLINE") (cons 100 "AcDbEntity"))
+          (when layer (list (cons 8 layer)))
+          (list (cons 100 "AcDbPolyline")
+                (cons 90 (length verts)) (cons 70 (if closed 1 0)))
+          (when (and width (/= width 0)) (list (cons 43 (d width))))
+          (loop for v in verts
+                for p = (if (pointp v) v (first v))
+                for b = (if (pointp v) 0d0 (second v))
+                collect (list 10 (px p) (py p))
+                unless (zerop b) collect (cons 42 (d b)))))
+
+(defun lwpoly-pieces (data)
+  (let* ((verts (lwpoly-vertices data))
+         (closed (lwpoly-closed-p data))
+         (n (length verts)))
+    (loop for i from 0 below (if closed n (1- n))
+          for (p b) = (nth i verts)
+          for q = (first (nth (mod (1+ i) n) verts))
+          unless (< (dist2d p q) 1d-12)
+            collect (if (< (abs b) 1d-12)
+                        (list :seg p q)
+                        (multiple-value-bind (c r a1 a2) (bulge->arc p q b)
+                          (list :arc c r a1 a2))))))
+
+;;; ---------- text extents ----------
+
+(defun text-string-display (s)
+  "Strip MTEXT formatting codes for display."
+  (let ((out (make-string-output-stream)) (i 0) (n (length s)))
+    (loop while (< i n) do
+      (let ((ch (char s i)))
+        (cond ((and (char= ch #\\) (< (1+ i) n))
+               (let ((nx (char-upcase (char s (1+ i)))))
+                 (case nx
+                   (#\P (write-char #\Newline out) (incf i 2))
+                   ((#\\ #\{ #\}) (write-char (char s (1+ i)) out) (incf i 2))
+                   (t (let ((semi (position #\; s :start i)))
+                        (if (and semi (member nx '(#\F #\H #\C #\W #\Q #\T #\A)))
+                            (setf i (1+ semi))
+                            (incf i 2)))))))
+              ((member ch '(#\{ #\})) (incf i))
+              (t (write-char ch out) (incf i)))))
+    (let ((r (get-output-stream-string out)))
+      ;; %%c %%d %%p control codes
+      (loop for (code rep) in '(("%%c" "Ø") ("%%C" "Ø") ("%%d" "°") ("%%D" "°") ("%%p" "±") ("%%P" "±"))
+            do (loop for pos = (search code r) while pos
+                     do (setf r (concatenate 'string (subseq r 0 pos) rep (subseq r (+ pos 3))))))
+      r)))
+
+(defun text-box (data)
+  "Approximate four corners of a TEXT/MTEXT entity (for selection & extents)."
+  (let* ((p (or (dxf 10 data) (pt 0 0)))
+         (h (or (dxf 40 data) 0.2d0))
+         (rot (or (dxf 50 data) 0d0))
+         (lines (let ((s (text-string-display (or (dxf 1 data) ""))))
+                  (loop with start = 0 for pos = (position #\Newline s :start start)
+                        collect (subseq s start pos) while pos do (setf start (1+ pos)))))
+         (w (* h 0.85d0 (max 1 (reduce #'max lines :key #'length :initial-value 0))))
+         (hh (* h 1.6d0 (length lines)))
+         (mtext (equal (dxf 0 data) "MTEXT"))
+         (o (if mtext (pt (px p) (- (py p) hh)) (pt (px p) (- (py p) (* 0.25 h)))))
+         (corners (list o (pt (+ (px o) w) (py o)) (pt (+ (px o) w) (+ (py o) (if mtext hh (* 1.25 h))))
+                        (pt (px o) (+ (py o) (if mtext hh (* 1.25 h)))))))
+    (mapcar (lambda (c) (rot-pt c p rot)) corners)))
+
+(defun text-insertion (data)
+  (let ((h72 (or (dxf 72 data) 0)) (h73 (or (dxf 73 data) 0)))
+    (if (and (equal (dxf 0 data) "TEXT") (or (/= h72 0) (/= h73 0)) (dxf 11 data))
+        (dxf 11 data) (dxf 10 data))))
+
+;;; ---------- pieces for any entity ----------
+
+(defvar *insert-depth* 0)
+
+(defun data-pieces (data)
+  (let ((type (dxf 0 data)))
+    (cond
+      ((equal type "LINE") (list (list :seg (pt3 (dxf 10 data)) (pt3 (dxf 11 data)))))
+      ((equal type "CIRCLE") (list (list :circle (pt3 (dxf 10 data)) (d (dxf 40 data)))))
+      ((equal type "ARC") (list (list :arc (pt3 (dxf 10 data)) (d (dxf 40 data))
+                                      (d (dxf 50 data)) (d (dxf 51 data)))))
+      ((equal type "POINT") (list (list :pt (pt3 (dxf 10 data)))))
+      ((equal type "LWPOLYLINE") (lwpoly-pieces data))
+      ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
+       (let ((c (text-box data)))
+         (loop for (a b) on (append c (list (first c))) while b collect (list :gseg a b))))
+      ((equal type "INSERT") (insert-pieces data))
+      ((equal type "DIMENSION")
+       (let ((b (find-block (dxf 2 data))))
+         (when (and b (< *insert-depth* 8))
+           (let ((*insert-depth* (1+ *insert-depth*)))
+             (loop for sub in (block-def-entities b) append (data-pieces sub))))))
+      ((equal type "ELLIPSE") (ellipse-pieces data))
+      ((equal type "SPLINE") (spline-pieces data))
+      ((equal type "SOLID")
+       (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
+         (loop for (a b) on (append c (list (first c))) while b collect (list :seg (pt3 a) (pt3 b)))))
+      (t nil))))
+
+(defun insert-xf (data base)
+  (xf-insert (pt3 (dxf 10 data)) (or (dxf 41 data) 1d0) (or (dxf 42 data) 1d0)
+             (or (dxf 50 data) 0d0) base))
+
+(defun insert-pieces (data)
+  (let ((b (find-block (dxf 2 data))))
+    (when (and b (< *insert-depth* 8))
+      (let ((*insert-depth* (1+ *insert-depth*))
+            (xf (insert-xf data (block-def-base b))))
+        (loop for sub in (block-def-entities b)
+              append (loop for pc in (data-pieces sub) append (transform-piece pc xf)))))))
+
+(defvar *geom-cache* (make-hash-table :test #'eq))
+(defun clear-geom-cache () (clrhash *geom-cache*))
+(defun cached-geom (e)
+  "(pieces . bbox) for E, recomputed when its data object changes."
+  (let ((c (gethash e *geom-cache*)) (data (ename-data e)))
+    (if (and c (eq (car c) data))
+        (cdr c)
+        (let* ((pcs (data-pieces data)) (v (cons pcs (pieces-bbox pcs))))
+          (setf (gethash e *geom-cache*) (cons data v))
+          v))))
+(defun entity-pieces (e) (car (cached-geom e)))
+(defun snap-pieces (e) (remove :gseg (entity-pieces e) :key #'first))
+
+(defun entity-bbox (e) (cdr (cached-geom e)))
+
+(defun ellipse-points (data &optional (n 96))
+  (let* ((c (pt3 (dxf 10 data))) (m (pt3 (dxf 11 data))) (k (or (dxf 40 data) 1d0))
+         (t0 (or (dxf 41 data) 0d0)) (t1 (or (dxf 42 data) +2pi+))
+         (sw (let ((s (norm-ang (- t1 t0)))) (if (< s 1d-9) +2pi+ s)))
+         (minor (pt (* k (- (py m))) (* k (px m)))))
+    (loop for i from 0 to n
+          for tt = (+ t0 (* sw (/ i n)))
+          collect (v+ c (v+ (v* m (cos tt)) (v* minor (sin tt)))))))
+(defun ellipse-pieces (data)
+  (loop for (a b) on (ellipse-points data) while b collect (list :seg a b)))
+
+(defun spline-points (data)
+  (let* ((deg (or (dxf 71 data) 3))
+         (knots (loop for p in data when (and (consp p) (eql (car p) 40)) collect (d (cdr p))))
+         (ctrl (loop for p in data when (and (consp p) (eql (car p) 10)) collect (pt3 (cdr p))))
+         (fit (loop for p in data when (and (consp p) (eql (car p) 11)) collect (pt3 (cdr p))))
+         (n (length ctrl)))
+    (cond
+      ((and (> n deg) (= (length knots) (+ n deg 1)))
+       (let* ((kv (coerce knots 'vector)) (cv (coerce ctrl 'vector))
+              (u0 (aref kv deg)) (u1 (aref kv n)) (steps (max 16 (* 8 n))))
+         (loop for i from 0 to steps
+               for u = (if (= i steps) (- u1 1d-12) (+ u0 (* (- u1 u0) (/ i steps))))
+               collect (de-boor deg kv cv u))))
+      (fit fit)
+      (t ctrl))))
+(defun de-boor (p kv cv u)
+  (let* ((n (length cv))
+         (k (loop for i from p below n when (and (<= (aref kv i) u) (< u (aref kv (1+ i)))) return i
+                  finally (return (1- n))))
+         (dd (make-array (1+ p))))
+    (loop for j from 0 to p do (setf (aref dd j) (aref cv (+ j (- k p)))))
+    (loop for r from 1 to p do
+      (loop for j from p downto r
+            for i = (+ j (- k p))
+            for den = (- (aref kv (+ i (- p r) 1)) (aref kv i))
+            for alpha = (if (zerop den) 0d0 (/ (- u (aref kv i)) den))
+            do (setf (aref dd j) (v+ (v* (aref dd (1- j)) (- 1 alpha)) (v* (aref dd j) alpha)))))
+    (aref dd p)))
+(defun spline-pieces (data)
+  (loop for (a b) on (spline-points data) while b collect (list :seg a b)))
+
+(defun drawing-extents (&optional (ents (live-entities)))
+  (let ((boxes (loop for e in ents
+                     when (layer-visible-p (find-layer (ent-layer e)))
+                       append (let ((b (entity-bbox e))) (and b (list b))))))
+    (when boxes
+      (list (reduce #'min boxes :key #'first) (reduce #'min boxes :key #'second)
+            (reduce #'max boxes :key #'third) (reduce #'max boxes :key #'fourth)))))
+
+;;; ---------- transforming entity data ----------
+
+(defun map-points (data codes fn)
+  (mapcar (lambda (pair)
+            (if (and (consp pair) (member (car pair) codes) (consp (cdr pair)))
+                (let ((q (funcall fn (pt3 (cdr pair)))))
+                  (if (= (length (cdr pair)) 2)
+                      (list (car pair) (px q) (py q))
+                      (cons (car pair) q)))
+                pair))
+          data))
+
+(defun map-codes (data codes fn)
+  (mapcar (lambda (pair)
+            (if (and (consp pair) (member (car pair) codes) (realp (cdr pair)))
+                (cons (car pair) (funcall fn (cdr pair)))
+                pair))
+          data))
+
+(defun xform-data (data xf)
+  (let* ((type (dxf 0 data))
+         (s (xf-scale xf))
+         (fa (xf-ang xf))
+         (fp (xf-fn xf)))
+    (cond
+      ((member type '("LINE" "POINT") :test #'equal) (map-points data '(10 11) fp))
+      ((equal type "CIRCLE") (map-codes (map-points data '(10) fp) '(40) (lambda (r) (* r s))))
+      ((equal type "ARC")
+       (let* ((d1 (map-codes (map-points data '(10) fp) '(40) (lambda (r) (* r s))))
+              (a1 (funcall fa (dxf 50 data))) (a2 (funcall fa (dxf 51 data))))
+         (if (xf-mirror xf)
+             (set-dxf 51 a1 (set-dxf 50 a2 d1))
+             (set-dxf 51 a2 (set-dxf 50 a1 d1)))))
+      ((equal type "LWPOLYLINE")
+       (let ((d1 (map-codes (map-points data '(10) fp) '(40 41 43) (lambda (w) (* w s)))))
+         (if (xf-mirror xf) (map-codes d1 '(42) #'-) d1)))
+      ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
+       (let* ((d1 (map-codes (map-points data '(10 11) fp) '(40) (lambda (h) (* h s))))
+              (a (funcall fa (or (dxf 50 data) 0d0))))
+         (when (and (xf-mirror xf) (< (* 0.5 +pi+) a (* 1.5 +pi+)))
+           (setf a (norm-ang (+ a +pi+))))
+         (set-dxf 50 a d1)))
+      ((equal type "INSERT")
+       (let* ((d1 (map-points data '(10) fp))
+              (sx (* (or (dxf 41 data) 1d0) s))
+              (sy (* (or (dxf 42 data) 1d0) s))
+              (a (funcall fa (or (dxf 50 data) 0d0))))
+         (when (xf-mirror xf) (setf sx (- sx) a (norm-ang (+ a +pi+))))
+         (set-dxf 50 a (set-dxf 42 sy (set-dxf 41 sx d1)))))
+      ((equal type "ELLIPSE")
+       (let* ((c (pt3 (dxf 10 data))) (m (pt3 (dxf 11 data)))
+              (nc (funcall fp c)) (nm (v- (funcall fp (v+ c m)) nc))
+              (d1 (set-dxf 11 nm (set-dxf 10 nc data))))
+         (if (xf-mirror xf)
+             (let ((t0 (or (dxf 41 data) 0d0)) (t1 (or (dxf 42 data) +2pi+)))
+               (if (< (abs (- (norm-ang (- t1 t0)) 0)) 1d-9) d1
+                   (set-dxf 42 (norm-ang (- t0)) (set-dxf 41 (norm-ang (- t1)) d1))))
+             d1)))
+      ((equal type "DIMENSION")
+       (let ((d1 (map-points data '(10 11 13 14 15 16) fp)))
+         (if (dxf 50 data) (set-dxf 50 (funcall fa (dxf 50 data)) d1) d1)))
+      ((equal type "SOLID") (map-points data '(10 11 12 13) fp))
+      ((equal type "SPLINE") (map-points data '(10 11 12 13) fp))
+      (t (map-points data '(10 11) fp)))))
+
+;;; ---------- explode ----------
+
+(defun explode-data (data)
+  "Return a list of simpler entity alists, or NIL if DATA can't be exploded."
+  (let ((type (dxf 0 data)) (layer (dxf 8 data)) (color (assoc 62 data)))
+    (flet ((common (d) (append d (list (cons 8 layer)) (and color (list color)))))
+      (cond
+        ((equal type "LWPOLYLINE")
+         (loop for pc in (lwpoly-pieces data)
+               collect (common (piece->data pc))))
+        ((equal type "INSERT")
+         (let ((b (find-block (dxf 2 data))))
+           (when b
+             (let ((xf (insert-xf data (block-def-base b))))
+               (loop for sub in (block-def-entities b)
+                     collect (let ((nd (if (or (xf-uniform xf) (not (member (dxf 0 sub) '("CIRCLE" "ARC") :test #'equal)))
+                                           (xform-data sub xf)
+                                           sub)))
+                               (if (equal (dxf 8 nd) "0") (set-dxf 8 layer nd) nd)))))))
+        (t nil)))))
+
+(defun piece->data (pc)
+  (ecase (first pc)
+    (:seg (list (cons 0 "LINE") (cons 10 (second pc)) (cons 11 (third pc))))
+    (:arc (destructuring-bind (c r a1 a2) (rest pc)
+            (list (cons 0 "ARC") (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))))
+    (:circle (list (cons 0 "CIRCLE") (cons 10 (second pc)) (cons 40 (third pc))))
+    (:pt (list (cons 0 "POINT") (cons 10 (second pc))))))
+
+(defun new-drawing ()
+  (setf *dwg* (make-drawing))
+  (reset-sysvars))

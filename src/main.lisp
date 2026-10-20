@@ -1,0 +1,160 @@
+;;;; main.lisp — the Command: loop, dispatch, undo grouping and program entry.
+
+(in-package :lispdraft)
+
+(defvar *last-command* nil)
+(defvar *lisp-buffer* "")
+(defvar *command-running* nil)
+
+(defvar *in-undo-group* nil)
+(defun with-undo-group (thunk)
+  (let ((snap (take-snapshot)) (mc (drawing-modcount *dwg*)) (*in-undo-group* t))
+    (unwind-protect (funcall thunk)
+      (when (/= mc (drawing-modcount *dwg*))
+        (push snap (drawing-undo *dwg*))
+        (setf (drawing-redo *dwg*) nil)
+        (when (> (length (drawing-undo *dwg*)) 200)
+          (setf (drawing-undo *dwg*) (subseq (drawing-undo *dwg*) 0 200)))))))
+
+(defparameter *no-undo-commands* '("U" "UNDO" "REDO" "MREDO" "ZOOM" "PAN" "REGEN" "HELP" "ABOUT" "LIST" "DIST" "ID" "AREA"
+                                    "QSAVE" "SAVE" "SAVEAS" "DXFOUT" "NEW" "OPEN" "QUIT" "COPYCLIP" "SELECTALL"))
+
+(defun print-lisp-result (v)
+  (unless (eq v *null-sym*) (out (format nil "~A~%" (lisp-repr v t)))))
+
+(defun run-lisp-toplevel (thunk &key (print t))
+  "Evaluate AutoLISP at the Command: prompt with *error* support; finish any open COMMAND."
+  (multiple-value-bind (v failed)
+      (with-undo-group (lambda () (call-with-alisp-errors thunk)))
+    (if failed
+        (co-cancel)
+        (progn (co-finish-interactively) (when print (print-lisp-result v))))
+    (setf *initget-bits* 0 *initget-keywords* nil)))
+
+(defun run-builtin (name fn)
+  (let ((*command-running* name))
+    (handler-case
+        (unwind-protect
+             (if (member name *no-undo-commands* :test #'string-equal)
+                 (funcall fn)
+                 (with-undo-group fn))
+          (clear-command-highlight))
+      (alisp-cancel () nil)
+      (alisp-exit () nil)
+      (alisp-error (c) (out (format nil "~A~%" (alisp-error-msg c))))
+      (error (c) (out (format nil "; error: ~A~%" (cl-error-text c)))))))
+
+(defun execute-command (text)
+  "Run what was typed at the Command: prompt."
+  (let* ((raw (string-trim " " text)))
+    (cond
+      ((zerop (length raw))
+       (when *last-command* (execute-command *last-command*)))
+      ((char= (char raw 0) #\!)
+       (run-lisp-toplevel (lambda () (sym-value (asym (subseq raw 1))))))
+      ((member (char raw 0) '(#\( #\'))
+       (if (and (char= (char raw 0) #\') (> (length raw) 1) (not (char= (char raw 1) #\()))
+           (execute-command (subseq raw 1))
+           (run-lisp-toplevel (lambda () (alisp-eval-string raw)))))
+      (t
+       (let* ((parts (split-first-word raw))
+              (word (first parts))
+              (name (canonical-command-name word))
+              (fn (and name (gethash name *commands*)))
+              (lisp-fn (sym-value (asym (concatenate 'string "C:" (strip-command-prefix word))))))
+         ;; the rest of the line (e.g. from a menu macro "ZOOM E") is fed as input
+         (setf *script-queue* (append (rest parts) *script-queue*))
+         (progn
+           (cond
+             (fn (setf *last-command* word) (run-builtin name fn))
+             ((or (ufunc-p lisp-fn) (subr-p lisp-fn) (and (consp lisp-fn) (listp (car lisp-fn))))
+              (setf *last-command* word)
+              (run-lisp-toplevel (lambda () (apply-a lisp-fn nil))))
+             ((multiple-value-bind (v found) (gethash (string-upcase word) *sysvars*) (declare (ignore v)) found)
+              (handler-case (setvar-prompt word)
+                (alisp-cancel () nil)
+                (alisp-error (c) (out (format nil "~A~%" (alisp-error-msg c))))))
+             (t (out (format nil "Unknown command \"~A\".  Press F1 for help.~%" (string-upcase word)))))))))))
+
+(defun split-first-word (s)
+  (let ((p (position #\Space s)))
+    (if p
+        (cons (subseq s 0 p) (let ((r (string-trim " " (subseq s (1+ p))))) (and (plusp (length r)) (list r))))
+        (list s))))
+
+(defun command-loop-step ()
+  "Read one Command: line and run it."
+  (if *menu-queue*
+      (execute-command (pop *menu-queue*))
+      (let ((text (handler-case
+                      (get-user-input :command :prompt (if (plusp (length *lisp-buffer*)) "(_> " "Command: "))
+                    (alisp-cancel () (setf *lisp-buffer* "") nil))))
+        (when text
+          (if (or (plusp (length *lisp-buffer*)) (and (plusp (length text)) (char= (char text 0) #\()))
+              (let ((all (concatenate 'string *lisp-buffer* (if (plusp (length *lisp-buffer*)) (string #\Newline) "") text)))
+                (if (alisp-complete-p all)
+                    (progn (setf *lisp-buffer* "") (execute-command all))
+                    (setf *lisp-buffer* all)))
+              (execute-command text))))))
+
+(defun install-startup-functions ()
+  ;; S::STARTUP and acaddoc.lsp style autoload
+  (let ((home (getenv "HOME")))
+    (dolist (f (list "acaddoc.lsp" "lispdraft.lsp" (and home (concatenate 'string home "/.lispdraft.lsp"))))
+      (when (and f (probe-file f))
+        (out (format nil "Loading ~A~%" f))
+        (run-lisp-file f))))
+  (let ((s (sym-value (sym "S::STARTUP"))))
+    (when (or (ufunc-p s) (consp s)) (call-with-alisp-errors (lambda () (apply-a s nil))))))
+
+(defun quit-program ()
+  (ignore-errors (when *wish-in* (tk "exit")))
+  #+sbcl (sb-ext:exit :code 0 :abort t)
+  #+ecl (ext:quit 0)
+  #+ccl (ccl:quit 0)
+  #-(or sbcl ecl ccl) (cl-user::quit))
+
+(defun banner ()
+  (format nil "~A ~A — AutoLISP-compatible 2D drafting. Type HELP for commands, or an AutoLISP expression.~%"
+          *program-name* *version*))
+
+(defun start (&key (gui t) file lisp-files)
+  "Start LispDraft. With GUI NIL, run on the terminal."
+  (setf *gui-dir* (or *gui-dir* (script-directory)))
+  (if gui
+      (handler-case (gui-init)
+        (error (c)
+          (format *error-output* "~&LispDraft could not open its window: ~A~%~
+                                  (Is a graphical display available? Use --tty for terminal mode.)~%" c)
+          (quit-program)))
+      (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
+  (out (banner))
+  (when file (open-drawing file))
+  (when (and gui (not file)) (zoom-to-box 0 0 12 9))
+  (install-startup-functions)
+  (dolist (f lisp-files) (run-lisp-file f))
+  (setf *quit-requested* nil)
+  (loop until *quit-requested*
+        do (handler-case (command-loop-step)
+             (alisp-exit () (when (eq *ui* :tty) (setf *quit-requested* t)))
+             (error (c) (out (format nil "; error: ~A~%" (cl-error-text c))))))
+  (quit-program))
+
+(defun run-tty (&rest args) (apply #'start :gui nil args))
+
+(defun main ()
+  "Command-line entry: lispdraft [--tty] [--load file.lsp]... [drawing.dxf]"
+  (let* ((args #+sbcl (rest sb-ext:*posix-argv*)   ; SBCL removes its own options already
+               #+ecl (let* ((all (ext:command-args)) (p (position "--" all :test #'string=)))
+                       (and p (subseq all (1+ p))))
+               #+ccl (let* ((all ccl:*command-line-argument-list*) (p (position "--" all :test #'string=)))
+                       (and p (subseq all (1+ p))))
+               #-(or sbcl ecl ccl) nil)
+         (gui t) (file nil) (lisp nil))
+    (loop while args do
+      (let ((a (pop args)))
+        (cond ((string= a "--tty") (setf gui nil))
+              ((string= a "--load") (push (pop args) lisp))
+              ((and (> (length a) 4) (string-equal (subseq a (- (length a) 4)) ".lsp")) (push a lisp))
+              ((and (plusp (length a)) (char/= (char a 0) #\-)) (setf file a)))))
+    (start :gui gui :file file :lisp-files (nreverse lisp))))

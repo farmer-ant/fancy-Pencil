@@ -1,0 +1,641 @@
+;;;; utilcmds.lisp — view, file, layer, block, inquiry and undo commands;
+;;;; AutoLISP database/system-variable functions.
+
+(in-package :lispdraft)
+
+(defun gui-p () (eq *ui* :gui))
+(defun from-lisp-p () (or (in-worker-p) (listp *sync-queue*) *script-queue*))
+
+;;; ---------- view ----------
+
+(defcmd "ZOOM" ("Z") "Changes the view magnification."
+  (let ((r (gpoint "Specify corner of window, enter a scale factor (nX or nXP), or [All/Center/Extents/Previous/Window] <real time>: "
+                   :keywords '("All" "Center" "Extents" "Previous" "Window" "E" "A" "P" "W"))))
+    (when (gui-p)
+      (cond ((null r) nil)
+            ((member r '("Extents" "E") :test #'string-equal) (zoom-extents))
+            ((member r '("All" "A") :test #'string-equal)
+             (let ((b (or (drawing-extents) (list 0 0 12 9))))
+               (zoom-to-box (min 0 (first b)) (min 0 (second b)) (max 12 (third b)) (max 9 (fourth b)))))
+            ((member r '("Previous" "P") :test #'string-equal) (zoom-previous))
+            ((member r '("Window" "W") :test #'string-equal)
+             (let* ((a (gpoint "Specify first corner: "))
+                    (b (get-user-input :corner :base a :prompt "Specify opposite corner: ")))
+               (when (pointp b) (zoom-to-box (min (px a) (px b)) (min (py a) (py b)) (max (px a) (px b)) (max (py a) (py b)) 1d0))))
+            ((equal r "Center")
+             (let ((c (gpoint "Specify center point: ")))
+               (when c (let ((h (or (gdist (format nil "Enter magnification or height <~A>: " (fmt-len (/ *ch* *vscale*)))) (/ *ch* *vscale*))))
+                         (push-view) (setf *vx* (px c) *vy* (py c) *vscale* (/ *ch* h)) (gui-regen)))))
+            ((pointp r)
+             (let ((b (get-user-input :corner :base r :prompt "Specify opposite corner: ")))
+               (when (pointp b) (zoom-to-box (min (px r) (px b)) (min (py r) (py b)) (max (px r) (px b)) (max (py r) (py b)) 1d0))))))))
+
+;; scale factors such as 2x are typed at the ZOOM prompt; handled in the dispatcher hook below
+(defun zoom-scale-text-p (s)
+  (let ((s (string-trim " " s)))
+    (and (> (length s) 1) (char-equal (char s (1- (length s))) #\x)
+         (parse-number-text (string-right-trim "xXpP" s)))))
+
+(defcmd "PAN" ("P" "-PAN") "Shifts the view."
+  (let* ((a (gpoint "Specify base point or displacement: "))
+         (b (and a (gpoint "Specify second point: " :base a))))
+    (when (and (gui-p) (pointp a))
+      (let ((dv (if (pointp b) (v- b a) a)))
+        (push-view) (setf *vx* (- *vx* (px dv)) *vy* (- *vy* (py dv))) (gui-regen)))))
+
+(defcmd "REGEN" ("RE" "REDRAW" "R" "REGENALL" "REDRAWALL") "Regenerates the display."
+  (setf *grdraw-items* nil)
+  (when (gui-p) (gui-regen)))
+
+;;; ---------- inquiry ----------
+
+(defcmd "DIST" ("DI") "Measures the distance and angle between two points."
+  (let* ((a (gpoint "Specify first point: ")) (b (and a (gpoint "Specify second point: " :base a))))
+    (when (pointp b)
+      (out (format nil "Distance = ~A,  Angle in XY Plane = ~A,  Angle from XY Plane = 0~%Delta X = ~A,  Delta Y = ~A,   Delta Z = ~A~%"
+                   (fmt-len (dist a b)) (fmt-ang (ang a b))
+                   (fmt-len (- (px b) (px a))) (fmt-len (- (py b) (py a))) (fmt-len (- (pz b) (pz a))))))))
+
+(defcmd "ID" () "Displays the coordinates of a location."
+  (let ((p (gpoint "Specify point: ")))
+    (when p (out (format nil "X = ~A     Y = ~A     Z = ~A~%" (fmt-len (px p)) (fmt-len (py p)) (fmt-len (pz p)))))))
+
+(defun polygon-area (pts)
+  (/ (abs (loop for (a b) on (append pts (list (first pts))) while b
+                sum (- (* (px a) (py b)) (* (px b) (py a)))))
+     2))
+
+(defun entity-area-perimeter (e)
+  (let* ((data (ent-data e)) (type (dxf 0 data)))
+    (cond ((equal type "CIRCLE") (let ((r (dxf 40 data))) (values (* +pi+ r r) (* +2pi+ r))))
+          ((equal type "LWPOLYLINE")
+           (let* ((pcs (lwpoly-pieces data))
+                  (pts (loop for pc in pcs append (if (eq (first pc) :seg) (list (second pc))
+                                                      (butlast (apply #'arc-points (append (rest pc) '(64)))))))
+                  (len (loop for pc in pcs sum (if (eq (first pc) :seg) (dist2d (second pc) (third pc))
+                                                   (* (third pc) (arc-sweep (fourth pc) (fifth pc)))))))
+             (values (polygon-area pts) len)))
+          ((equal type "ELLIPSE") (let ((pts (ellipse-points data 256)))
+                                    (values (polygon-area pts) (loop for (a b) on pts while b sum (dist2d a b)))))
+          (t nil))))
+
+(defcmd "AREA" ("AA") "Calculates the area and perimeter of objects or a polygon of points."
+  (let ((r (gpoint "Specify first corner point or [Object] <Object>: " :keywords '("Object"))))
+    (if (or (null r) (equal r "Object"))
+        (let ((sel (get-user-input :entity :prompt "Select objects: ")))
+          (when (consp sel)
+            (let ((e (sel-entity sel)))
+              (multiple-value-bind (a p) (and e (entity-area-perimeter e))
+                (if a (out (format nil "Area = ~A, ~A = ~A~%" (fmt-len a) (if (equal (ent-type e) "CIRCLE") "Circumference" "Perimeter") (fmt-len p)))
+                    (out (format nil "Selected object does not have an area.~%")))))))
+        (let ((pts (list r)))
+          (loop for p = (gpoint "Specify next point or press ENTER for total: " :base (first pts)
+                                :drag (lambda (cur) (lwpoly-pieces (make-lwpoly-data (reverse (cons cur pts)) t))))
+                while (pointp p) do (push p pts))
+          (setf pts (nreverse pts))
+          (out (format nil "Area = ~A, Perimeter = ~A~%" (fmt-len (polygon-area pts))
+                       (fmt-len (loop for (a b) on (append pts (list (first pts))) while b sum (dist2d a b)))))))))
+
+(defun describe-entity (e)
+  (let* ((data (ent-data e)) (type (dxf 0 data)))
+    (with-output-to-string (o)
+      (format o "~&~20@A      Layer: \"~A\"~%~26TSpace: Model space~%~20THandle = ~(~A~)~%"
+              type (dxf 8 data) (ename-handle e))
+      (when (dxf 62 data) (format o "~26TColor: ~D~%" (dxf 62 data)))
+      (flet ((p (label pt) (format o "~10@A point, X=~10@A  Y=~10@A  Z=~10@A~%" label
+                                   (fmt-len (px pt)) (fmt-len (py pt)) (fmt-len (pz pt)))))
+        (cond
+          ((equal type "LINE")
+           (let ((a (dxf 10 data)) (b (dxf 11 data)))
+             (p "from" a) (p "to" b)
+             (format o "~10TLength = ~A,  Angle in XY Plane = ~A~%~10TDelta X = ~A, Delta Y = ~A~%"
+                     (fmt-len (dist a b)) (fmt-ang (ang a b)) (fmt-len (- (px b) (px a))) (fmt-len (- (py b) (py a))))))
+          ((member type '("CIRCLE" "ARC") :test #'equal)
+           (p "center" (dxf 10 data))
+           (format o "~10Tradius ~A~%" (fmt-len (dxf 40 data)))
+           (if (equal type "CIRCLE")
+               (format o "~10Tcircumference ~A~%~10Tarea ~A~%" (fmt-len (* +2pi+ (dxf 40 data))) (fmt-len (* +pi+ (expt (dxf 40 data) 2))))
+               (format o "~10Tstart angle ~A~%~10Tend angle ~A~%~10Tlength ~A~%" (fmt-ang (dxf 50 data)) (fmt-ang (dxf 51 data))
+                       (fmt-len (* (dxf 40 data) (arc-sweep (dxf 50 data) (dxf 51 data)))))))
+          ((equal type "LWPOLYLINE")
+           (format o "~10T~:[Open~;Closed~]~%" (lwpoly-closed-p data))
+           (multiple-value-bind (a per) (entity-area-perimeter e)
+             (format o "~10Tarea ~A~%~10Tlength ~A~%" (fmt-len a) (fmt-len per)))
+           (loop for (v b) in (lwpoly-vertices data)
+                 do (format o "~10Tat point  X=~10@A  Y=~10@A~@[   bulge ~A~]~%" (fmt-len (px v)) (fmt-len (py v))
+                            (and (/= b 0) (fmt-len b)))))
+          ((member type '("TEXT" "MTEXT") :test #'equal)
+           (format o "~10TContents: ~A~%" (dxf 1 data)) (p "insertion" (dxf 10 data))
+           (format o "~10Theight ~A~%~10Trotation angle ~A~%" (fmt-len (dxf 40 data)) (fmt-ang (or (dxf 50 data) 0d0))))
+          ((equal type "INSERT")
+           (format o "~10TBlock Name: \"~A\"~%" (dxf 2 data)) (p "at" (dxf 10 data))
+           (format o "~10TX scale factor: ~A~%~10TY scale factor: ~A~%~10Trotation angle: ~A~%"
+                   (fmt-len (or (dxf 41 data) 1)) (fmt-len (or (dxf 42 data) 1)) (fmt-ang (or (dxf 50 data) 0d0))))
+          ((equal type "POINT") (p "at" (dxf 10 data)))
+          (t (format o "~10T~S~%" (lisp-repr data))))))))
+
+(defcmd "LIST" ("LI" "LS") "Displays property data for selected objects."
+  (dolist (e (get-selection)) (out (describe-entity e))))
+
+;;; ---------- undo ----------
+
+(defun undo-one ()
+  (let ((snap (pop (drawing-undo *dwg*))))
+    (if snap
+        (progn (push (take-snapshot) (drawing-redo *dwg*)) (restore-snapshot snap) t)
+        (progn (out (format nil "Everything has been undone~%")) nil))))
+
+(defcmd "U" () "Reverses the most recent operation."
+  (when (undo-one) (out (format nil "Undo~%"))))
+(defcmd "UNDO" () "Reverses the effect of commands."
+  (let ((n (get-user-input :int :prompt "Enter the number of operations to undo or [All] <1>: " :keywords '("All"))))
+    (if (equal n "All")
+        (loop while (drawing-undo *dwg*) do (undo-one))
+        (loop repeat (or n 1) while (undo-one)))))
+(defcmd "REDO" ("MREDO") "Reverses the effects of the previous UNDO."
+  (let ((snap (pop (drawing-redo *dwg*))))
+    (if snap (progn (push (take-snapshot) (drawing-undo *dwg*)) (restore-snapshot snap) (out (format nil "Redo~%")))
+        (out (format nil "Nothing to redo~%")))))
+
+;;; ---------- layers ----------
+
+(defcmd "LAYER" ("LA" "-LAYER" "DDLMODES" "LAYERP") "Manages layers."
+  (if (and (gui-p) (not (from-lisp-p)))
+      (show-layer-dialog)
+      (layer-command-line)))
+
+(defun layer-command-line ()
+  (loop
+    (out (format nil "Current layer:  \"~A\"~%" (sysvar "CLAYER")))
+    (let ((k (gkw "Enter an option [?/Make/Set/New/ON/OFF/Color/Freeze/Thaw/LOck/Unlock]: "
+                  '("?" "Make" "Set" "New" "ON" "OFF" "Color" "Freeze" "Thaw" "LOck" "Unlock"))))
+      (flet ((names (prompt) (let ((s (gstring prompt t)))
+                               (loop with start = 0 for pos = (position #\, s :start start)
+                                     for nm = (string-trim " " (subseq s start pos))
+                                     when (plusp (length nm)) collect nm
+                                     while pos do (setf start (1+ pos)))))
+             (each (nms fn) (dolist (n nms)
+                              (let ((matches (remove-if-not (lambda (l) (wcmatch (string-upcase (layer-name l)) (string-upcase n)))
+                                                            (drawing-layers *dwg*))))
+                                (if matches (mapc fn matches) (out (format nil "No matching layer names found.~%")))))))
+        (cond
+          ((null k) (return))
+          ((equal k "?")
+           (out (format nil "~%Layer name                     State     Color   Linetype~%"))
+           (dolist (l (drawing-layers *dwg*))
+             (out (format nil "~30A ~:[Off~;On ~] ~:[    ~;Frz ~]~:[ ~;L~]  ~5D   ~A~%" (layer-name l) (layer-on l)
+                          (layer-frozen l) (layer-locked l) (abs (layer-color l)) (layer-ltype l)))))
+          ((equal k "Make") (let ((n (gstring "Enter name for new layer (becomes the current layer) <0>: " t)))
+                              (when (plusp (length n)) (ensure-layer n) (setf (sysvar "CLAYER") (layer-name (find-layer n))))))
+          ((equal k "Set") (let* ((n (gstring "Enter layer name to make current or <select object>: " t)) (l (find-layer n)))
+                             (cond ((null l) (out (format nil "Cannot find layer \"~A\".~%" n)))
+                                   ((layer-frozen l) (out (format nil "Cannot set a frozen layer current.~%")))
+                                   (t (setf (sysvar "CLAYER") (layer-name l))))))
+          ((equal k "New") (dolist (n (names "Enter name list for new layer(s): ")) (ensure-layer n)))
+          ((equal k "ON") (each (names "Enter name list of layer(s) to turn on: ") (lambda (l) (setf (layer-on l) t))))
+          ((equal k "OFF") (each (names "Enter name list of layer(s) to turn off or <select objects>: ") (lambda (l) (setf (layer-on l) nil))))
+          ((equal k "Freeze") (each (names "Enter name list of layer(s) to freeze or <select objects>: ")
+                                    (lambda (l) (if (string-equal (layer-name l) (sysvar "CLAYER"))
+                                                    (out (format nil "Cannot freeze layer \"~A\".  It is the CURRENT layer.~%" (layer-name l)))
+                                                    (setf (layer-frozen l) t)))))
+          ((equal k "Thaw") (each (names "Enter name list of layer(s) to thaw: ") (lambda (l) (setf (layer-frozen l) nil))))
+          ((equal k "LOck") (each (names "Enter name list of layer(s) to lock or <select objects>: ") (lambda (l) (setf (layer-locked l) t))))
+          ((equal k "Unlock") (each (names "Enter name list of layer(s) to unlock or <select objects>: ") (lambda (l) (setf (layer-locked l) nil))))
+          ((equal k "Color")
+           (let ((c (parse-color (gstring "Enter color name or number (1-255): "))))
+             (if (and c (<= 1 c 255))
+                 (each (names (format nil "Enter name list of layer(s) for color ~D <~A>: " c (sysvar "CLAYER")))
+                       (lambda (l) (setf (layer-color l) (if (layer-on l) c (- c)))))
+                 (out (format nil "Invalid color.~%"))))))
+        (touch)))))
+
+(defcmd "LAYMCUR" () "Makes the layer of a selected object current."
+  (let ((sel (get-user-input :entity :prompt "Select object whose layer will become current: ")))
+    (when (consp sel)
+      (let ((e (sel-entity sel)))
+        (when e (setf (sysvar "CLAYER") (ent-layer e))
+              (out (format nil "~A is now the current layer.~%" (ent-layer e))))))))
+
+;;; ---------- blocks ----------
+
+(defcmd "BLOCK" ("B" "-BLOCK" "BMAKE") "Creates a block definition from selected objects."
+  (let ((name (gstring "Enter block name or [?]: " t)))
+    (cond
+      ((string= name "") nil)
+      ((string= name "?") (dolist (b (drawing-blocks *dwg*))
+                            (unless (char= (char (block-def-name b) 0) #\*) (out (format nil "  ~A~%" (block-def-name b))))))
+      (t
+       (when (and (find-block name)
+                  (not (equal "Yes" (gkw (format nil "Block \"~A\" already exists. Redefine it? [Yes/No] <N>: " name) '("Yes" "No") "No"))))
+         (return-from-cmd))
+       (let* ((base (gpoint "Specify insertion base point: "))
+              (ents (and base (get-selection))))
+         (when ents
+           (setf (drawing-blocks *dwg*)
+                 (cons (make-block-def :name name :base base :entities (mapcar (lambda (e) (rem-dxf 5 (ent-data e))) ents))
+                       (remove name (drawing-blocks *dwg*) :key #'block-def-name :test #'string-equal)))
+           (clear-geom-cache)
+           (dolist (e ents) (delete-entity e))
+           (add (list (cons 0 "INSERT") (cons 2 name) (cons 10 base) (cons 41 1d0) (cons 42 1d0) (cons 50 0d0)))
+           (out (format nil "Block ~A defined with ~D object~:P.~%" name (length ents)))))))))
+
+(defun load-block-from-dxf (name)
+  "Make a block NAME from a DXF file on the support path."
+  (let ((path (find-file-in-support (if (search ".dxf" name :test #'char-equal) name (concatenate 'string name ".dxf")))))
+    (when path
+      (let ((saved *dwg*) (saved-vars (let ((h (make-hash-table :test #'equalp))) (maphash (lambda (k v) (setf (gethash k h) v)) *sysvars*) h)))
+        (let ((ents nil) (blocks nil) (layers nil))
+          (unwind-protect
+               (progn (dxf-import path)
+                      (setf ents (mapcar (lambda (e) (rem-dxf 5 (ent-data e))) (live-entities))
+                            blocks (drawing-blocks *dwg*) layers (drawing-layers *dwg*)))
+            (setf *dwg* saved *sysvars* saved-vars))
+          (dolist (l layers) (unless (find-layer (layer-name l)) (setf (drawing-layers *dwg*) (append (drawing-layers *dwg*) (list l)))))
+          (dolist (b blocks) (unless (find-block (block-def-name b)) (push b (drawing-blocks *dwg*))))
+          (let* ((base-name (pathname-name (pathname path)))
+                 (bn (if (or (find base-name blocks :key #'block-def-name :test #'string-equal) (find-block base-name))
+                         (loop for i from 1 for n = (format nil "~A-~D" base-name i)
+                               unless (or (find n blocks :key #'block-def-name :test #'string-equal) (find-block n))
+                                 return n)
+                         base-name)))
+            (push (make-block-def :name bn :base (pt 0 0) :entities ents) (drawing-blocks *dwg*))
+            bn))))))
+
+(defcmd "INSERT" ("I" "-INSERT" "DDINSERT") "Inserts a block or a DXF drawing."
+  (let* ((name (gstring "Enter block name or [?]: " t)))
+    (cond
+      ((string= name "") nil)
+      ((string= name "?") (dolist (b (drawing-blocks *dwg*))
+                            (unless (char= (char (block-def-name b) 0) #\*) (out (format nil "  ~A~%" (block-def-name b))))))
+      (t
+       (let ((b (or (find-block name) (let ((bn (load-block-from-dxf name))) (and bn (find-block bn))))))
+         (if (null b) (out (format nil "Block \"~A\" not found.~%" name))
+             (let* ((mk (lambda (p sx sy rot) (list (cons 0 "INSERT") (cons 2 (block-def-name b)) (cons 10 (pt3 p))
+                                                    (cons 41 (d sx)) (cons 42 (d sy)) (cons 50 (d rot)))))
+                    (p (gpoint "Specify insertion point or [Scale/Rotate]: " :keywords '("Scale" "Rotate")
+                               :drag (lambda (cur) (list (list :data (funcall mk cur 1 1 0))))))
+                    (sx 1d0) (rot 0d0))
+               (loop while (stringp p) do
+                 (cond ((equal p "Scale") (setf sx (or (greal "Specify scale factor for XYZ axes <1>: ") 1d0)))
+                       ((equal p "Rotate") (setf rot (or (gangle "Specify rotation angle <0>: ") 0d0))))
+                 (setf p (gpoint "Specify insertion point or [Scale/Rotate]: " :keywords '("Scale" "Rotate")
+                                 :drag (lambda (cur) (list (list :data (funcall mk cur sx sx rot)))))))
+               (when (pointp p)
+                 (let* ((x (or (greal (format nil "Enter X scale factor, specify opposite corner, or [Corner/XYZ] <~A>: " (fmt-len sx))) sx))
+                        (y (or (greal "Enter Y scale factor <use X scale factor>: ") x))
+                        (r (or (gangle (format nil "Specify rotation angle <~A>: " (fmt-ang rot)) :base p
+                                       :drag (lambda (cur) (list (list :data (funcall mk p x y (ang p cur))))))
+                               rot)))
+                   (add (funcall mk p x y r)))))))))))
+
+(defcmd "PURGE" ("PU" "-PURGE") "Removes unused layers and block definitions."
+  (let* ((used-layers (remove-duplicates (mapcar #'ent-layer (live-entities)) :test #'string-equal))
+         (used-blocks (remove-duplicates (loop for e in (live-entities) when (dxf 2 (ent-data e)) collect (dxf 2 (ent-data e))) :test #'string-equal))
+         (nl 0) (nb 0))
+    (setf (drawing-layers *dwg*)
+          (remove-if (lambda (l) (and (not (string-equal (layer-name l) "0")) (not (string-equal (layer-name l) (sysvar "CLAYER")))
+                                      (not (member (layer-name l) used-layers :test #'string-equal))
+                                      (incf nl)))
+                     (drawing-layers *dwg*)))
+    (setf (drawing-blocks *dwg*)
+          (remove-if (lambda (b) (and (not (member (block-def-name b) used-blocks :test #'string-equal)) (incf nb)))
+                     (drawing-blocks *dwg*)))
+    (touch)
+    (out (format nil "~D layer~:P and ~D block~:P deleted.~%" nl nb))))
+
+;;; ---------- files ----------
+
+(defun drawing-modified-p () (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)))
+
+(defun ask-save-changes ()
+  "Returns NIL if the user cancelled."
+  (if (and (drawing-modified-p) (gui-p) (not (from-lisp-p)))
+      (let ((r (gui-confirm (format nil "Save changes to ~A?" (drawing-display-name)) "yesnocancel")))
+        (cond ((string= r "yes") (save-drawing nil) t) ((string= r "no") t) (t nil)))
+      t))
+
+(defun ask-file (save title &optional initial)
+  (if (and (gui-p) (eql (sysvar "FILEDIA") 1) (not (from-lisp-p)))
+      (file-dialog save title :initial initial)
+      (let ((s (gstring (format nil "~A <~A>: " title (or initial "")) t)))
+        (cond ((plusp (length s)) s) (initial initial) (t nil)))))
+
+(defun ensure-ext (path ext)
+  (if (pathname-type (pathname path)) path (concatenate 'string path "." ext)))
+
+(defun save-drawing (as)
+  (let ((f (if (or as (null (drawing-filename *dwg*)))
+               (ask-file t "Save Drawing As" (or (drawing-filename *dwg*) "Drawing1.dxf"))
+               (drawing-filename *dwg*))))
+    (when f
+      (let ((f (ensure-ext f "dxf")))
+        (dxf-export f)
+        (out (format nil "Saved ~A~%" f))))))
+
+(defun open-drawing (f)
+  (handler-case
+      (let ((n (dxf-import f)))
+        (setf *pickfirst* nil *view-history* nil)
+        (clrhash *hl*) (clear-geom-cache)
+        (out (format nil "Opened ~A (~D object~:P).~%" f n))
+        (when (gui-p) (zoom-extents) (gui-sync)))
+    (file-error () (out (format nil "Cannot open ~A~%" f)))))
+
+(defcmd "NEW" ("QNEW") "Creates a new drawing."
+  (when (ask-save-changes)
+    (new-drawing) (setf *pickfirst* nil) (clrhash *hl*) (clear-geom-cache)
+    (when (gui-p) (zoom-to-box 0 0 12 9) (gui-sync))))
+(defcmd "OPEN" () "Opens a DXF drawing."
+  (when (ask-save-changes)
+    (let ((f (ask-file nil "Select File")))
+      (when f (open-drawing f)))))
+(defcmd "QSAVE" () "Saves the current drawing." (save-drawing nil))
+(defcmd "SAVE" () "Saves the drawing." (save-drawing nil))
+(defcmd "SAVEAS" () "Saves the drawing under a new name." (save-drawing t))
+(defcmd "DXFOUT" () "Exports the drawing as DXF." (save-drawing t))
+(defcmd "DXFIN" ("IMPORT") "Imports a DXF drawing into the current drawing."
+  (let ((f (ask-file nil "Select DXF File")))
+    (when f
+      (let ((bn (load-block-from-dxf f)))
+        (when bn
+          (dolist (dd (block-def-entities (find-block bn))) (add-entity dd))
+          (setf (drawing-blocks *dwg*) (remove bn (drawing-blocks *dwg*) :key #'block-def-name :test #'string-equal))
+          (out (format nil "Imported ~A.~%" f)))))))
+
+(defcmd "APPLOAD" ("AP") "Loads an AutoLISP (.lsp) file."
+  (let ((f (ask-file nil "Load AutoLISP File")))
+    (when f
+      (let ((r (run-lisp-file f)))
+        (declare (ignore r))
+        (out (format nil "~A successfully loaded.~%" (file-namestring f)))))))
+
+(defun tokenize-script (text)
+  (let ((items nil) (cur (make-string-output-stream)) (depth 0) (instr nil))
+    (flet ((flush () (push (get-output-stream-string cur) items)))
+      (loop for c across text do
+        (cond (instr (write-char c cur) (when (char= c #\") (setf instr nil)))
+              ((char= c #\") (setf instr t) (write-char c cur))
+              ((char= c #\() (incf depth) (write-char c cur))
+              ((char= c #\)) (decf depth) (write-char c cur))
+              ((and (zerop depth) (member c '(#\Space #\Newline))) (flush))
+              ((char= c #\Return) nil)
+              ((and (char= c #\;) (zerop depth)) nil)
+              (t (write-char c cur))))
+      (let ((last (get-output-stream-string cur))) (when (plusp (length last)) (push last items))))
+    (nreverse items)))
+
+(defcmd "SCRIPT" ("SCR") "Runs a sequence of commands from a script (.scr) file."
+  (let ((f (ask-file nil "Select Script File")))
+    (when f
+      (let ((items (tokenize-script (format nil "~{~A~%~}" (read-file-lines f)))))
+        (setf *script-queue* (append *script-queue* items))))))
+
+;;; ---------- settings ----------
+
+(defun setvar-prompt (name)
+  (let* ((cur (getvar name))
+         (s (gstring (format nil "Enter new value for ~A <~A>: " (string-upcase name) (if (stringp cur) cur (lisp-repr cur))) t)))
+    (when (plusp (length s))
+      (let ((v (cond ((integerp cur) (or (ignore-errors (parse-integer s)) (aerr "Requires an integer value.")))
+                     ((realp cur) (or (parse-number-text s) (aerr "Requires a numeric value.")))
+                     ((pointp cur) (or (parse-point-text s nil) (aerr "Requires a point.")))
+                     (t s))))
+        (setvar name v)))))
+
+(defcmd "SETVAR" ("SET") "Lists or changes the values of system variables."
+  (let ((n (gstring "Enter variable name or [?]: ")))
+    (cond ((string= n "?")
+           (let (names) (maphash (lambda (k v) (declare (ignore v)) (push k names)) *sysvars*)
+             (dolist (k (sort names #'string<)) (out (format nil "~15A ~A~%" k (lisp-repr (getvar k)))))))
+          ((plusp (length n)) (setvar-prompt n)))))
+
+(defcmd "OSNAP" ("OS" "-OSNAP" "DSETTINGS" "DS") "Sets running object snap modes."
+  (let* ((m (logand (sysvar "OSMODE") 16383))
+         (names (loop for (bit . nm) in '((1 . "END") (2 . "MID") (4 . "CEN") (8 . "NOD") (16 . "QUA") (32 . "INT")
+                                          (64 . "INS") (128 . "PER") (256 . "TAN") (512 . "NEA"))
+                      when (logtest m bit) collect nm)))
+    (out (format nil "Current osnap modes: ~:[None~;~:*~{~A~^,~}~]~%" names))
+    (let ((s (gstring "Enter list of object snap modes (END,MID,CEN,NOD,QUA,INT,INS,PER,TAN,NEA or NONE): ")))
+      (when (plusp (length s))
+        (setf (sysvar "OSMODE") (if (string-equal s "none") 0 (osnap-bits-from-string s)))
+        (when (gui-p) (gui-sync))))))
+
+(defcmd "ORTHO" () "Turns ortho mode on or off."
+  (let ((k (gkw (format nil "Enter mode [ON/OFF] <~A>: " (if (eql (sysvar "ORTHOMODE") 1) "ON" "OFF")) '("ON" "OFF"))))
+    (when k (setf (sysvar "ORTHOMODE") (if (equal k "ON") 1 0)) (when (gui-p) (gui-sync)))))
+(defcmd "GRID" () "Turns the grid on or off, or sets spacing."
+  (let ((r (get-user-input :real :prompt (format nil "Specify grid spacing(X) or [ON/OFF] <~A>: " (fmt-len (first (sysvar "GRIDUNIT"))))
+                                 :keywords '("ON" "OFF"))))
+    (cond ((equal r "ON") (setf (sysvar "GRIDMODE") 1)) ((equal r "OFF") (setf (sysvar "GRIDMODE") 0))
+          ((realp r) (setf (sysvar "GRIDUNIT") (list r r) (sysvar "GRIDMODE") 1)))
+    (when (gui-p) (gui-regen) (gui-sync))))
+(defcmd "SNAP" ("SN") "Sets snap spacing or turns snap on/off."
+  (let ((r (get-user-input :real :prompt (format nil "Specify snap spacing or [ON/OFF] <~A>: " (fmt-len (first (sysvar "SNAPUNIT"))))
+                                 :keywords '("ON" "OFF"))))
+    (cond ((equal r "ON") (setf (sysvar "SNAPMODE") 1)) ((equal r "OFF") (setf (sysvar "SNAPMODE") 0))
+          ((realp r) (setf (sysvar "SNAPUNIT") (list r r) (sysvar "SNAPMODE") 1)))
+    (when (gui-p) (gui-sync))))
+(defcmd "UNITS" ("UN" "-UNITS") "Sets linear unit format and precision."
+  (let ((lu (get-user-input :int :prompt (format nil "Enter linear units: 1 Scientific, 2 Decimal, 3 Engineering, 4 Architectural, 5 Fractional <~D>: " (sysvar "LUNITS")))))
+    (when (and lu (<= 1 lu 5)) (setf (sysvar "LUNITS") lu)))
+  (let ((pr (get-user-input :int :prompt (format nil "Enter number of digits to right of decimal point (0 to 8) <~D>: " (sysvar "LUPREC")))))
+    (when (and pr (<= 0 pr 8)) (setf (sysvar "LUPREC") pr))))
+
+(defcmd "HELP" ("?" "F1") "Lists commands."
+  (let (names) (maphash (lambda (k v) (declare (ignore v)) (push k names)) *commands*)
+    (out (format nil "~%LispDraft commands (aliases in parentheses):~%"))
+    (dolist (n (sort names #'string<))
+      (let ((al (let (r) (maphash (lambda (a c) (when (string= c n) (push a r))) *aliases*) (sort r #'string<))))
+        (out (format nil "  ~14A ~@[(~{~A~^ ~}) ~]~A~%" n al (gethash n *command-help*)))))
+    (out (format nil "~%Type an AutoLISP expression such as (+ 1 2) at the Command: prompt, or !var to see a value.~%Functions named C:XXX become commands.~%"))))
+
+(defcmd "ABOUT" () "Shows program information."
+  (out (format nil "~A ~A — 2D drafting with AutoLISP. Running on ~A ~A.~%"
+               *program-name* *version* (lisp-implementation-type) (lisp-implementation-version))))
+
+(defvar *quit-requested* nil)
+(defcmd "QUIT" ("EXIT") "Exits the program."
+  (when (ask-save-changes) (setf *quit-requested* t)))
+
+;;; ---------- AutoLISP: entity access ----------
+
+(defun aename (x) (if (ename-p x) x (bad-arg "lentityp" x)))
+
+(defsubr "entget" (e &optional apps)
+  (declare (ignore apps))
+  (let ((e (aename e)))
+    (and (not (ename-deleted e))
+         (cons (cons -1 e) (copy-tree (ename-data e))))))
+
+(defun valid-entity-data-p (data)
+  (let ((type (dxf 0 data)))
+    (and (stringp type)
+         (cond ((equal type "LINE") (and (pointp (dxf 10 data)) (pointp (dxf 11 data))))
+               ((equal type "CIRCLE") (and (pointp (dxf 10 data)) (realp (dxf 40 data))))
+               ((equal type "ARC") (and (pointp (dxf 10 data)) (realp (dxf 40 data)) (realp (dxf 50 data)) (realp (dxf 51 data))))
+               ((equal type "POINT") (pointp (dxf 10 data)))
+               ((member type '("TEXT" "MTEXT") :test #'equal) (and (pointp (dxf 10 data)) (stringp (dxf 1 data))))
+               ((equal type "LWPOLYLINE") (assoc 10 data))
+               ((equal type "INSERT") (and (stringp (dxf 2 data)) (find-block (dxf 2 data)) (pointp (dxf 10 data))))
+               ((member type '("ELLIPSE" "SPLINE" "SOLID" "DIMENSION") :test #'equal) t)
+               (t nil)))))
+
+(defun clean-entmake-data (lst)
+  (let ((data (remove-if (lambda (p) (and (consp p) (member (car p) '(-1 5 330 -2 100 410)))) (alst lst))))
+    ;; coerce numbers in known real codes
+    (mapcar (lambda (p)
+              (cond ((and (consp p) (member (car p) '(40 41 42 43 50 51)) (realp (cdr p))) (cons (car p) (d (cdr p))))
+                    ((and (consp p) (member (car p) '(10 11 12 13 14)) (pointp (cdr p)))
+                     (if (and (equal (dxf 0 lst) "LWPOLYLINE")) (list (car p) (d (second p)) (d (third p))) (cons (car p) (pt3 (cdr p)))))
+                    (t p)))
+            data)))
+
+(defsubr "entmake" (&optional lst)
+  (let ((data (clean-entmake-data lst)))
+    (when (valid-entity-data-p data) (add-entity data) lst)))
+(defsubr "entmakex" (&optional lst)
+  (let ((data (clean-entmake-data lst)))
+    (when (valid-entity-data-p data) (add-entity data))))
+(defsubr "entmod" (lst)
+  (let ((e (dxf -1 (alst lst))))
+    (when (and (ename-p e) (not (ename-deleted e)))
+      (let ((data (cons (assoc 0 (ename-data e))
+                        (cons (cons 5 (ename-handle e))
+                              (remove-if (lambda (p) (and (consp p) (member (car p) '(-1 0 5)))) (clean-entmake-data lst))))))
+        (when (valid-entity-data-p data)
+          (set-entity-data e data)
+          (when (gui-p) (rerender-entity e))
+          lst)))))
+(defsubr "entupd" (e) (when (gui-p) (rerender-entity (aename e))) e)
+(defsubr "entdel" (e)
+  (let ((e (aename e)))
+    (if (ename-deleted e) (undelete-entity e) (delete-entity e))
+    e))
+(defsubr "entlast" () (last-entity))
+(defsubr "entnext" (&optional e) (next-entity (and e (aename e))))
+(defsubr "handent" (h) (let ((e (entity-by-handle (astr h)))) (and e (not (ename-deleted e)) e)))
+
+;;; ---------- AutoLISP: tables ----------
+
+(defvar *tblnext-state* (make-hash-table :test #'equalp))
+
+(defun table-records (table)
+  (let ((tb (string-upcase table)))
+    (cond ((string= tb "LAYER")
+           (mapcar (lambda (l) (list (cons 0 "LAYER") (cons 2 (layer-name l))
+                                     (cons 70 (logior (if (layer-frozen l) 1 0) (if (layer-locked l) 4 0)))
+                                     (cons 62 (if (layer-on l) (abs (layer-color l)) (- (abs (layer-color l)))))
+                                     (cons 6 (layer-ltype l))))
+                   (drawing-layers *dwg*)))
+          ((string= tb "BLOCK")
+           (mapcar (lambda (b) (list (cons 0 "BLOCK") (cons 2 (block-def-name b)) (cons 70 (if (char= (char (block-def-name b) 0) #\*) 1 0))
+                                     (cons 10 (block-def-base b))))
+                   (reverse (drawing-blocks *dwg*))))
+          ((string= tb "LTYPE") (list (list (cons 0 "LTYPE") (cons 2 "CONTINUOUS") (cons 70 0) (cons 3 "Solid line"))))
+          ((string= tb "STYLE") (list (list (cons 0 "STYLE") (cons 2 "Standard") (cons 70 0) (cons 40 0d0) (cons 41 1d0) (cons 3 "txt"))))
+          ((member tb '("VIEW" "UCS" "VPORT" "DIMSTYLE" "APPID") :test #'string=)
+           (if (string= tb "DIMSTYLE") (list (list (cons 0 "DIMSTYLE") (cons 2 "Standard") (cons 70 0))) nil))
+          (t nil))))
+
+(defsubr "tblsearch" (table name &optional next)
+  (declare (ignore next))
+  (find (astr name) (table-records (astr table)) :key (lambda (r) (dxf 2 r)) :test #'string-equal))
+(defsubr "tblnext" (table &optional rewind)
+  (let* ((recs (table-records (astr table))) (key (string-upcase table))
+         (i (if rewind 0 (gethash key *tblnext-state* 0))))
+    (setf (gethash key *tblnext-state*) (1+ i))
+    (nth i recs)))
+(defsubr "tblobjname" (table name) (declare (ignore table name)) nil)
+(defsubr "layoutlist" () nil)
+
+;;; ---------- AutoLISP: system variables ----------
+
+(defun current-date-julian ()
+  (multiple-value-bind (s mi h dd mo y) (get-decoded-time)
+    (let* ((a (floor (- 14 mo) 12)) (yy (- (+ y 4800) a)) (mm (- (+ mo (* 12 a)) 3))
+           (jdn (+ dd (floor (+ (* 153 mm) 2) 5) (* 365 yy) (floor yy 4) (- (floor yy 100)) (floor yy 400) -32045)))
+      (+ jdn (/ (+ (* h 3600) (* mi 60) s) 86400d0)))))
+
+(defun getvar (name)
+  (let ((n (string-upcase name)))
+    (cond
+      ((string= n "DWGNAME") (drawing-display-name))
+      ((string= n "DWGPREFIX") (let ((f (drawing-filename *dwg*)))
+                                 (if f (directory-namestring f) (namestring (truename ".")))))
+      ((string= n "DWGTITLED") (if (drawing-filename *dwg*) 1 0))
+      ((string= n "DBMOD") (if (drawing-modified-p) 1 0))
+      ((string= n "ACADVER") "24.3s (LispDraft)")
+      ((string= n "PRODUCT") "LispDraft")
+      ((string= n "PLATFORM") (format nil "~A ~A" (software-type) (machine-type)))
+      ((string= n "LOGINNAME") (or (getenv "USER") (getenv "USERNAME") "user"))
+      ((string= n "CDATE") (multiple-value-bind (s mi h dd mo y) (get-decoded-time)
+                             (+ (* y 10000) (* mo 100) dd (/ (+ (* h 10000) (* mi 100) s) 1000000d0))))
+      ((string= n "DATE") (current-date-julian))
+      ((string= n "MILLISECS") (mod (floor (* 1000 (get-internal-real-time)) internal-time-units-per-second) (expt 2 31)))
+      ((string= n "CMDACTIVE") (if (co-active-p) 1 0))
+      ((string= n "CMDNAMES") (if (co-active-p) "COMMAND" ""))
+      ((string= n "EXTMIN") (let ((b (drawing-extents))) (if b (pt (first b) (second b)) (pt 1d20 1d20 1d20))))
+      ((string= n "EXTMAX") (let ((b (drawing-extents))) (if b (pt (third b) (fourth b)) (pt -1d20 -1d20 -1d20))))
+      ((string= n "VIEWCTR") (pt *vx* *vy*))
+      ((string= n "VIEWSIZE") (/ *ch* *vscale*))
+      ((string= n "SCREENSIZE") (list (d *cw*) (d *ch*)))
+      ((string= n "TILEMODE") 1)
+      ((string= n "WORLDUCS") 1)
+      ((string= n "UCSORG") (pt 0 0))
+      ((string= n "UCSXDIR") (pt 1 0))
+      ((string= n "UCSYDIR") (pt 0 1))
+      ((string= n "CVPORT") 2)
+      ((string= n "ELEVATION") 0d0)
+      ((string= n "THICKNESS") 0d0)
+      ((string= n "CELTYPE") "ByLayer")
+      ((string= n "CELWEIGHT") -1)
+      ((string= n "DIMSCALE") (or (sysvar n) 1d0))
+      ((string= n "CURSORSIZE") (or (sysvar n) 100))
+      ((string= n "CIRCLERAD") (or (sysvar n) 0d0))
+      (t (multiple-value-bind (v found) (gethash n *sysvars*)
+           (if found v nil))))))
+
+(defparameter *read-only-sysvars*
+  '("DWGNAME" "DWGPREFIX" "DWGTITLED" "DBMOD" "ACADVER" "PRODUCT" "PLATFORM" "LOGINNAME" "CDATE" "DATE"
+    "MILLISECS" "CMDACTIVE" "CMDNAMES" "EXTMIN" "EXTMAX" "VIEWCTR" "VIEWSIZE" "SCREENSIZE"))
+
+(defun setvar (name val)
+  (let ((n (string-upcase name)))
+    (cond
+      ((member n *read-only-sysvars* :test #'string=) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
+      ((string= n "CLAYER")
+       (let ((l (find-layer (astr val))))
+         (unless l (aerr "AutoCAD variable setting rejected: \"CLAYER\" ~A" (lisp-repr val)))
+         (setf (sysvar "CLAYER") (layer-name l))))
+      ((member n '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "CMDECHO" "LUPREC" "AUPREC" "LUNITS" "AUNITS"
+                   "PICKBOX" "APERTURE" "PDMODE" "HIGHLIGHT" "BLIPMODE" "PICKFIRST" "MIRRTEXT" "FILEDIA"
+                   "EXPERT" "ANGDIR" "CURSORSIZE" "INSUNITS")
+               :test #'string=)
+       (unless (integerp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
+       (setf (sysvar n) val))
+      ((member n '("TEXTSIZE" "PDSIZE" "FILLETRAD" "OFFSETDIST" "ANGBASE" "DIMSCALE" "DIMTXT" "DIMASZ"
+                   "DIMEXO" "DIMEXE" "DIMGAP" "PLINEWID" "CHAMFERA" "CHAMFERB" "CIRCLERAD" "LASTROTATION")
+               :test #'string=)
+       (unless (realp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
+       (setf (sysvar n) (d val)))
+      ((member n '("SNAPUNIT" "GRIDUNIT" "LIMMIN" "LIMMAX" "LASTPOINT") :test #'string=)
+       (unless (pointp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
+       (setf (sysvar n) (if (string= n "LASTPOINT") (pt3 val) (list (d (first val)) (d (second val))))))
+      (t (setf (sysvar n) val)))
+    (when (gui-p)
+      (when (member n '("CLAYER" "OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE") :test #'string=) (gui-sync))
+      (when (member n '("GRIDMODE" "GRIDUNIT" "PDMODE" "PDSIZE") :test #'string=) (gui-regen)))
+    val))
+
+(defsubr "getvar" (name) (getvar (astr name)))
+(defsubr "setvar" (name val) (setvar (astr name) val))
+(defsubr "getcfg" (s) (declare (ignore s)) nil)
+(defsubr "setcfg" (s v) (declare (ignore s)) v)
+
+(defsubr "textbox" (elist)
+  (let* ((data (remove-if (lambda (p) (and (consp p) (eql (car p) -1))) (alst elist)))
+         (data (if (assoc 0 data) data (cons (cons 0 "TEXT") data)))
+         (data (if (assoc 10 data) data (append data (list (cons 10 (pt 0 0))))))
+         (data (set-dxf 10 (pt 0 0) (set-dxf 50 0d0 (if (assoc 40 data) data (append data (list (cons 40 (d (sysvar "TEXTSIZE"))))))))))
+    (let ((c (text-box data)))
+      (list (pt (px (first c)) (py (first c))) (pt (px (third c)) (py (third c)))))))
