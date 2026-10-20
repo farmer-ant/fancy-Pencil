@@ -470,7 +470,7 @@
       (let ((r (get-user-input :select-point :prompt "Select objects: " :keywords '("Crossing" "Window"))))
         (flet ((corners (p1)
                  (let ((p2 (get-user-input :corner :base p1 :prompt "Specify opposite corner: "
-                                                   :drag (lambda (cur) (list (list :rect p1 cur :crossing))))))
+                                                   :drag (lambda (cur) (list (list :rect p1 cur :crossing))) :nosnap t)))
                    (when (pointp p2)
                      (push (list (min (px p1) (px p2)) (min (py p1) (py p2)) (max (px p1) (px p2)) (max (py p1) (py p2))) windows)
                      (let ((found (filter-editable (entities-in-window p1 p2 t))))
@@ -600,7 +600,7 @@
                      (let ((e (pick-entity-at r)))
                        (if e (set-entity-data e (match-props (ent-data s) (ent-data e)))
                            (let ((p2 (get-user-input :corner :base r :prompt "Specify opposite corner: "
-                                                             :drag (window-selection-drag r))))
+                                                             :drag (window-selection-drag r) :nosnap t)))
                              (when (pointp p2)
                                (dolist (e (filter-editable (entities-in-window r p2 (< (px p2) (px r)))))
                                  (unless (eq e s)

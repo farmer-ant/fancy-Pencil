@@ -16,6 +16,16 @@
         (when (> (length (drawing-undo *dwg*)) 200)
           (setf (drawing-undo *dwg*) (subseq (drawing-undo *dwg*) 0 200)))))))
 
+(defparameter *no-repeat-commands*
+  '("NEW" "OPEN" "QSAVE" "SAVE" "SAVEAS" "SAVEASR12" "DXFIN" "DXFOUT" "QUIT" "APPLOAD" "SCRIPT"
+    "PURGE" "ALIASEDIT" "REINIT" "HELP" "ABOUT" "U" "UNDO" "REDO" "OOPS" "LAYER" "LINETYPE" "LWEIGHT"
+    "DIMSTYLE" "UNITS" "SETVAR" "OSNAP" "PROPERTIES" "SELECTALL" "COPYCLIP" "REGEN" "HPSET")
+  "Commands that Enter at an empty prompt does not repeat (file, setup and undo commands).")
+
+(defun remember-command (word name)
+  (unless (member name *no-repeat-commands* :test #'string-equal)
+    (setf *last-command* word)))
+
 (defparameter *no-undo-commands* '("U" "UNDO" "REDO" "MREDO" "ZOOM" "PAN" "REGEN" "HELP" "ABOUT" "LIST" "DIST" "ID" "AREA"
                                     "QSAVE" "SAVE" "SAVEAS" "DXFOUT" "NEW" "OPEN" "QUIT" "COPYCLIP" "SELECTALL"))
 
@@ -69,7 +79,7 @@
          (setf *script-queue* (append (rest parts) *script-queue*))
          (progn
            (cond
-             (fn (setf *last-command* word) (run-builtin name fn))
+             (fn (remember-command word name) (run-builtin name fn))
              ((or (ufunc-p lisp-fn) (subr-p lisp-fn) (and (consp lisp-fn) (listp (car lisp-fn))))
               (setf *last-command* word)
               (run-lisp-toplevel (lambda () (apply-a lisp-fn nil))))

@@ -17,7 +17,7 @@
 (defvar *from-script* nil)
 
 (defstruct inreq
-  kind prompt base keywords (flags 0) drag spaces)
+  kind prompt base keywords (flags 0) drag spaces nosnap)
 
 ;;; ---------- thread shim (for the COMMAND coroutine) ----------
 
@@ -327,10 +327,11 @@
         (pt (* ux (fround (/ (px p) ux))) (* uy (fround (/ (py p) uy))) (pz p)))
       p))
 
-(defun resolve-cursor-point (raw base)
+(defun resolve-cursor-point (raw base &key (ortho t))
   "Snap/ortho processing for a clicked or hovered point: (values point snap-bit)."
   (multiple-value-bind (q bit) (find-osnap raw base)
-    (if q (values q bit) (values (apply-ortho (apply-grid-snap raw) base) nil))))
+    (if q (values q bit)
+        (values (if ortho (apply-ortho (apply-grid-snap raw) base) (apply-grid-snap raw)) nil))))
 
 ;;; ---------- selection helpers ----------
 
@@ -391,7 +392,7 @@
                             (out (format nil "~D found, ~D removed, ~D total~%" (length found) (length found) (length sel)))))))
              (corner-select (p1 force)
                (let ((p2 (get-user-input :corner :base p1 :prompt "Specify opposite corner: "
-                                                 :drag (window-selection-drag p1))))
+                                                 :drag (window-selection-drag p1) :nosnap t)))
                  (when (pointp p2)
                    (take (entities-in-window p1 p2 (ecase force (:window nil) (:crossing t)
                                                      ((nil) (< (px p2) (px p1))))))))))
@@ -408,9 +409,9 @@
                   (let ((e (pick-entity-at r)))
                     (if e (take (list e))
                         (corner-select r nil))))
-                 ((equal r "Window") (let ((p (get-user-input :point :prompt "Specify first corner: "))) (corner-select p :window)))
-                 ((equal r "Crossing") (let ((p (get-user-input :point :prompt "Specify first corner: "))) (corner-select p :crossing)))
-                 ((equal r "BOX") (let ((p (get-user-input :point :prompt "Specify first corner: "))) (corner-select p nil)))
+                 ((equal r "Window") (let ((p (get-user-input :point :prompt "Specify first corner: " :nosnap t))) (corner-select p :window)))
+                 ((equal r "Crossing") (let ((p (get-user-input :point :prompt "Specify first corner: " :nosnap t))) (corner-select p :crossing)))
+                 ((equal r "BOX") (let ((p (get-user-input :point :prompt "Specify first corner: " :nosnap t))) (corner-select p nil)))
                  ((equal r "ALL") (take (remove-if-not (lambda (e) (layer-visible-p (find-layer (ent-layer e)))) (live-entities))))
                  ((equal r "Last") (let ((e (last-entity))) (when e (take (list e)))))
                  ((equal r "Previous") (take (remove-if-not #'ent-live-p *previous-selection*)))
@@ -559,10 +560,11 @@
     (:int "Requires an integer value.")
     (t "Invalid input.")))
 
-(defun get-user-input (kind &key (prompt "") base keywords (flags 0) drag spaces)
-  "Ask for input of KIND. Returns the value, NIL for Enter, or a matched keyword string."
+(defun get-user-input (kind &key (prompt "") base keywords (flags 0) drag spaces nosnap)
+  "Ask for input of KIND. Returns the value, NIL for Enter, or a matched keyword string.
+NOSNAP turns off object snap, grid snap and ortho (used for selection windows)."
   (let ((req (make-inreq :kind kind :prompt prompt :base (and base (pt3 base)) :keywords keywords
-                         :flags flags :drag drag :spaces spaces))
+                         :flags flags :drag drag :spaces spaces :nosnap nosnap))
         (*osnap-override* nil))
     (loop
       (let ((item (next-queued-input)) value ok)

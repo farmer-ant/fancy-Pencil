@@ -12,7 +12,7 @@
 
 (in-package :lispdraft)
 
-(defparameter *version* "0.2")
+(defparameter *version* "0.2.1")
 (defparameter *program-name* "LispDraft")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
