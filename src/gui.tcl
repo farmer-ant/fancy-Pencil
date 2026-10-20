@@ -278,6 +278,7 @@ bind all <Control-Key-1> {palette_toggle; break}
 
 bind .c <Motion> {emit M %x %y}
 bind .c <ButtonPress-1> {emit B %x %y; focus .cmd.e}
+bind .c <ButtonRelease-1> {emit U %x %y}
 bind .c <ButtonPress-3> {emit R %x %y}
 bind .c <ButtonPress-2> {emit P %x %y}
 bind .c <B2-Motion> {emit D %x %y}

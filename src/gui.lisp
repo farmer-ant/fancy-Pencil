@@ -22,6 +22,8 @@
 (defvar *gui-dir* nil)
 (defvar *at-line-start* t)
 (defvar *palette-shown* nil)
+(defvar *prompt-owner* nil "The input request whose prompt the command line is showing.")
+(defvar *press-pos* nil "Screen position of the last left-button press (for press-drag-release windows).")
 
 ;;; ---------- process ----------
 
@@ -536,10 +538,13 @@
 (defun update-cursor (sx sy)
   (setf *mouse-sx* sx *mouse-sy* sy *mouse-in* t)
   (let* ((raw (s->w sx sy)) (kind (and *req* (inreq-kind *req*))))
-    (if (member kind '(:point :corner :distance :angle))
-        (multiple-value-bind (q bit) (resolve-cursor-point raw (inreq-base *req*))
-          (setf *cursor-world* q *snap-bit* bit))
-        (setf *cursor-world* raw *snap-bit* nil))))
+    (cond ((and (member kind '(:point :corner)) (inreq-nosnap *req*))
+           (setf *cursor-world* raw *snap-bit* nil))
+          ((member kind '(:point :corner :distance :angle))
+           ;; ortho constrains lines, never the opposite corner of a rectangle or window
+           (multiple-value-bind (q bit) (resolve-cursor-point raw (inreq-base *req*) :ortho (not (eq kind :corner)))
+             (setf *cursor-world* q *snap-bit* bit)))
+          (t (setf *cursor-world* raw *snap-bit* nil)))))
 
 (defun echo-input (text)
   (out (format nil "~:[~%~;~]~A~A~%" *at-line-start* (inreq-prompt *req*) text)))
@@ -601,6 +606,7 @@
                           (update-cursor x y) (draw-temp) (update-coords)))
       ((string= ty "B")
        (destructuring-bind (x y) (event-ints ev)
+         (setf *press-pos* (list x y))
          (update-cursor x y)
          (case kind
            ((:point :corner :distance :angle)
@@ -609,6 +615,13 @@
             (echo-input "") (setf *acq-result* (list :pick (s->w x y))))
            (:command (command-prompt-pick (s->w x y)))
            (t nil))))
+      ((string= ty "U")
+       (destructuring-bind (x y) (event-ints ev)
+         (when (and (eq kind :corner) (inreq-nosnap *req*) *press-pos*
+                    (> (+ (abs (- x (first *press-pos*))) (abs (- y (second *press-pos*)))) 6))
+           (update-cursor x y)
+           (echo-input "") (setf *acq-result* (list :point *cursor-world*)))
+         (setf *press-pos* nil)))
       ((string= ty "R") (echo-input "") (setf *acq-result* (list :text "")))
       ((string= ty "L") (let ((s (event-rest ev))) (echo-input s) (setf *acq-result* (list :text s))))
       ((string= ty "E")
@@ -651,7 +664,7 @@
           (refresh-grips) (refresh-palette))
         (let ((p2 (handler-case
                       (get-user-input :corner :base p :prompt "Specify opposite corner: "
-                                              :drag (window-selection-drag p))
+                                              :drag (window-selection-drag p) :nosnap t)
                     (alisp-cancel () nil))))
           (when (pointp p2)
             (let ((new (remove-if (lambda (x) (member x *pickfirst*))
@@ -670,8 +683,15 @@
     (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
     (when *mouse-in* (update-cursor *mouse-sx* *mouse-sy*))
     (draw-temp)
+    (setf *prompt-owner* req)
     (unwind-protect
-         (loop until *acq-result* do (handle-event (next-event)))
+         (loop until *acq-result*
+               do (handle-event (next-event))
+                  ;; a nested prompt (window corner, grip edit...) changed the label: put ours back
+                  (unless (or *acq-result* (eq *prompt-owner* req))
+                    (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
+                    (setf *prompt-owner* req)
+                    (draw-temp)))
       (setf *snap-bit* nil))
     *acq-result*))
 
