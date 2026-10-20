@@ -22,7 +22,20 @@
             ((<= 460 code 469) (num))
             ((<= 1010 code 1059) (num))
             ((<= 1060 code 1071) (or (int) 0))
-            (t (string-right-trim '(#\Return) str))))))
+            (t (decode-dxf-unicode (string-right-trim '(#\Return) str)))))))
+
+(defun decode-dxf-unicode (s)
+  "Replace \\U+XXXX escapes (used by AutoCAD in ANSI DXF files) with characters."
+  (if (not (search "\\U+" s))
+      s
+      (with-output-to-string (o)
+        (let ((i 0) (n (length s)))
+          (loop while (< i n) do
+            (if (and (<= (+ i 7) n) (string= "\\U+" s :start2 i :end2 (+ i 3))
+                     (every (lambda (c) (digit-char-p c 16)) (subseq s (+ i 3) (+ i 7))))
+                (progn (write-char (code-char (parse-integer s :start (+ i 3) :end (+ i 7) :radix 16)) o)
+                       (incf i 7))
+                (progn (write-char (char s i) o) (incf i))))))))
 
 (defun read-file-lines (path)
   (flet ((try (fmt)
@@ -94,6 +107,8 @@
 
 (defun convert-in (g)
   "Convert one raw DXF entity group to internal alist (radians, world coords)."
+  (when (equal (cdr (first g)) "HATCH")
+    (return-from convert-in (hatch-from-dxf (clean-group g))))
   (let* ((type (cdr (first g)))
          (data (group-coords (clean-group g) (if (equal type "LWPOLYLINE") '(10) nil))))
     (cond
@@ -102,9 +117,11 @@
       ((member type '("TEXT" "INSERT" "ATTDEF" "ATTRIB") :test #'equal)
        (setf data (map-codes data '(50 51) #'rad)))
       ((equal type "MTEXT")
+       ;; rotation: the direction vector (11) wins; group 50 is in degrees despite the DXF reference
        (let ((dir (dxf 11 data)))
-         (when (and dir (not (dxf 50 data)))
-           (setf data (append (rem-dxf 11 data) (list (cons 50 (ang (pt 0 0) dir)))))))
+         (setf data (if dir
+                        (append (rem-dxf 50 (rem-dxf 11 data)) (list (cons 50 (ang (pt 0 0) dir))))
+                        (map-codes data '(50) #'rad))))
        ;; MTEXT text may be split across 3 groups followed by 1
        (let ((parts (loop for p in data when (and (consp p) (member (car p) '(3 1))) collect (cdr p))))
          (setf data (append (remove-if (lambda (p) (and (consp p) (member (car p) '(3 1)))) data)
@@ -162,6 +179,25 @@
     (when replace
       (new-drawing)
       (setf (drawing-filename *dwg*) (namestring path)))
+    ;; dimension styles
+    (dolist (g tables)
+      (when (and (equal (cdr (first g)) "DIMSTYLE") (dxf 2 g))
+        (let ((vars (standard-dimvars)))
+          (loop for (code key) in '((3 :dimpost) (40 :dimscale) (41 :dimasz) (42 :dimexo) (43 :dimdli) (44 :dimexe)
+                                    (140 :dimtxt) (141 :dimcen) (142 :dimtsz) (144 :dimlfac) (147 :dimgap)
+                                    (73 :dimtih) (77 :dimtad) (271 :dimdec) (176 :dimclrd) (177 :dimclre) (178 :dimclrt))
+                for v = (dxf code g)
+                when v do (setf (getf vars key) (if (floatp v) (d v) v)))
+          (setf (drawing-dimstyles *dwg*)
+                (append (remove (dxf 2 g) (drawing-dimstyles *dwg*) :key #'dimstyle-name :test #'string-equal)
+                        (list (make-dimstyle :name (dxf 2 g) :vars vars)))))))
+    ;; linetypes
+    (dolist (g tables)
+      (when (equal (cdr (first g)) "LTYPE")
+        (let ((name (dxf 2 g)))
+          (unless (or (null name) (continuous-name-p name))
+            (add-ltype (make-ltype :name name :desc (or (dxf 3 g) "")
+                                   :pattern (loop for p in g when (eql (car p) 49) collect (d (cdr p)))))))))
     ;; layers
     (dolist (g tables)
       (when (equal (cdr (first g)) "LAYER")
@@ -170,7 +206,8 @@
             (let ((l (ensure-layer name)))
               (setf (layer-color l) (max 1 (abs c)) (layer-on l) (>= c 0)
                     (layer-frozen l) (logtest 1 flags) (layer-locked l) (logtest 4 flags)
-                    (layer-ltype l) (or (dxf 6 g) "CONTINUOUS")))))))
+                    (layer-ltype l) (or (dxf 6 g) "CONTINUOUS")
+                    (layer-lineweight l) (or (dxf 370 g) -3)))))))
     ;; blocks
     (let ((cur nil) (body nil))
       (dolist (g blocks)
@@ -280,13 +317,18 @@
       (let ((ltypes (remove-duplicates
                      (remove-if (lambda (n) (or (not (stringp n)) (member n '("CONTINUOUS" "BYLAYER" "BYBLOCK") :test #'string-equal)))
                                 (append (mapcar #'layer-ltype (drawing-layers *dwg*))
+                                        (mapcar #'ltype-name (drawing-ltypes *dwg*))
                                         (mapcar (lambda (e) (dxf 6 (ename-data e))) (live-entities))
                                         (loop for b in (drawing-blocks *dwg*) append (mapcar (lambda (dd) (dxf 6 dd)) (block-def-entities b)))))
                      :test #'string-equal)))
         (wr out 0 "TABLE") (wr out 2 "LTYPE") (wr out 70 (1+ (length ltypes)))
         (dolist (n (cons "CONTINUOUS" ltypes))
-          (wr out 0 "LTYPE") (wr out 2 n) (wr out 70 0) (wr out 3 (if (string= n "CONTINUOUS") "Solid line" n))
-          (wr out 72 65) (wr out 73 0) (wr out 40 0d0))
+          (let* ((lt (or (find-ltype n) (library-linetype n)))
+                 (pat (and lt (ltype-pattern lt))))
+            (wr out 0 "LTYPE") (wr out 2 n) (wr out 70 0)
+            (wr out 3 (cond ((string= n "CONTINUOUS") "Solid line") (lt (ltype-desc lt)) (t n)))
+            (wr out 72 65) (wr out 73 (length pat)) (wr out 40 (d (reduce #'+ (mapcar #'abs pat))))
+            (dolist (x pat) (wr out 49 (d x)))))
         (wr out 0 "ENDTAB"))
       (wr out 0 "TABLE") (wr out 2 "LAYER") (wr out 70 (length (drawing-layers *dwg*)))
       (dolist (l (drawing-layers *dwg*))

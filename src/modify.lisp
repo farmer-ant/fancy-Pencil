@@ -302,9 +302,7 @@
                    (next (or (find-if (lambda (x) (> x ap)) ss) (first ss))))
                (replace-with e (list (arc-data c r next prev)))
                :done))))
-      ((equal type "LWPOLYLINE")
-       ;; trim one segment: explode the polyline into pieces, trim the picked one, rejoin the rest
-       :unsupported)
+      ((equal type "LWPOLYLINE") (trim-polyline e pick cuts))
       (t :unsupported))))
 
 (defun extend-entity (e pick bounds)
@@ -336,6 +334,7 @@
                                                  (set-dxf 51 (norm-ang (+ a2 dlt)) data)))
                           :done)
                :no-intersection)))
+        ((equal type "LWPOLYLINE") (extend-polyline e pick bounds))
         (t :unsupported)))))
 
 (defun edge-select (what)
@@ -406,96 +405,6 @@
                    (replace-with e (list (arc-data c rr (ang c p2) (ang c p1))))))
                 (t (out (format nil "Cannot break that object.~%")))))))))))
 
-;;; ---------- FILLET / CHAMFER ----------
-
-(defun pick-line (prompt keywords)
-  (loop
-    (let ((r (get-user-input :entity :prompt prompt :keywords keywords)))
-      (cond ((or (null r) (stringp r)) (return r))
-            ((consp r)
-             (let ((e (sel-entity r)))
-               (cond ((null e) (out (format nil "No object found.~%")))
-                     ((not (equal (ent-type e) "LINE")) (out (format nil "Only lines can be filleted or chamfered.~%")))
-                     (t (return (list e (sel-point r)))))))))))
-
-(defun corner-geometry (s1 s2)
-  "For two (line pick) pairs: intersection X, unit dirs toward kept sides, and far endpoints."
-  (destructuring-bind (e1 p1) s1
-    (destructuring-bind (e2 p2) s2
-      (let* ((d1 (ent-data e1)) (d2 (ent-data e2))
-             (a1 (pt3 (dxf 10 d1))) (b1 (pt3 (dxf 11 d1)))
-             (a2 (pt3 (dxf 10 d2))) (b2 (pt3 (dxf 11 d2)))
-             (x (line-line-int a1 b1 a2 b2 nil)))
-        (when x
-          (flet ((side (a b p)
-                   ;; keep the end on the picked side of the intersection
-                   (let ((tp (seg-param p a b)) (tx (seg-param x a b)))
-                     (if (>= tp tx) b a))))
-            (let ((f1 (side a1 b1 p1)) (f2 (side a2 b2 p2)))
-              (values x f1 f2))))))))
-
-(defcmd "FILLET" ("F") "Rounds the corner between two lines."
-  (loop
-    (out (format nil "Current settings: Mode = TRIM, Radius = ~A~%" (fmt-len (sysvar "FILLETRAD"))))
-    (let ((s1 (pick-line "Select first object or [Radius]: " '("Radius"))))
-      (cond
-        ((null s1) (return))
-        ((equal s1 "Radius")
-         (let ((r (gdist (format nil "Specify fillet radius <~A>: " (fmt-len (sysvar "FILLETRAD"))) :flags 4)))
-           (when r (setf (sysvar "FILLETRAD") r))))
-        (t
-         (ui-highlight (list (first s1)) t)
-         (let ((s2 (unwind-protect (pick-line "Select second object: " nil)
-                     (ui-highlight (list (first s1)) nil))))
-           (when (consp s2)
-             (when (eq (first s1) (first s2)) (aerr "Cannot fillet an object to itself."))
-             (multiple-value-bind (x f1 f2) (corner-geometry s1 s2)
-               (if (null x) (out (format nil "Lines are parallel.~%"))
-                   (let ((r (sysvar "FILLETRAD")) (e1 (first s1)) (e2 (first s2)))
-                     (if (< r 1d-9)
-                         (progn (set-entity-data e1 (set-dxf 11 f1 (set-dxf 10 x (ent-data e1))))
-                                (set-entity-data e2 (set-dxf 11 f2 (set-dxf 10 x (ent-data e2)))))
-                         (let* ((u1 (ang x f1)) (u2 (ang x f2))
-                                (theta (let ((dd (abs (- u1 u2)))) (if (> dd +pi+) (- +2pi+ dd) dd)))
-                                (tl (/ r (tan (/ theta 2))))
-                                (t1 (polar x u1 tl)) (t2 (polar x u2 tl))
-                                (bis (ang x (midpt (polar x u1 1) (polar x u2 1))))
-                                (c (polar x bis (/ r (sin (/ theta 2))))))
-                           (if (or (> tl (dist2d x f1)) (> tl (dist2d x f2)))
-                               (out (format nil "Radius is too large.~%"))
-                               (progn
-                                 (set-entity-data e1 (set-dxf 11 f1 (set-dxf 10 t1 (ent-data e1))))
-                                 (set-entity-data e2 (set-dxf 11 f2 (set-dxf 10 t2 (ent-data e2))))
-                                 (let ((a1 (ang c t1)) (a2 (ang c t2)))
-                                   (add (with-props (if (< (norm-ang (- a2 a1)) +pi+) (arc-data c r a1 a2) (arc-data c r a2 a1))
-                                                    (ent-data e1)))))))))))))
-           (return))))))
-
-(defcmd "CHAMFER" ("CHA") "Bevels the corner between two lines."
-  (loop
-    (out (format nil "(TRIM mode) Current chamfer Dist1 = ~A, Dist2 = ~A~%"
-                 (fmt-len (or (sysvar "CHAMFERA") 0d0)) (fmt-len (or (sysvar "CHAMFERB") 0d0))))
-    (let ((s1 (pick-line "Select first line or [Distance]: " '("Distance"))))
-      (cond
-        ((null s1) (return))
-        ((equal s1 "Distance")
-         (let* ((a (gdist (format nil "Specify first chamfer distance <~A>: " (fmt-len (or (sysvar "CHAMFERA") 0d0))) :flags 4))
-                (a (or a (sysvar "CHAMFERA") 0d0))
-                (b (or (gdist (format nil "Specify second chamfer distance <~A>: " (fmt-len a)) :flags 4) a)))
-           (setf (sysvar "CHAMFERA") a (sysvar "CHAMFERB") b)))
-        (t
-         (let ((s2 (pick-line "Select second line: " nil)))
-           (when (consp s2)
-             (multiple-value-bind (x f1 f2) (corner-geometry s1 s2)
-               (if (null x) (out (format nil "Lines are parallel.~%"))
-                   (let* ((da (or (sysvar "CHAMFERA") 0d0)) (db (or (sysvar "CHAMFERB") 0d0))
-                          (q1 (polar x (ang x f1) da)) (q2 (polar x (ang x f2) db)))
-                     (set-entity-data (first s1) (set-dxf 11 f1 (set-dxf 10 q1 (ent-data (first s1)))))
-                     (set-entity-data (first s2) (set-dxf 11 f2 (set-dxf 10 q2 (ent-data (first s2)))))
-                     (when (> (dist2d q1 q2) 1d-9)
-                       (add (with-props (line-data q1 q2) (ent-data (first s1)))))))))
-           (return)))))))
-
 ;;; ---------- EXPLODE / JOIN ----------
 
 (defcmd "EXPLODE" ("X") "Breaks a compound object into its component objects."
@@ -520,30 +429,36 @@
 
 (defun reverse-chain (ch) (reverse (mapcar (lambda (s) (list (second s) (first s) (- (third s)))) ch)))
 
-(defcmd "JOIN" ("J") "Joins lines, arcs and open polylines end to end into one polyline."
-  (let* ((ents (remove-if-not #'entity-chain-pieces (get-selection "Select source objects or multiple objects to join at once: ")))
-         (tol 1d-6))
-    (when (< (length ents) 2) (out (format nil "Select at least two connected objects.~%")) (return-from-cmd))
-    (let* ((first-e (first ents)) (chain (entity-chain-pieces first-e)) (used (list first-e)) (progress t))
-      (loop while progress do
-        (setf progress nil)
-        (dolist (e ents)
-          (unless (member e used)
-            (let ((c (entity-chain-pieces e))
-                  (s (first (first chain))) (f (second (car (last chain)))))
-              (cond ((< (dist2d f (first (first c))) tol) (setf chain (append chain c)))
-                    ((< (dist2d f (second (car (last c)))) tol) (setf chain (append chain (reverse-chain c))))
-                    ((< (dist2d s (second (car (last c)))) tol) (setf chain (append c chain)))
-                    ((< (dist2d s (first (first c))) tol) (setf chain (append (reverse-chain c) chain)))
-                    (t (setf c nil)))
-              (when c (push e used) (setf progress t))))))
-      (let* ((closed (< (dist2d (first (first chain)) (second (car (last chain)))) tol))
-             (verts (append (mapcar (lambda (s) (list (first s) (third s))) chain)
-                            (unless closed (list (list (second (car (last chain))) 0d0))))))
-        (add-entity (append (make-lwpoly-data verts closed) (common-props (ent-data first-e))))
-        (dolist (e used) (delete-entity e))
-        (out (format nil "~D objects joined into 1 polyline.~%" (length used)))))))
+(defun join-entities (ents &key (tol 1d-6))
+  "Join chainable ENTS (first one is the source) into one polyline. Returns (values new-ename count)."
+  (let* ((first-e (first ents)) (chain (entity-chain-pieces first-e)) (used (list first-e)) (progress t))
+    (loop while progress do
+      (setf progress nil)
+      (dolist (e ents)
+        (unless (member e used)
+          (let ((c (entity-chain-pieces e))
+                (s (first (first chain))) (f (second (car (last chain)))))
+            (cond ((< (dist2d f (first (first c))) tol) (setf chain (append chain c)))
+                  ((< (dist2d f (second (car (last c)))) tol) (setf chain (append chain (reverse-chain c))))
+                  ((< (dist2d s (second (car (last c)))) tol) (setf chain (append c chain)))
+                  ((< (dist2d s (first (first c))) tol) (setf chain (append (reverse-chain c) chain)))
+                  (t (setf c nil)))
+            (when c (push e used) (setf progress t))))))
+    (let* ((closed (< (dist2d (first (first chain)) (second (car (last chain)))) tol))
+           (verts (append (mapcar (lambda (s) (list (first s) (third s))) chain)
+                          (unless closed (list (list (second (car (last chain))) 0d0)))))
+           (data (ent-data first-e))
+           (new (add-entity (append (make-lwpoly-data verts closed :width (and (equal (dxf 0 data) "LWPOLYLINE") (dxf 43 data)))
+                                    (common-props data)))))
+      (dolist (e used) (delete-entity e))
+      (values new (length used)))))
 
+(defcmd "JOIN" ("J") "Joins lines, arcs and open polylines end to end into one polyline."
+  (let* ((ents (remove-if-not #'entity-chain-pieces (get-selection "Select source objects or multiple objects to join at once: "))))
+    (when (< (length ents) 2) (out (format nil "Select at least two connected objects.~%")) (return-from-cmd))
+    (multiple-value-bind (new n) (join-entities ents)
+      (declare (ignore new))
+      (out (format nil "~D objects joined into 1 polyline.~%" n)))))
 
 ;;; ---------- STRETCH ----------
 
@@ -642,8 +557,20 @@
   (let ((ents (get-selection)))
     (when ents
       (loop
-        (let ((k (gkw "Enter property to change [Color/LAyer]: " '("Color" "LAyer"))))
+        (let ((k (gkw "Enter property to change [Color/LAyer/LType/ltScale/LWeight]: " '("Color" "LAyer" "LType" "ltScale" "LWeight"))))
           (cond ((null k) (return))
+                ((equal k "LType")
+                 (let ((n (gstring "Enter new linetype name <ByLayer>: " t)))
+                   (when (string= n "") (setf n "BYLAYER"))
+                   (if (ensure-ltype n)
+                       (dolist (e ents) (set-entity-data e (if (string-equal n "BYLAYER") (rem-dxf 6 (ent-data e)) (set-dxf 6 n (ent-data e)))))
+                       (out (format nil "Linetype ~A not found. Use LINETYPE to load it.~%" n)))))
+                ((equal k "ltScale")
+                 (let ((v (greal "Specify new linetype scale <1.0000>: " :flags 6)))
+                   (when v (dolist (e ents) (set-entity-data e (set-dxf 48 (d v) (ent-data e)))))))
+                ((equal k "LWeight")
+                 (let ((lw (parse-lweight-label (gstring "Enter new lineweight <ByLayer>: "))))
+                   (dolist (e ents) (set-entity-data e (if (or (null lw) (= lw -1)) (rem-dxf 370 (ent-data e)) (set-dxf 370 lw (ent-data e)))))))
                 ((equal k "Color")
                  (let ((c (parse-color (gstring "Enter new color [Truecolor/COlorbook] <BYLAYER>: "))))
                    (dolist (e ents) (set-entity-data e (set-entity-color (ent-data e) (or c 256))))))
@@ -654,26 +581,30 @@
                        (if l (dolist (e ents) (set-entity-data e (set-dxf 8 (layer-name l) (ent-data e))))
                            (out (format nil "Cannot find layer \"~A\".~%" n)))))))))))))
 
+(defun match-props (src dst)
+  "Copy layer, color, linetype, linetype scale and lineweight from SRC to DST."
+  (let ((d (set-dxf 8 (dxf 8 src) dst)))
+    (dolist (code '(62 6 48 370) d)
+      (setf d (if (assoc code src) (set-dxf code (dxf code src) d) (rem-dxf code d))))))
+
 (defcmd "MATCHPROP" ("MA" "PAINTER") "Applies the layer and color of a source object to others."
   (let ((src (get-user-input :entity :prompt "Select source object: ")))
     (when (consp src)
       (let ((s (sel-entity src)))
         (when s
-          (out (format nil "Current active settings:  Color Layer~%"))
+          (out (format nil "Current active settings:  Color Layer Ltype Ltscale Lineweight~%"))
           (loop
             (let ((r (get-user-input :select-point :prompt "Select destination object(s): ")))
               (cond ((null r) (return))
                     ((pointp r)
                      (let ((e (pick-entity-at r)))
-                       (if e (set-entity-data e (let ((d (set-dxf 8 (ent-layer s) (ent-data e))))
-                                                  (if (dxf 62 (ent-data s)) (set-dxf 62 (dxf 62 (ent-data s)) d) (rem-dxf 62 d))))
+                       (if e (set-entity-data e (match-props (ent-data s) (ent-data e)))
                            (let ((p2 (get-user-input :corner :base r :prompt "Specify opposite corner: "
                                                              :drag (window-selection-drag r))))
                              (when (pointp p2)
                                (dolist (e (filter-editable (entities-in-window r p2 (< (px p2) (px r)))))
                                  (unless (eq e s)
-                                   (set-entity-data e (let ((d (set-dxf 8 (ent-layer s) (ent-data e))))
-                                                        (if (dxf 62 (ent-data s)) (set-dxf 62 (dxf 62 (ent-data s)) d) (rem-dxf 62 d)))))))))))))))))))
+                                   (set-entity-data e (match-props (ent-data s) (ent-data e))))))))))))))))))
 
 (defcmd "COLOR" ("COL" "-COLOR") "Sets the color for new objects."
   (let ((c (parse-color (gstring (format nil "Enter default object color [Truecolor/COlorbook] <~A>: " (sysvar "CECOLOR"))))))

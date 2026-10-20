@@ -5,7 +5,8 @@
 (in-package :lispdraft-loader)
 
 (defparameter *root* (make-pathname :name nil :type nil :defaults *load-truename*))
-(defparameter *files* '("package" "geom" "db" "dxf" "alisp" "input" "gui" "commands" "modify" "utilcmds" "main"))
+(defparameter *files* '("package" "geom" "db" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
+                         "commands" "dims" "modify" "modify2" "cmds2" "utilcmds" "props" "express" "main"))
 
 (let ((*compile-verbose* nil) (*compile-print* nil) (*load-verbose* nil))
   (handler-bind ((style-warning #'muffle-warning)

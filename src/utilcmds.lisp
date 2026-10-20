@@ -167,9 +167,9 @@
 (defun layer-command-line ()
   (loop
     (out (format nil "Current layer:  \"~A\"~%" (sysvar "CLAYER")))
-    (let ((k (gkw "Enter an option [?/Make/Set/New/ON/OFF/Color/Freeze/Thaw/LOck/Unlock]: "
-                  '("?" "Make" "Set" "New" "ON" "OFF" "Color" "Freeze" "Thaw" "LOck" "Unlock"))))
-      (flet ((names (prompt) (let ((s (gstring prompt t)))
+    (let ((k (gkw "Enter an option [?/Make/Set/New/ON/OFF/Color/Ltype/LWeight/Freeze/Thaw/LOck/Unlock]: "
+                  '("?" "Make" "Set" "New" "ON" "OFF" "Color" "Ltype" "LWeight" "Freeze" "Thaw" "LOck" "Unlock"))))
+      (flet ((names (prompt) (let ((s (let ((x (gstring prompt t))) (if (string= x "") (sysvar "CLAYER") x))))
                                (loop with start = 0 for pos = (position #\, s :start start)
                                      for nm = (string-trim " " (subseq s start pos))
                                      when (plusp (length nm)) collect nm
@@ -201,6 +201,20 @@
           ((equal k "Thaw") (each (names "Enter name list of layer(s) to thaw: ") (lambda (l) (setf (layer-frozen l) nil))))
           ((equal k "LOck") (each (names "Enter name list of layer(s) to lock or <select objects>: ") (lambda (l) (setf (layer-locked l) t))))
           ((equal k "Unlock") (each (names "Enter name list of layer(s) to unlock or <select objects>: ") (lambda (l) (setf (layer-locked l) nil))))
+          ((equal k "Ltype")
+           (let ((n (gstring "Enter a loaded linetype name or [?] <Continuous>: " t)))
+             (when (string= n "") (setf n "CONTINUOUS"))
+             (if (ensure-ltype n)
+                 (each (names (format nil "Enter name list of layer(s) for linetype \"~A\" <~A>: " n (sysvar "CLAYER")))
+                       (lambda (l) (setf (layer-ltype l) (if (continuous-name-p n) "CONTINUOUS" n))))
+                 (out (format nil "Linetype ~A not found.~%" n)))))
+          ((equal k "LWeight")
+           (let ((lw (let ((s (gstring "Enter lineweight (0.0mm - 2.11mm): "))) (or (parse-lweight-label s)
+                                                                                      (let ((v (parse-number-text s))) (and v (round (* 100 v))))))))
+             (if lw
+                 (each (names (format nil "Enter name list of layers(s) for lineweight ~A <~A>: " (lineweight-label lw) (sysvar "CLAYER")))
+                       (lambda (l) (setf (layer-lineweight l) lw)))
+                 (out (format nil "Invalid lineweight.~%")))))
           ((equal k "Color")
            (let ((c (parse-color (gstring "Enter color name or number (1-255): "))))
              (if (and c (<= 1 c 255))
@@ -323,14 +337,20 @@
 (defun ensure-ext (path ext)
   (if (pathname-type (pathname path)) path (concatenate 'string path "." ext)))
 
-(defun save-drawing (as)
-  (let ((f (if (or as (null (drawing-filename *dwg*)))
-               (ask-file t "Save Drawing As" (or (drawing-filename *dwg*) "Drawing1.dxf"))
-               (drawing-filename *dwg*))))
+(defun save-drawing (as &key (format nil))
+  "Save as DXF. FORMAT is :R2000 (default, keeps lineweights and hatches) or :R12."
+  (let* ((f (if (or as (null (drawing-filename *dwg*)))
+                (ask-file t "Save Drawing As" (or (drawing-filename *dwg*) "Drawing1.dxf"))
+                (drawing-filename *dwg*)))
+         (fmt (or format
+                  (and as (from-lisp-p) nil)
+                  (and as (not (from-lisp-p)) (not (gui-p))
+                       (if (equal "R12" (gkw "File format [R12/2000] <2000>: " '("R12" "2000") "2000")) :r12 :r2000))
+                  (if (equalp (sysvar "SAVEFORMAT") "R12") :r12 :r2000))))
     (when f
       (let ((f (ensure-ext f "dxf")))
-        (dxf-export f)
-        (out (format nil "Saved ~A~%" f))))))
+        (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
+        (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000")))))))
 
 (defun open-drawing (f)
   (handler-case
@@ -352,7 +372,10 @@
 (defcmd "QSAVE" () "Saves the current drawing." (save-drawing nil))
 (defcmd "SAVE" () "Saves the drawing." (save-drawing nil))
 (defcmd "SAVEAS" () "Saves the drawing under a new name." (save-drawing t))
-(defcmd "DXFOUT" () "Exports the drawing as DXF." (save-drawing t))
+(defcmd "DXFOUT" () "Exports the drawing as DXF (choose AutoCAD 2000 or R12)."
+  (let ((fmt (if (equal "R12" (gkw "File format [R12/2000] <2000>: " '("R12" "2000") "2000")) :r12 :r2000)))
+    (save-drawing t :format fmt)))
+(defcmd "SAVEASR12" () "Saves an AutoCAD R12 DXF (no lineweights or hatches)." (save-drawing t :format :r12))
 (defcmd "DXFIN" ("IMPORT") "Imports a DXF drawing into the current drawing."
   (let ((f (ask-file nil "Select DXF File")))
     (when f
@@ -461,11 +484,17 @@
 
 (defun aename (x) (if (ename-p x) x (bad-arg "lentityp" x)))
 
+(defun lisp-visible-data (data)
+  "Entity data as AutoLISP sees it: DXF-style groups only."
+  (if (equal (dxf 0 data) "HATCH")
+      (hatch-to-groups data)
+      (remove-if (lambda (p) (and (consp p) (keywordp (car p)))) data)))
+
 (defsubr "entget" (e &optional apps)
   (declare (ignore apps))
   (let ((e (aename e)))
     (and (not (ename-deleted e))
-         (cons (cons -1 e) (copy-tree (ename-data e))))))
+         (cons (cons -1 e) (copy-tree (lisp-visible-data (ename-data e)))))))
 
 (defun valid-entity-data-p (data)
   (let ((type (dxf 0 data)))
@@ -478,9 +507,12 @@
                ((equal type "LWPOLYLINE") (assoc 10 data))
                ((equal type "INSERT") (and (stringp (dxf 2 data)) (find-block (dxf 2 data)) (pointp (dxf 10 data))))
                ((member type '("ELLIPSE" "SPLINE" "SOLID" "DIMENSION") :test #'equal) t)
+               ((equal type "HATCH") (and (dxf :loops data) t))
                (t nil)))))
 
 (defun clean-entmake-data (lst)
+  (when (and (equal (dxf 0 lst) "HATCH") (assoc 91 lst))
+    (return-from clean-entmake-data (hatch-from-lisp lst)))
   (let ((data (remove-if (lambda (p) (and (consp p) (member (car p) '(-1 5 330 -2 100 410)))) (alst lst))))
     ;; coerce numbers in known real codes
     (mapcar (lambda (p)
@@ -525,16 +557,27 @@
            (mapcar (lambda (l) (list (cons 0 "LAYER") (cons 2 (layer-name l))
                                      (cons 70 (logior (if (layer-frozen l) 1 0) (if (layer-locked l) 4 0)))
                                      (cons 62 (if (layer-on l) (abs (layer-color l)) (- (abs (layer-color l)))))
-                                     (cons 6 (layer-ltype l))))
+                                     (cons 6 (layer-ltype l)) (cons 370 (layer-lineweight l))))
                    (drawing-layers *dwg*)))
           ((string= tb "BLOCK")
            (mapcar (lambda (b) (list (cons 0 "BLOCK") (cons 2 (block-def-name b)) (cons 70 (if (char= (char (block-def-name b) 0) #\*) 1 0))
                                      (cons 10 (block-def-base b))))
                    (reverse (drawing-blocks *dwg*))))
-          ((string= tb "LTYPE") (list (list (cons 0 "LTYPE") (cons 2 "CONTINUOUS") (cons 70 0) (cons 3 "Solid line"))))
+          ((string= tb "LTYPE")
+           (cons (list (cons 0 "LTYPE") (cons 2 "CONTINUOUS") (cons 70 0) (cons 3 "Solid line") (cons 72 65) (cons 73 0) (cons 40 0d0))
+                 (mapcar (lambda (lt) (append (list (cons 0 "LTYPE") (cons 2 (ltype-name lt)) (cons 70 0) (cons 3 (ltype-desc lt))
+                                                    (cons 72 65) (cons 73 (length (ltype-pattern lt)))
+                                                    (cons 40 (reduce #'+ (mapcar #'abs (ltype-pattern lt)))))
+                                              (mapcar (lambda (x) (cons 49 x)) (ltype-pattern lt))))
+                         (drawing-ltypes *dwg*))))
+          ((string= tb "DIMSTYLE")
+           (mapcar (lambda (ds) (list (cons 0 "DIMSTYLE") (cons 2 (dimstyle-name ds)) (cons 70 0)
+                                      (cons 40 (dv (dimstyle-vars ds) :dimscale)) (cons 41 (dv (dimstyle-vars ds) :dimasz))
+                                      (cons 140 (dv (dimstyle-vars ds) :dimtxt)) (cons 271 (dv (dimstyle-vars ds) :dimdec))))
+                   (all-dimstyles)))
           ((string= tb "STYLE") (list (list (cons 0 "STYLE") (cons 2 "Standard") (cons 70 0) (cons 40 0d0) (cons 41 1d0) (cons 3 "txt"))))
           ((member tb '("VIEW" "UCS" "VPORT" "DIMSTYLE" "APPID") :test #'string=)
-           (if (string= tb "DIMSTYLE") (list (list (cons 0 "DIMSTYLE") (cons 2 "Standard") (cons 70 0))) nil))
+           nil)
           (t nil))))
 
 (defsubr "tblsearch" (table name &optional next)
@@ -587,8 +630,6 @@
       ((string= n "CVPORT") 2)
       ((string= n "ELEVATION") 0d0)
       ((string= n "THICKNESS") 0d0)
-      ((string= n "CELTYPE") "ByLayer")
-      ((string= n "CELWEIGHT") -1)
       ((string= n "DIMSCALE") (or (sysvar n) 1d0))
       ((string= n "CURSORSIZE") (or (sysvar n) 100))
       ((string= n "CIRCLERAD") (or (sysvar n) 0d0))
@@ -603,18 +644,28 @@
   (let ((n (string-upcase name)))
     (cond
       ((member n *read-only-sysvars* :test #'string=) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
+      ((string= n "CELTYPE")
+       (unless (and (stringp val) (ensure-ltype val)) (aerr "AutoCAD variable setting rejected: \"CELTYPE\" ~A" (lisp-repr val)))
+       (setf (sysvar "CELTYPE") (if (member val '("BYLAYER" "BYBLOCK") :test #'string-equal) (string-upcase val) val)))
+      ((string= n "DIMSTYLE")
+       (let ((ds (find-dimstyle val)))
+         (unless ds (aerr "AutoCAD variable setting rejected: \"DIMSTYLE\" ~A" (lisp-repr val)))
+         (apply-dimvars (dimstyle-vars ds)) (setf (sysvar "DIMSTYLE") (dimstyle-name ds))))
       ((string= n "CLAYER")
        (let ((l (find-layer (astr val))))
          (unless l (aerr "AutoCAD variable setting rejected: \"CLAYER\" ~A" (lisp-repr val)))
          (setf (sysvar "CLAYER") (layer-name l))))
       ((member n '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "CMDECHO" "LUPREC" "AUPREC" "LUNITS" "AUNITS"
                    "PICKBOX" "APERTURE" "PDMODE" "HIGHLIGHT" "BLIPMODE" "PICKFIRST" "MIRRTEXT" "FILEDIA"
-                   "EXPERT" "ANGDIR" "CURSORSIZE" "INSUNITS")
+                   "EXPERT" "ANGDIR" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
+                   "GRIPSIZE" "DIMDEC" "DIMTAD" "DIMCLRD" "DIMCLRE" "DIMCLRT" "DIMTIH" "DIMADEC" "PLINEGEN")
                :test #'string=)
        (unless (integerp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
        (setf (sysvar n) val))
       ((member n '("TEXTSIZE" "PDSIZE" "FILLETRAD" "OFFSETDIST" "ANGBASE" "DIMSCALE" "DIMTXT" "DIMASZ"
-                   "DIMEXO" "DIMEXE" "DIMGAP" "PLINEWID" "CHAMFERA" "CHAMFERB" "CIRCLERAD" "LASTROTATION")
+                   "DIMEXO" "DIMEXE" "DIMGAP" "PLINEWID" "CHAMFERA" "CHAMFERB" "CIRCLERAD" "LASTROTATION"
+                   "LTSCALE" "CELTSCALE" "HPSCALE" "HPANG" "DIMCEN" "DIMLFAC" "DIMDLI" "DIMTSZ" "PEDITFUZZ"
+                   "REVCLOUDARC" "BRKLSIZE")
                :test #'string=)
        (unless (realp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
        (setf (sysvar n) (d val)))
@@ -624,7 +675,7 @@
       (t (setf (sysvar n) val)))
     (when (gui-p)
       (when (member n '("CLAYER" "OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE") :test #'string=) (gui-sync))
-      (when (member n '("GRIDMODE" "GRIDUNIT" "PDMODE" "PDSIZE") :test #'string=) (gui-regen)))
+      (when (member n '("GRIDMODE" "GRIDUNIT" "PDMODE" "PDSIZE" "LTSCALE" "LWDISPLAY") :test #'string=) (gui-regen)))
     val))
 
 (defsubr "getvar" (name) (getvar (astr name)))

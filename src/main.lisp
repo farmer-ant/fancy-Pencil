@@ -61,7 +61,10 @@
               (word (first parts))
               (name (canonical-command-name word))
               (fn (and name (gethash name *commands*)))
-              (lisp-fn (sym-value (asym (concatenate 'string "C:" (strip-command-prefix word))))))
+              ;; an alias may point at an AutoLISP command (C:XXX)
+              (target (or (gethash (strip-command-prefix word) *aliases*) (strip-command-prefix word)))
+              (lisp-fn (or (sym-value (asym (concatenate 'string "C:" (strip-command-prefix word))))
+                           (sym-value (asym (concatenate 'string "C:" target))))))
          ;; the rest of the line (e.g. from a menu macro "ZOOM E") is fed as input
          (setf *script-queue* (append (rest parts) *script-queue*))
          (progn
@@ -70,6 +73,8 @@
              ((or (ufunc-p lisp-fn) (subr-p lisp-fn) (and (consp lisp-fn) (listp (car lisp-fn))))
               (setf *last-command* word)
               (run-lisp-toplevel (lambda () (apply-a lisp-fn nil))))
+             ((gethash (strip-command-prefix word) *pgp-external*)
+              (run-external-command (strip-command-prefix word)))
              ((multiple-value-bind (v found) (gethash (string-upcase word) *sysvars*) (declare (ignore v)) found)
               (handler-case (setvar-prompt word)
                 (alisp-cancel () nil)
@@ -128,6 +133,7 @@
                                   (Is a graphical display available? Use --tty for terminal mode.)~%" c)
           (quit-program)))
       (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
+  (load-aliases)
   (out (banner))
   (when file (open-drawing file))
   (when (and gui (not file)) (zoom-to-box 0 0 12 9))

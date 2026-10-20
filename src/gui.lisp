@@ -9,8 +9,6 @@
 (defvar *gui-lock* (make-lock* "gui"))
 
 ;;; view state
-(defvar *vx* 6d0) (defvar *vy* 4.5d0) (defvar *vscale* 60d0)
-(defvar *cw* 1000) (defvar *ch* 600)
 (defvar *mouse-sx* -100) (defvar *mouse-sy* -100) (defvar *mouse-in* nil)
 (defvar *view-history* nil)
 (defvar *drawn-modcount* -1)
@@ -23,6 +21,7 @@
 (defvar *snap-bit* nil)
 (defvar *gui-dir* nil)
 (defvar *at-line-start* t)
+(defvar *palette-shown* nil)
 
 ;;; ---------- process ----------
 
@@ -306,24 +305,49 @@
           ((equal (dxf 8 sub) "0") parent-aci)
           (t (let ((l (find-layer (dxf 8 sub)))) (if l (abs (layer-color l)) parent-aci))))))
 
-(defun render-data (data aci tags hl &optional xf (depth 0))
+(defun piece-polyline (pc)
+  "World-space points along a piece, finely enough for dashing at the current zoom."
+  (ecase (first pc)
+    (:seg (list (second pc) (third pc)))
+    (:circle (let ((n (max 24 (min 720 (ceiling (* (third pc) *vscale* 0.6))))))
+               (arc-points (second pc) (third pc) 0d0 +2pi+ n)))
+    (:arc (destructuring-bind (c r a1 a2) (rest pc)
+            (let ((n (max 8 (min 720 (ceiling (* r *vscale* (arc-sweep a1 a2) 0.1))))))
+              (arc-points c r a1 a2 n))))))
+
+(defun render-linetyped (pc pattern scale color tags hl width)
+  "Render piece PC with a dash PATTERN, or plain when the dashes would be too small or too many."
+  (let* ((period (* scale (reduce #'+ (mapcar #'abs pattern))))
+         (len (case (first pc)
+                (:seg (dist2d (second pc) (third pc)))
+                (:circle (* +2pi+ (third pc)))
+                (:arc (* (third pc) (arc-sweep (fourth pc) (fifth pc))))
+                (t 0d0))))
+    (if (or (member (first pc) '(:pt :gseg))
+            (< (* period *vscale*) 3)
+            (> (/ len (max period 1d-12)) 4000)
+            (not (piece-visible-p pc)))
+        (render-piece pc color tags :dash hl :width width)
+        (loop for run in (dash-runs (piece-polyline pc) pattern scale)
+              append (screen-line run color tags :dash hl :width width)))))
+
+(defun render-data (data aci tags hl &optional xf (depth 0) parent-lt parent-lw (parent-lts 1d0))
   (let ((type (dxf 0 data)) (color (aci->hex aci)))
     (cond
       ((> depth 8) nil)
       ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
        (render-text (if xf (xform-data data xf) data) color tags hl))
-      ((equal type "INSERT")
+      ((member type '("INSERT" "DIMENSION") :test #'equal)
        (let ((b (find-block (dxf 2 data))))
          (when b
-           (let ((ixf (insert-xf data (block-def-base b))))
-             (let ((cxf (if xf (xf-compose ixf xf) ixf)))
-               (loop for sub in (block-def-entities b)
-                     append (render-data sub (sub-color sub aci) tags hl cxf (1+ depth))))))))
-      ((equal type "DIMENSION")
-       (let ((b (find-block (dxf 2 data))))
-         (when b
-           (loop for sub in (block-def-entities b)
-                 append (render-data sub (sub-color sub aci) tags hl xf (1+ depth))))))
+           (let* ((cxf (if (equal type "INSERT")
+                           (let ((ixf (insert-xf data (block-def-base b)))) (if xf (xf-compose ixf xf) ixf))
+                           xf))
+                  (lt (entity-ltype-name data parent-lt))
+                  (lw (entity-lineweight data parent-lw))
+                  (lts (* parent-lts (d (or (dxf 48 data) 1)))))
+             (loop for sub in (block-def-entities b)
+                   append (render-data sub (sub-color sub aci) tags hl cxf (1+ depth) lt lw lts))))))
       ((equal type "SOLID")
        (let* ((pts (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data))))
               (pts (if xf (mapcar (lambda (p) (xf-point xf (pt3 p))) pts) (mapcar #'pt3 pts)))
@@ -332,13 +356,19 @@
                     (some #'piece-visible-p (loop for (a b) on pts while b collect (list :seg a b))))
            (list (format nil ".c create polygon ~{~A~^ ~} -fill ~A -outline ~A -tags {~A}"
                          (mapcar #'fmtn coords) color color tags)))))
+      ((equal type "HATCH") (render-hatch data color tags hl xf))
       (t
-       (let ((width (if (and (equal type "LWPOLYLINE") (dxf 43 data))
-                        (max 1 (round (* (dxf 43 data) *vscale* (if xf (xf-scale xf) 1))))
-                        1)))
+       (let* ((pw (if (and (equal type "LWPOLYLINE") (dxf 43 data) (plusp (dxf 43 data)))
+                      (max 1 (round (* (dxf 43 data) *vscale* (if xf (xf-scale xf) 1))))
+                      0))
+              (width (max pw (lineweight-pixels (entity-lineweight data parent-lw))))
+              (pattern (ltype-pattern-for (entity-ltype-name data parent-lt)))
+              (scale (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1))))
          (loop for pc in (data-pieces data)
                append (loop for tp in (if xf (transform-piece pc xf) (list pc))
-                            append (render-piece tp color tags :dash hl :width width))))))))
+                            append (if pattern
+                                       (render-linetyped tp pattern scale color tags hl width)
+                                       (render-piece tp color tags :dash hl :width width)))))))))
 
 (defun entity-render-cmds (e)
   (let ((data (ename-data e)))
@@ -385,6 +415,7 @@
           (setf cmds (nconc cmds (screen-line (list a b) (aci->hex aci) "grd")))))
       (setf cmds (nconc cmds (ucs-icon-cmds)))
       (tk-send-string (format nil "~{~A~%~}" cmds))
+      (refresh-grips)
       (setf *drawn-modcount* (drawing-modcount *dwg*))
       (draw-temp))))
 
@@ -434,6 +465,10 @@
                                (if (eq style :crossing) " -dash {4 3}" "")))))))
     (:data (destructuring-bind (data) (rest item)
              (render-data data (entity-aci data) "tmp" nil)))
+    (:hotgrip (multiple-value-bind (x y) (w->s (second item))
+                (let ((s (grip-pixel-size)))
+                  (list (format nil ".c create rectangle ~D ~D ~D ~D -fill #ff2a2a -outline #6b0000 -tags tmp"
+                                (round (- x s)) (round (- y s)) (round (+ x s)) (round (+ y s)))))))
     (t (render-piece item "#d8dde4" "tmp"))))
 
 (defun cursor-cmds ()
@@ -472,6 +507,7 @@
             (multiple-value-bind (x y) (w->s cur)
               (setf cmds (nconc cmds (snap-glyph x y *snap-bit*)
                                 (tooltip-cmds x y (cdr (assoc *snap-bit* *snap-names*)))))))))
+      (when (and req (eq (inreq-kind req) :command)) (setf cmds (nconc cmds (grip-hover-cmds))))
       (setf cmds (nconc cmds (cursor-cmds)))
       (tk-send-string (format nil "~{~A~%~}" cmds)))))
 
@@ -485,8 +521,10 @@
          (cur (sysvar "CLAYER"))
          (l (find-layer cur)))
     (tk "setlayers {~{~A~^ ~}} ~A ~A" (mapcar #'tq names) (tq cur) (aci->hex (if l (abs (layer-color l)) 7)))
-    (tk "settoggles ~D ~D ~D ~D" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
-        (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0)))
+    (tk "settoggles ~D ~D ~D ~D ~D" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
+        (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0))
+        (sysvar "LWDISPLAY"))
+    (sync-current-props)
     (tk "settitle ~A" (tq (format nil "LispDraft — ~A~A" (drawing-display-name)
                                   (if (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)) " *" ""))))))
 
@@ -517,7 +555,8 @@
              (out (format nil "<Osnap ~A>~%" (if (logtest (sysvar "OSMODE") 16384) "off" "on")))))
           ((string= k "F7") (flip "GRIDMODE" "Grid") (gui-regen))
           ((string= k "F8") (flip "ORTHOMODE" "Ortho"))
-          ((string= k "F9") (flip "SNAPMODE" "Snap")))
+          ((string= k "F9") (flip "SNAPMODE" "Snap"))
+          ((string= k "LWT") (setf (sysvar "LWDISPLAY") (if (eql (sysvar "LWDISPLAY") 1) 0 1)) (gui-regen)))
     (gui-sync)))
 
 (defun handle-common-event (ev)
@@ -550,6 +589,8 @@
                                  (gui-sync) t))
       ((string= ty "LAYERACT") (layer-dialog-action (event-rest ev)) t)
       ((string= ty "A") t)
+      ((string= ty "PALETTE") (setf *palette-shown* (string= (event-rest ev) "1")) (refresh-palette) t)
+      ((string= ty "CURPROP") (apply-current-prop (event-rest ev)) t)
       (t nil))))
 
 (defun handle-event (ev)
@@ -572,9 +613,15 @@
       ((string= ty "L") (let ((s (event-rest ev))) (echo-input s) (setf *acq-result* (list :text s))))
       ((string= ty "E")
        (if (eq kind :command)
-           (progn (when *pickfirst* (take-pickfirst)) (out (format nil "~A*Cancel*~%" (inreq-prompt *req*))))
+           (progn (when *pickfirst* (take-pickfirst) (refresh-grips) (refresh-palette))
+                  (out (format nil "~A*Cancel*~%" (inreq-prompt *req*))))
            (progn (out (format nil "~A*Cancel*~%" (inreq-prompt *req*)))
                   (error 'alisp-cancel))))
+      ((string= ty "PROP")
+       (if (eq kind :command)
+           (progn (apply-palette-edit (event-rest ev)) (setf *drawn-modcount* -1)
+                  (when (/= *drawn-modcount* (drawing-modcount *dwg*)) (gui-regen)) (refresh-palette))
+           (out (format nil "Finish the current command before editing properties.~%"))))
       ((string= ty "MENU")
        (let ((name (event-rest ev)))
          (cond ((and (plusp (length name)) (char= (char name 0) #\'))
@@ -590,12 +637,18 @@
         ((string-equal name "REGEN") (gui-regen))))
 
 (defun command-prompt-pick (p)
-  "Click at the Command: prompt: noun/verb selection, implicit windows."
+  "Click at the Command: prompt: grip editing, noun/verb selection, implicit windows."
+  (let ((g (grip-at p)))
+    (when g
+      (handler-case (progn (grip-edit g) (gui-regen))
+        (alisp-cancel () (refresh-grips)))
+      (return-from command-prompt-pick nil)))
   (let ((e (pick-entity-at p)))
     (if e
         (unless (member e *pickfirst*)
           (setf *pickfirst* (append *pickfirst* (list e)))
-          (gui-highlight (list e) t))
+          (gui-highlight (list e) t)
+          (refresh-grips) (refresh-palette))
         (let ((p2 (handler-case
                       (get-user-input :corner :base p :prompt "Specify opposite corner: "
                                               :drag (window-selection-drag p))
@@ -604,11 +657,16 @@
             (let ((new (remove-if (lambda (x) (member x *pickfirst*))
                                   (entities-in-window p p2 (< (px p2) (px p))))))
               (setf *pickfirst* (append *pickfirst* new))
-              (gui-highlight new t)))))))
+              (gui-highlight new t)
+              (refresh-grips) (refresh-palette)))))))
 
 (defun gui-acquire (req)
   (let ((*req* req) (*acq-result* nil))
     (when (/= *drawn-modcount* (drawing-modcount *dwg*)) (gui-regen) (gui-sync))
+    (when (eq (inreq-kind req) :command)
+      (setf *pickfirst* (remove-if-not #'ent-live-p *pickfirst*))
+      (refresh-grips)
+      (refresh-palette))
     (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
     (when *mouse-in* (update-cursor *mouse-sx* *mouse-sy*))
     (draw-temp)
@@ -703,10 +761,15 @@
 
 (defun layer-rows ()
   (loop for l in (drawing-layers *dwg*)
-        collect (format nil "{~A ~D ~D ~D ~D ~D}" (tq (layer-name l)) (if (layer-on l) 1 0) (if (layer-frozen l) 1 0)
+        collect (format nil "{~A ~D ~D ~D ~D ~D ~A ~A}" (tq (layer-name l)) (if (layer-on l) 1 0) (if (layer-frozen l) 1 0)
                         (if (layer-locked l) 1 0) (abs (layer-color l))
-                        (if (string-equal (layer-name l) (sysvar "CLAYER")) 1 0))))
-(defun show-layer-dialog () (tk "layerdlg {~{~A~^ ~}}" (layer-rows)))
+                        (if (string-equal (layer-name l) (sysvar "CLAYER")) 1 0)
+                        (tq (ltype-label (layer-ltype l))) (tq (lineweight-label (layer-lineweight l))))))
+(defun show-layer-dialog ()
+  (tk "layerdlg {~{~A~^ ~}} ~A ~A" (layer-rows)
+      (tcl-list (append '("Continuous") (mapcar #'ltype-name (drawing-ltypes *dwg*))
+                        (remove-if (lambda (n) (find-ltype n)) (mapcar #'first *standard-linetypes*))))
+      (tcl-list (cons "Default" (mapcar #'lineweight-label *lineweights*)))))
 
 (defun unique-layer-name ()
   (loop for i from 1 for n = (format nil "Layer~D" i) unless (find-layer n) return n))
@@ -716,6 +779,10 @@
          (act (subseq rest 0 sp))
          (arg (if sp (string-left-trim " " (subseq rest (1+ sp))) ""))
          (color nil))
+    (when (member act '("ltype" "lweight") :test #'string=)
+      (let ((sp2 (position #\Space arg)))
+        (setf color (substitute #\Space #\_ (subseq arg 0 sp2))
+              arg (if sp2 (subseq arg (1+ sp2)) ""))))
     (when (string= act "color")
       (let ((sp2 (position #\Space arg)))
         (setf color (ignore-errors (parse-integer arg :end sp2))
@@ -734,6 +801,9 @@
              (setf (layer-frozen l) (not (layer-frozen l)))))
         ((string= act "lock") (setf (layer-locked l) (not (layer-locked l))))
         ((string= act "color") (when (and color (<= 1 color 255)) (setf (layer-color l) color)))
+        ((string= act "ltype") (when (ensure-ltype color)
+                                 (setf (layer-ltype l) (if (continuous-name-p color) "CONTINUOUS" color))))
+        ((string= act "lweight") (let ((lw (parse-lweight-label color))) (when lw (setf (layer-lineweight l) lw))))
         ((string= act "delete")
          (cond ((string-equal (layer-name l) "0") (out (format nil "Layer 0 cannot be deleted.~%")))
                ((string-equal (layer-name l) (sysvar "CLAYER")) (out (format nil "The current layer cannot be deleted.~%")))
@@ -764,3 +834,101 @@
                (push ev *event-buffer*)))
   (setf *event-buffer* (nreverse *event-buffer*))
   (gui-sync))
+
+;;; ---------- generic dialogs ----------
+
+(defun split-on (s ch)
+  (loop with start = 0 for pos = (position ch s :start start)
+        collect (subseq s start pos) while pos do (setf start (1+ pos))))
+
+(defun tcl-list (items) (format nil "{~{~A~^ ~}}" (mapcar #'tq items)))
+
+(defun gui-form (title rows ok-label)
+  "ROWS are (key label value kind [choices]). Returns an alist of (key . string) or NIL if cancelled."
+  (let* ((rowstr (format nil "{~{~A~^ ~}}"
+                         (mapcar (lambda (r)
+                                   (destructuring-bind (key label value kind &optional choices) r
+                                     (format nil "{~A ~A ~A ~A ~A}" (tq key) (tq label)
+                                             (tq (if (stringp value) value (lisp-repr value nil)))
+                                             (if (eq kind :combo) "combo" "entry")
+                                             (tcl-list (or choices nil)))))
+                                 rows)))
+         (r (tk-ask (format nil "formdlg ~A ~A ~A" (tq title) rowstr (tq ok-label)))))
+    (unless (string= r "")
+      (loop for part in (split-on r (code-char #x1f))
+            for kv = (split-on part (code-char #x1e))
+            when (and (= (length kv) 2) (plusp (length (first kv))))
+              collect (cons (first kv) (second kv))))))
+
+;;; ---------- toolbar Properties panel ----------
+
+(defparameter *color-choices*
+  '("ByLayer" "ByBlock" "Red" "Yellow" "Green" "Cyan" "Blue" "Magenta" "White" "8" "9" "Select Color..."))
+
+(defun color-label (c)
+  (cond ((or (null c) (eql c 256) (equalp c "BYLAYER")) "ByLayer")
+        ((or (eql c 0) (equalp c "BYBLOCK")) "ByBlock")
+        (t (let ((n (if (stringp c) (or (ignore-errors (parse-integer c)) 7) c)))
+             (case n (1 "Red") (2 "Yellow") (3 "Green") (4 "Cyan") (5 "Blue") (6 "Magenta") (7 "White")
+               (t (princ-to-string n)))))))
+
+(defun parse-color-label (s)
+  (cond ((string-equal s "Select Color...")
+         (let ((r (gui-form "Select Color" (list (list "C" "AutoCAD Color Index (1-255)" "7" :entry)) "OK")))
+           (and r (parse-color (cdr (first r))))))
+        (t (parse-color s))))
+
+(defun ltype-choices ()
+  (append '("ByLayer" "ByBlock" "Continuous") (mapcar #'ltype-name (drawing-ltypes *dwg*)) '("Load...")))
+
+(defun lweight-choices ()
+  (append '("ByLayer" "ByBlock" "Default") (mapcar #'lineweight-label *lineweights*)))
+
+(defun parse-lweight-label (s)
+  (cond ((string-equal s "ByLayer") -1) ((string-equal s "ByBlock") -2) ((string-equal s "Default") -3)
+        (t (let ((v (parse-number-text (string-right-trim "m" s)))) (and v (round (* 100 v)))))))
+
+(defun ltype-label (n) (cond ((or (null n) (string-equal n "BYLAYER")) "ByLayer") ((string-equal n "BYBLOCK") "ByBlock")
+                             ((string-equal n "CONTINUOUS") "Continuous") (t n)))
+
+(defun sync-current-props ()
+  (let* ((sel (remove-if-not #'ent-live-p *pickfirst*))
+         (one (lambda (f) (let ((vals (remove-duplicates (mapcar f sel) :test #'equalp)))
+                            (if (= (length vals) 1) (first vals) "")))))
+    (tk "setcurprops ~A ~A ~A ~A ~A ~A"
+        (tcl-list *color-choices*)
+        (tq (if sel (funcall one (lambda (e) (color-label (or (dxf 62 (ent-data e)) 256)))) (color-label (sysvar "CECOLOR"))))
+        (tcl-list (ltype-choices))
+        (tq (if sel (funcall one (lambda (e) (ltype-label (dxf 6 (ent-data e))))) (ltype-label (sysvar "CELTYPE"))))
+        (tcl-list (lweight-choices))
+        (tq (if sel (funcall one (lambda (e) (lineweight-label (or (dxf 370 (ent-data e)) -1)))) (lineweight-label (sysvar "CELWEIGHT")))))))
+
+(defun load-ltype-interactively ()
+  (let ((r (gui-form "Load Linetype"
+                     (list (list "N" "Linetype" "DASHED" :combo (mapcar #'first *standard-linetypes*))) "Load")))
+    (when r (let ((n (cdr (first r)))) (when (ensure-ltype n) n)))))
+
+(defun apply-current-prop (rest)
+  "Toolbar Properties panel: change the selected objects, or the current setting when nothing is selected."
+  (let* ((sp (position #\Space rest)) (key (subseq rest 0 sp)) (val (if sp (subseq rest (1+ sp)) ""))
+         (sel (remove-if-not #'ent-live-p *pickfirst*)))
+    (flet ((apply-to (fn) (with-undo-group (lambda () (dolist (e (filter-editable sel)) (set-entity-data e (funcall fn (ent-data e))))))
+                            (gui-regen)))
+      (cond
+        ((string= key "COLOR")
+         (let ((c (parse-color-label val)))
+           (when c (if sel (apply-to (lambda (d) (set-entity-color d c)))
+                       (setf (sysvar "CECOLOR") (case c (256 "BYLAYER") (0 "BYBLOCK") (t (princ-to-string c))))))))
+        ((string= key "LTYPE")
+         (let ((n (if (string-equal val "Load...") (load-ltype-interactively) val)))
+           (when n
+             (ensure-ltype n)
+             (let ((v (cond ((string-equal n "ByLayer") "BYLAYER") ((string-equal n "ByBlock") "BYBLOCK") (t n))))
+               (if sel (apply-to (lambda (d) (if (string= v "BYLAYER") (rem-dxf 6 d) (set-dxf 6 v d))))
+                   (setf (sysvar "CELTYPE") v))))))
+        ((string= key "LWEIGHT")
+         (let ((lw (parse-lweight-label val)))
+           (when lw (if sel (apply-to (lambda (d) (if (= lw -1) (rem-dxf 370 d) (set-dxf 370 lw d))))
+                        (setf (sysvar "CELWEIGHT") lw))))))
+      (gui-sync)
+      (refresh-palette))))
