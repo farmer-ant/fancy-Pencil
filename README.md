@@ -1,6 +1,6 @@
 # LispDraft
 
-![LispDraft moving a hole on a drawing produced by an AutoLISP program](docs/screenshot.png)
+![LispDraft: a drawing made by an AutoLISP program, with grips and the Properties palette](docs/screenshot.png)
 
 A 2D drafting program written in Common Lisp that works like AutoCAD and runs AutoLISP.
 Same command names and aliases, the same prompts, a command line with the same input rules,
@@ -48,13 +48,51 @@ It behaves like AutoCAD's command line:
 
 | Area | Commands (aliases) |
 |---|---|
-| Draw | LINE (L), PLINE (PL) with Arc/Width, RECTANG (REC), POLYGON (POL), CIRCLE (C) incl. 2P/3P, ARC (A) 3-point/Center/End, ELLIPSE (EL), POINT (PO), TEXT (DT), MTEXT (T), DIMLINEAR (DLI), DIMALIGNED (DAL), BLOCK (B), INSERT (I) |
-| Modify | ERASE (E), OOPS, MOVE (M), COPY (CO), ROTATE (RO), SCALE (SC), MIRROR (MI), OFFSET (O), TRIM (TR), EXTEND (EX), BREAK (BR), FILLET (F), CHAMFER (CHA), JOIN (J), STRETCH (S), ARRAY (AR) rectangular/polar, EXPLODE (X), CHPROP, MATCHPROP (MA), COLOR, TEXTEDIT (ED), DIVIDE (DIV), COPYCLIP/PASTECLIP |
+| Draw | LINE (L), PLINE (PL) with Arc/Width, RECTANG (REC), POLYGON (POL), CIRCLE (C) incl. 2P/3P, ARC (A) 3-point/Center/End, ELLIPSE (EL), POINT (PO), TEXT (DT), MTEXT (T), HATCH (H, BH), REVCLOUD (RC), BLOCK (B), INSERT (I) |
+| Modify | ERASE (E), OOPS, MOVE (M), COPY (CO), ROTATE (RO), SCALE (SC), MIRROR (MI), OFFSET (O), TRIM (TR), EXTEND (EX), BREAK (BR), FILLET (F), CHAMFER (CHA), JOIN (J), STRETCH (S), ARRAY (AR), EXPLODE (X), PEDIT (PE), HATCHEDIT (HE), CHPROP, MATCHPROP (MA), COLOR, TEXTEDIT (ED), DIVIDE (DIV), COPYCLIP/PASTECLIP |
+| Dimension | DIMLINEAR (DLI), DIMALIGNED (DAL), DIMRADIUS (DRA), DIMDIAMETER (DDI), DIMANGULAR (DAN), DIMCONTINUE (DCO), DIMBASELINE (DBA), DIMSTYLE (D) |
 | View | ZOOM (Z) Extents/All/Window/Previous/Center, PAN (P), REGEN (RE) |
-| Inquiry | DIST (DI), ID, AREA (AA), LIST (LI) |
-| Settings | LAYER (LA; dialog) and -LAYER (command line), LAYMCUR, OSNAP (OS), ORTHO, GRID, SNAP, UNITS, SETVAR, or type any system variable name |
-| File | NEW, OPEN, QSAVE, SAVEAS, DXFIN, DXFOUT, APPLOAD (AP), SCRIPT (SCR), PURGE (PU), QUIT |
+| Inquiry | DIST (DI), ID, AREA (AA), LIST (LI), PROPERTIES (PR, Ctrl+1) |
+| Settings | LAYER (LA; dialog) and -LAYER, LAYMCUR, LINETYPE (LT), LTSCALE (LTS), LWEIGHT (LW), OSNAP (OS), ORTHO, GRID, SNAP, UNITS, HPSET, SETVAR, or type any system variable name |
+| File | NEW, OPEN, QSAVE, SAVEAS, SAVEASR12, DXFIN, DXFOUT, APPLOAD (AP), SCRIPT (SCR), PURGE (PU), QUIT |
+| Aliases | ALIASEDIT, REINIT |
+| Express Tools | LAYISO, LAYUNISO, LAYOFF, LAYFRZ, LAYON, LAYTHW, LAYLCK, LAYULK, LAYCUR, LAYMCH, LAYMRG, LAYDEL, OVERKILL, BREAKLINE, EXTRIM, MPEDIT, TCASE, TCOUNT, TXT2MTXT, MOCORO, COPYM, FLATTEN, SELECTSIMILAR, SSX, GETSEL, XLIST, BURST |
 | Other | U, UNDO, REDO, SELECTALL (Ctrl+A), HELP |
+
+### Selection, grips and the Properties palette
+
+Click objects at the `Command:` prompt to select them first. Selected objects show blue grips;
+click a grip to make it hot (red) and drag. Enter or Space cycles the grip mode through
+STRETCH, MOVE, ROTATE, SCALE and MIRROR, with the Base point, Copy, Undo and eXit options AutoCAD
+has. Selecting several objects that share an endpoint and dragging that grip moves them all.
+
+PROPERTIES (or Ctrl+1) opens the palette on the right. With nothing selected it shows and edits
+the current color, layer, linetype and lineweight; with a selection it shows the shared properties
+and, for a single object type, its geometry (line endpoints and length, circle radius and area,
+text contents, hatch pattern, block scale and so on). Edit a field and press Enter. The toolbar's
+Properties panel works the same way for color, linetype and lineweight.
+
+### Linetypes, lineweights and hatching
+
+LINETYPE loads the standard AutoCAD linetypes (CENTER, HIDDEN, DASHED, PHANTOM, DOT, DASHDOT,
+BORDER, DIVIDE and their 2 / X2 variants) or reads any `.lin` file. Linetypes can be set per layer
+(Layer Properties or `-LAYER Ltype`) or per object, scaled with LTSCALE and per object with
+CELTSCALE / "Linetype scale". Lineweights work the same way; turn their display on with the LWT
+button on the status bar.
+
+HATCH works like AutoCAD's: pick a point inside an area and the boundary is found automatically,
+with closed objects inside it left as islands; or choose "Select objects". Patterns include SOLID,
+ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZIGZAG, EARTH, STEEL and
+INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
+exactly as defined.
+
+### Command aliases
+
+Aliases come from a `.pgp` file in AutoCAD's acad.pgp format (`L,  *LINE`). The shipped set is in
+`support/lispdraft.pgp`. ALIASEDIT opens an editor; saving writes your own copy to
+`~/.config/lispdraft/lispdraft.pgp`, which is used from then on. You can also edit that file in
+any text editor and run REINIT. An alias may point at one of your AutoLISP commands, e.g.
+`HH, *HELLO` runs `C:HELLO`. External commands (`NAME, shell command, flags, *prompt,`) are supported.
 
 ### AutoLISP
 
@@ -79,6 +117,10 @@ About 250 functions plus the special forms are built in, including:
   tblsearch tblnext ssget ssadd ssdel sslength ssname ssmemb sssetfirst ssgetfirst`
 - **ssget** modes: interactive, `"X"`, `"W"`, `"C"`, `"WP"`, `"CP"`, `"F"`, `"L"`, `"P"`, `"I"`, `":S"`,
   with filter lists including wildcards and `-4` operators (`<OR`, `<AND`, `<NOT`, `>`, `<=`, `&` ...)
+- **Express Tools library**: `acet-error-init`, `acet-error-restore`, `acet-sysvar-set`, `acet-ui-progress`,
+  `acet-str-replace`, `acet-str-find`, `acet-str-format`, `acet-list-remove-duplicates`, `acet-list-m-assoc`,
+  `acet-geom-midpoint`, `acet-geom-vertex-list`, `acet-ent-geomextents`, `acet-ss-to-list`, `acet-ss-union`,
+  `acet-ss-ssget-filter`, `acet-ss-drag-move`, `acet-layer-locked`, `acet-pline-make` and more
 - **Commands**: `command`, `command-s`, `vl-cmdf`, including `pause` and commands left active across
   several `command` calls, as in AutoCAD (`(command "line" p1 p2)` then `(command "")`), and `CMDACTIVE`
 - **Files & system**: `open close read-line write-line read-char write-char findfile load getenv
@@ -92,23 +134,30 @@ About 250 functions plus the special forms are built in, including:
 
 ## DXF
 
-LispDraft saves AutoCAD R12 DXF (AC1009), which every AutoCAD version and nearly every CAD program
-opens. It reads ASCII DXF from R12 through current releases: lines, circles, arcs, points,
+SAVE writes AutoCAD 2000 DXF (AC1015), which keeps lineweights, linetypes and scales, hatches,
+dimensions and dimension styles, LWPOLYLINE, MTEXT, ELLIPSE and SPLINE, and opens in AutoCAD 2000
+and every later release. SAVEASR12 (or DXFOUT and choosing R12) writes R12 DXF for very old
+software; R12 has no lineweights or hatches. Exported files are checked in the test suite with
+the independent ezdxf auditor and come back with zero errors.
+
+LispDraft reads ASCII DXF from R12 through current releases: lines, circles, arcs, points,
 LWPOLYLINE/POLYLINE (with bulges and widths), TEXT, MTEXT, INSERT with ATTRIBs, nested blocks,
-DIMENSION (drawn from its block), ELLIPSE, SPLINE and SOLID; layers with color, on/off, freeze and lock.
+DIMENSION, HATCH (polyline, line, arc, ellipse and spline boundaries), ELLIPSE, SPLINE and SOLID;
+layers with color, linetype, lineweight, on/off, freeze and lock; linetype and dimension style tables.
 
 ## What's not there (yet)
 
-Compared with AutoCAD, this first version does not have: DWG files (proprietary), paper space and
-layouts, linetypes and lineweights (everything draws continuous), hatching (HATCH entities are kept
-but not drawn), text styles and fonts, dimension styles beyond the basic linear/aligned dims, grips,
-UCS, 3D, plotting, and ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. TRIM/EXTEND work on lines,
-arcs and circles (not yet on polylines). FILLET and CHAMFER work on two lines.
+Compared with AutoCAD, this version does not have: DWG files (a proprietary format), paper space
+and layouts, text styles and fonts (all text uses one sans-serif font), gradient fills, associative
+hatches and dimensions (they don't follow edits to their boundary objects), UCS, 3D, plotting, and
+ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. TRIM and EXTEND work on lines, arcs, circles and
+polylines but not ellipses or splines. Express Tools that depend on fonts or external references
+(TXTEXP, XREF tools) are not included.
 
 ## Tests
 
 ```sh
-./lispdraft --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp < /dev/null
+./lispdraft --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp < /dev/null
 ```
 
 ## Layout
@@ -119,13 +168,23 @@ load.lisp          compiles & loads the sources (no ASDF needed); lispdraft.asd 
 src/package.lisp   packages
 src/geom.lisp      points, intersections, transforms
 src/db.lisp        drawing database (entities are DXF association lists, like entget)
-src/dxf.lisp       DXF reader/writer
+src/ltype.lisp     linetypes (.lin), dashes, lineweights
+src/hatch.lisp     hatch patterns, rendering, boundary detection
+src/dxf.lisp       DXF reader and R12 writer
+src/dxf2000.lisp   AutoCAD 2000 DXF writer
 src/alisp.lisp     AutoLISP reader, printer, evaluator and core functions
 src/input.lisp     prompts, coordinate entry, keywords, object snaps, selection, (command)
 src/gui.lisp       Tk front end: view, rendering, events
-src/gui.tcl        Tk window layout
+src/grips.lisp     grips and grip editing
+src/gui.tcl        Tk window layout, palette, dialogs
 src/commands.lisp  drawing commands
+src/dims.lisp      dimensions and dimension styles
 src/modify.lisp    editing commands
+src/modify2.lisp   polyline trim/extend, fillet/chamfer, PEDIT
+src/cmds2.lisp     LINETYPE, LWEIGHT, HATCH, REVCLOUD
+src/props.lisp     Properties palette
+src/express.lisp   .pgp aliases, Express Tools, acet-* functions
 src/utilcmds.lisp  view/file/layer/block/inquiry commands; entget/tblsearch/getvar...
 src/main.lisp      command loop and entry point
+support/lispdraft.pgp  default command aliases
 ```

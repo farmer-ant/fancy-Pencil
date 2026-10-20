@@ -170,7 +170,7 @@
                    out))))
         ;; solid with islands: scanlines in world space, two pixels apart
         ((or (eql (dxf 70 data) 1) (solid-pattern-p (or (dxf 2 data) "")))
-         (let ((segs (hatch-family-segments (list 0d0 (pt 0 0) (pt 0 (/ 2d0 *vscale*)) nil) polys bbox 4000)))
+         (let ((segs (hatch-family-segments (list 0d0 (pt 0 (+ (second bbox) (/ 1d0 *vscale*))) (pt 0 (/ 2d0 *vscale*)) nil) polys bbox 4000)))
            (unless (eq segs :too-dense)
              (dolist (s segs) (setf out (nconc out (screen-line s color tags :width 2)))))))
         (t

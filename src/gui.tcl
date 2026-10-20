@@ -440,7 +440,7 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
     $w.t delete [$w.t children {}]
     foreach r $rows {
         lassign $r name on frz lck color cur ltype lweight
-        if {$cur} { set mark "\u2713" } else { set mark "" }
+        if {$cur} { set mark [format %c 0x2713] } else { set mark "" }
         set id [$w.t insert {} end -values [list $mark $name \
                     [expr {$on ? "On" : "off"}] [expr {$frz ? "Frozen" : "-"}] [expr {$lck ? "Locked" : "-"}] $color $ltype $lweight]]
         if {$name eq $selname} { $w.t selection set $id }
