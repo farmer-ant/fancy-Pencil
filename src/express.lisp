@@ -19,7 +19,12 @@
 
 (defun snapshot-builtin-aliases ()
   (unless *builtin-aliases*
-    (let (pairs) (maphash (lambda (a c) (push (cons a c) pairs)) *aliases*)
+    (let (pairs)
+      (maphash (lambda (a c)
+                 ;; "-LAYER" style names resolve to their command automatically, so they need no alias
+                 (unless (and (> (length a) 1) (char= (char a 0) #\-) (string-equal (subseq a 1) c))
+                   (push (cons a c) pairs)))
+               *aliases*)
       (setf *builtin-aliases* (sort pairs #'string< :key #'car)))))
 
 (defun parse-pgp (path)

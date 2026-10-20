@@ -141,6 +141,7 @@
          (outside (> (dist2d c loc) r))
          (tr (readable-angle a))
          (ents nil))
+    (declare (ignorable tr))
     (if outside
         (progn (push (colored (line-data q loc) (dv vars :dimclrd)) ents)
                (setf ents (append (dim-arrow q c vars) ents))
@@ -154,8 +155,13 @@
     (when (and (> cen 0) (not diameter))
       (push (colored (line-data (polar c 0 cen) (polar c +pi+ cen)) (dv vars :dimclrd)) ents)
       (push (colored (line-data (polar c (/ +pi+ 2) cen) (polar c (* 1.5 +pi+) cen)) (dv vars :dimclrd)) ents))
-    (let ((tp (polar loc (+ tr (/ +pi+ 2)) gap)))
-      (push (dim-text-entity tp tr s vars 8) ents))
+    (if outside
+        ;; text outside: horizontal, on a short landing (AutoCAD's default DIMTOH behaviour)
+        (let* ((right (>= (cos a) 0)) (land (* 1.5 sc (d (dv vars :dimasz))))
+               (lend (polar loc (if right 0d0 +pi+) land)))
+          (push (colored (line-data loc lend) (dv vars :dimclrd)) ents)
+          (push (dim-text-entity (polar lend (if right 0d0 +pi+) gap) 0d0 s vars (if right 4 6)) ents))
+        (push (dim-text-entity (polar loc (+ tr (/ +pi+ 2)) gap) tr s vars 8) ents))
     (values (nreverse ents) meas q opp)))
 
 ;;; ---------- angular ----------

@@ -157,10 +157,11 @@
           (lambda ()
             (loop until done do
               (let* ((label (string-upcase (symbol-name mode)))
-                     (prompt (format nil "** ~A~:[~; (multiple)~] **~%Specify ~A or [Base point/Copy/Undo/eXit]: "
-                                     label copy
-                                     (case mode (:stretch "stretch point") (:move "move point") (:rotate "rotation angle")
-                                       (:scale "scale factor") (:mirror "second point"))))
+                     (prompt (progn
+                               (out (format nil "~:[~%~;~]** ~A~:[~; (multiple)~] **~%" *at-line-start* label copy))
+                               (format nil "Specify ~A or [Base point/Copy/Undo/eXit]: "
+                                       (case mode (:stretch "stretch point") (:move "move point") (:rotate "rotation angle")
+                                         (:scale "scale factor") (:mirror "second point")))))
                      (drag (lambda (cur)
                              (cons (hot-grip-item gp)
                                    (if (eq mode :stretch)
