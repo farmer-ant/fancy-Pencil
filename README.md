@@ -45,6 +45,16 @@ can be opened with it from the file manager (*Open With → Fancy Pencil*).
 Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT under the old name
 (`~/.config/lispdraft/lispdraft.pgp`) and a `~/.lispdraft.lsp` startup file are still picked up.
 
+### Several drawings at once
+
+Every drawing opens in its own tab above the drawing area, as in AutoCAD. OPEN and NEW add a tab
+(OPEN reuses an untouched empty Drawing1, and switches to a file that is already open); click a tab
+to switch, its × (or a middle-click) to close it, + for a new drawing. Ctrl+Tab / Ctrl+Shift+Tab cycle
+through them, Ctrl+F4 or CLOSE closes the current one, CLOSEALL closes all, and the Window menu lists
+them. Each drawing keeps its own view, selection, undo history, layers and settings; program-wide
+settings (object snaps, Ortho, grid, pickbox ...) follow you between tabs. COPYCLIP / PASTECLIP work
+between drawings. QUIT offers to save every changed drawing. `./fancypencil a.dxf b.dwg` opens both.
+
 ### Opening and saving DWG files
 
 DWG is AutoCAD's closed binary format, so Fancy Pencil converts it with a free converter:

@@ -420,14 +420,12 @@ a DXF next to it instead and leave the DWG untouched."
   (out (format nil "Opened ~A (~D object~:P).~%" f n))
   (when (gui-p) (zoom-extents) (gui-sync)))
 
-(defcmd "NEW" ("QNEW") "Creates a new drawing."
-  (when (ask-save-changes)
-    (new-drawing) (setf *pickfirst* nil) (clrhash *hl*) (clear-geom-cache)
-    (when (gui-p) (zoom-to-box 0 0 12 9) (gui-sync))))
+(defcmd "NEW" ("QNEW") "Creates a new drawing in its own tab."
+  (new-doc)
+  (out (format nil "~A~%" (doc-name (current-doc)))))
 (defcmd "OPEN" () "Opens a drawing (DXF, or DWG through a converter)."
-  (when (ask-save-changes)
-    (let ((f (ask-file nil "Select File" nil "dwg dxf")))
-      (when f (open-drawing f)))))
+  (let ((f (ask-file nil "Select File" nil "dwg dxf")))
+    (when f (open-in-tab f))))
 (defcmd "QSAVE" () "Saves the current drawing." (save-drawing nil))
 (defcmd "SAVE" () "Saves the drawing." (save-drawing nil))
 (defcmd "SAVEAS" () "Saves the drawing under a new name." (save-drawing t))
@@ -536,8 +534,8 @@ a DXF next to it instead and leave the DWG untouched."
                *program-name* *version* (lisp-implementation-type) (lisp-implementation-version))))
 
 (defvar *quit-requested* nil)
-(defcmd "QUIT" ("EXIT") "Exits the program."
-  (when (ask-save-changes) (setf *quit-requested* t)))
+(defcmd "QUIT" ("EXIT") "Exits the program (offering to save each changed drawing)."
+  (when (quit-all-docs) (setf *quit-requested* t)))
 
 ;;; ---------- AutoLISP: entity access ----------
 

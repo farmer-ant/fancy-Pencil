@@ -93,12 +93,14 @@ proc mcmd {m label cmd {accel ""}} {
 }
 proc menucmd {cmd} { emit MENU $cmd; focus .cmd.e }
 
-foreach {name label} {file File edit Edit view View draw Draw dim Dimension modify Modify format Format tools Tools express Express help Help} {
+foreach {name label} {file File edit Edit view View draw Draw dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
     menu .mb.$name
     .mb add cascade -label $label -menu .mb.$name
 }
 mcmd .mb.file "New" NEW Ctrl+N
 mcmd .mb.file "Open..." OPEN Ctrl+O
+mcmd .mb.file "Close" CLOSE Ctrl+F4
+mcmd .mb.file "Close All" CLOSEALL
 mcmd .mb.file "Save" QSAVE Ctrl+S
 mcmd .mb.file "Save As..." SAVEAS
 .mb.file add separator
@@ -236,6 +238,9 @@ proc setcurprops {colors color ltypes ltype lweights lweight} {
 tbgroup view View {Extents "ZOOM E" Window "ZOOM W" Undo U Redo REDO}
 
 # ---------------------------------------------------------------- canvas
+# file tabs: one per open drawing, like AutoCAD's
+frame .tabs -background "#1b2027" -height 28
+pack .tabs -side top -fill x
 ttk::frame .main
 pack .main -side top -fill both -expand 1
 canvas .c -background $bg -highlightthickness 0 -cursor none -borderwidth 0
@@ -371,6 +376,10 @@ bind all <Control-y> {emit MENU REDO; break}
 bind all <Control-s> {emit MENU QSAVE; break}
 bind all <Control-o> {emit MENU OPEN; break}
 bind all <Control-n> {emit MENU NEW; break}
+bind all <Control-Tab> {emit MENU DOCNEXT; break}
+bind all <Control-ISO_Left_Tab> {emit MENU DOCPREV; break}
+bind all <Control-Shift-Tab> {emit MENU DOCPREV; break}
+bind all <Control-F4> {emit MENU CLOSE; break}
 bind all <Control-a> {emit MENU SELECTALL; break}
 bind all <Control-c> {emit MENU COPYCLIP; break}
 bind all <Control-v> {emit MENU PASTECLIP; break}
@@ -407,6 +416,50 @@ proc ask {id script} {
     emit A $id [string map {"\n" " "} $r]
 }
 proc setgrread {v} { set ::grread $v }
+
+# ---------------------------------------------------------------- document tabs
+# items: list of {id label modified}; current: id of the active drawing
+proc settabs {items current} {
+    foreach w [winfo children .tabs] { destroy $w }
+    foreach it $items {
+        lassign $it id label modified
+        set on [expr {$id == $current}]
+        set bg [expr {$on ? $::bg : "#2b313b"}]
+        set fg [expr {$on ? "#ffffff" : "#aab3bf"}]
+        set f [frame .tabs.t$id -background $bg -borderwidth 0]
+        label $f.l -text [expr {$modified ? "$label *" : $label}] -background $bg -foreground $fg \
+            -font {Helvetica 10} -padx 10 -pady 4
+        label $f.x -text "\u00D7" -background $bg -foreground "#8a94a3" -font {Helvetica 11} -padx 4
+        if {$on} { frame $f.bar -background $::accent -height 2; pack $f.bar -side top -fill x }
+        pack $f.l $f.x -side left
+        foreach w [list $f $f.l] {
+            bind $w <Button-1> [list emit MENU "DOCSWITCH $id"]
+            bind $w <Button-2> [list emit MENU "DOCCLOSE $id"]
+        }
+        bind $f.x <Button-1> [list emit MENU "DOCCLOSE $id"]
+        bind $f.x <Enter> [list $f.x configure -foreground "#ff8080"]
+        bind $f.x <Leave> [list $f.x configure -foreground "#8a94a3"]
+        pack $f -side left -padx {0 1} -pady {3 0}
+    }
+    label .tabs.plus -text "+" -background "#1b2027" -foreground "#aab3bf" -font {Helvetica 13} -padx 8
+    bind .tabs.plus <Button-1> {emit MENU NEW}
+    pack .tabs.plus -side left
+    # Window menu: the same list
+    set m .mb.window
+    $m delete 0 end
+    $m add command -label "Next Drawing" -accelerator Ctrl+Tab -command {menucmd DOCNEXT}
+    $m add command -label "Previous Drawing" -accelerator Ctrl+Shift+Tab -command {menucmd DOCPREV}
+    $m add command -label "Close" -accelerator Ctrl+F4 -command {menucmd CLOSE}
+    $m add command -label "Close All" -command {menucmd CLOSEALL}
+    $m add separator
+    set n 1
+    foreach it $items {
+        lassign $it id label modified
+        $m add radiobutton -label "$n  $label" -variable ::curdoc -value $id -command [list menucmd "DOCSWITCH $id"]
+        incr n
+    }
+    set ::curdoc $current
+}
 
 # ---------------------------------------------------------------- in-place text editor
 # MTEXT / DTEXT / TEXTEDIT type straight onto the drawing, like AutoCAD's in-place editor.
