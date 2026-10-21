@@ -87,6 +87,17 @@ a click outside finishes; Esc cancels. TEXT (DT) types each line in place at its
 Enter on an empty line ends. Double-click any text, or use TEXTEDIT (ED), to edit it the same way.
 From AutoLISP or scripts, the same commands take their text on the command line.
 
+The MTEXT editor has a formatting bar: text style, font, height, Bold/Italic/Underline (also Ctrl+B/I/U),
+left/center/right alignment, and a Symbols menu (°, ±, ⌀ ...). Right-click in the editor or on the command
+line for Cut/Copy/Paste, Select All, symbols and change case. A selected MTEXT shows grips on the top
+corners of its box: drag one (object snaps work as usual) to change the wrap width.
+
+STYLE (ST, or Format → Text Style) manages text styles: font (any installed font, or an AutoCAD .shx
+name, shown with a similar font), bold, italic, fixed height, width factor and oblique angle; -STYLE
+does the same at the command line. Styles are saved to and read from DXF, including the TrueType
+font and bold/italic flags AutoCAD stores. Width factor and oblique angle are kept in the file but
+text is drawn without them for now.
+
 ### Selection, grips and the Properties palette
 
 Click objects at the `Command:` prompt to select them first. Selected objects show blue grips;

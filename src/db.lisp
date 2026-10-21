@@ -23,6 +23,7 @@
   (blocks nil)
   (ltypes nil)
   (dimstyles nil)
+  (styles nil)
   (modcount 0)
   (saved-modcount 0)
   (filename nil)
@@ -267,7 +268,7 @@
 (defun text-box (data)
   "Approximate four corners of a TEXT/MTEXT entity (for selection & extents)."
   (let* ((p (or (dxf 10 data) (pt 0 0)))
-         (h (or (dxf 40 data) 0.2d0))
+         (h (text-effective-height data))
          (rot (or (dxf 50 data) 0d0))
          (mtext (equal (dxf 0 data) "MTEXT"))
          (width (and mtext (dxf 41 data) (plusp (dxf 41 data)) (dxf 41 data)))

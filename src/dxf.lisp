@@ -198,6 +198,9 @@
           (unless (or (null name) (continuous-name-p name))
             (add-ltype (make-ltype :name name :desc (or (dxf 3 g) "")
                                    :pattern (loop for p in g when (eql (car p) 49) collect (d (cdr p)))))))))
+    ;; text styles
+    (dolist (g tables)
+      (when (equal (cdr (first g)) "STYLE") (import-style-record g)))
     ;; layers
     (dolist (g tables)
       (when (equal (cdr (first g)) "LAYER")
@@ -337,15 +340,13 @@
         (wr out 62 (* (if (layer-on l) 1 -1) (abs (layer-color l))))
         (wr out 6 (or (layer-ltype l) "CONTINUOUS")))
       (wr out 0 "ENDTAB")
-      (let ((styles (remove-duplicates
-                     (remove-if (lambda (n) (or (not (stringp n)) (string-equal n "STANDARD")))
-                                (append (mapcar (lambda (e) (dxf 7 (ename-data e))) (live-entities))
-                                        (loop for b in (drawing-blocks *dwg*) append (mapcar (lambda (dd) (dxf 7 dd)) (block-def-entities b)))))
-                     :test #'string-equal)))
-        (wr out 0 "TABLE") (wr out 2 "STYLE") (wr out 70 (1+ (length styles)))
-        (dolist (n (cons "STANDARD" styles))
-          (wr out 0 "STYLE") (wr out 2 n) (wr out 70 0) (wr out 40 0d0) (wr out 41 1d0)
-          (wr out 50 0d0) (wr out 71 0) (wr out 42 0.2d0) (wr out 3 "txt") (wr out 4 ""))
+      (let ((styles (styles-for-export)))
+        (wr out 0 "TABLE") (wr out 2 "STYLE") (wr out 70 (length styles))
+        (dolist (st styles)
+          (wr out 0 "STYLE") (wr out 2 (textstyle-name st)) (wr out 70 0) (wr out 40 (textstyle-height st))
+          (wr out 41 (textstyle-width st)) (wr out 50 (* (textstyle-oblique st) (/ 180 pi)))
+          (wr out 71 (style-gen-flags st)) (wr out 42 0.2d0) (wr out 3 (style-font-file st))
+          (wr out 4 (textstyle-bigfont st)))
         (wr out 0 "ENDTAB"))
       (wr out 0 "ENDSEC")
       ;; blocks

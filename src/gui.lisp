@@ -282,7 +282,7 @@
                   "left")))))
 
 (defun render-text (data color tags hl)
-  (let* ((h (or (dxf 40 data) 0.2d0))
+  (let* ((h (text-effective-height data))
          (px-size (round (/ (* h *vscale*) 0.72d0)))
          (p (text-insertion data))
          (rot (or (dxf 50 data) 0d0))
@@ -298,8 +298,8 @@
           ((> px-size 3000) nil)
           ((or (< x -4000) (> x (+ *cw* 4000)) (< y -4000) (> y (+ *ch* 4000))) nil)
           (t (multiple-value-bind (anchor justify) (text-anchor data)
-               (list (format nil ".c create text ~A ~A -text ~A -anchor ~A -justify ~A -angle ~,3F -font {Helvetica -~D} -fill ~A -tags {~A}~A"
-                             (fmtn x) (fmtn y) (tq s) anchor justify (deg rot) px-size
+               (list (format nil ".c create text ~A ~A -text ~A -anchor ~A -justify ~A -angle ~,3F -font {~A} -fill ~A -tags {~A}~A"
+                             (fmtn x) (fmtn y) (tq s) anchor justify (deg rot) (text-font-spec data px-size)
                              (if hl "#8fc4ff" color) tags
                              (let ((w (and (equal (dxf 0 data) "MTEXT") (dxf 41 data))))
                                (if (and w (plusp w)) (format nil " -width ~D" (max 1 (round (* w *vscale*)))) "")))))))))))
@@ -872,6 +872,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                (progn (handle-common-event ev) (return))
                (push ev *event-buffer*)))
   (setf *event-buffer* (nreverse *event-buffer*))
+  ;; installed font families, so text in a missing font falls back to a look-alike
+  (setf *tk-families* (ignore-errors (split-string (tk-ask "join [font families] \x1f") (code-char 31))))
   (gui-sync))
 
 ;;; ---------- generic dialogs ----------

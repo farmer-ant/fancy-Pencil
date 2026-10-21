@@ -5,8 +5,8 @@
 (in-package :fancy-pencil-loader)
 
 (defparameter *root* (make-pathname :name nil :type nil :defaults *load-truename*))
-(defparameter *files* '("package" "geom" "db" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
-                         "commands" "dims" "modify" "modify2" "cmds2" "utilcmds" "props" "express" "main"))
+(defparameter *files* '("package" "geom" "db" "textstyle" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
+                         "commands" "dims" "modify" "modify2" "cmds2" "utilcmds" "props" "express" "textcmds" "main"))
 
 (let ((*compile-verbose* nil) (*compile-print* nil) (*load-verbose* nil))
   (handler-bind ((style-warning #'muffle-warning)
