@@ -63,6 +63,30 @@
     ("NONE" "None"))
   "DIMBLK values (AutoCAD's names without the leading underscore) and their names in the dialog.")
 
+(defparameter *arrow-block-names*
+  '(("CLOSEDBLANK" . "_ClosedBlank") ("OPEN" . "_Open") ("OPEN90" . "_Open90") ("DOT" . "_Dot")
+    ("DOTSMALL" . "_DotSmall") ("ARCHTICK" . "_ArchTick") ("OBLIQUE" . "_Oblique") ("NONE" . "_None"))
+  "Arrowhead codes and the block names AutoCAD uses for them in drawing files.")
+
+(defun arrow-block-name (code) (cdr (assoc (arrow-code code) *arrow-block-names* :test #'string=)))
+
+(defun known-arrow-name-p (name)
+  "True for a DIMBLK block name we can draw (\"_ArchTick\", \"ArchTick\", \"_Closed\"...)."
+  (let ((c (arrow-code name)))
+    (or (string= c "") (assoc c *arrow-block-names* :test #'string=))))
+
+(defun arrow-block-entities (code)
+  "Entities of the arrowhead block for CODE, AutoCAD-style: arrow size 1, tip at the origin, drawn
+for the right-hand end of a horizontal dimension line, colour ByBlock."
+  (dim-arrow (pt 0 0) (pt -1 0) (list :dimscale 1d0 :dimasz 1d0 :dimtsz 0d0 :dimclrd 0 :dimblk (arrow-code code))))
+
+(defun arrow-codes-in-use ()
+  "Arrowhead codes (other than the default) used by any dimension style or the current settings."
+  (remove-duplicates
+   (remove "" (mapcar #'arrow-code (cons (sysvar "DIMBLK") (mapcar (lambda (ds) (dv (dimstyle-vars ds) :dimblk)) (all-dimstyles))))
+           :test #'string=)
+   :test #'string=))
+
 (defun arrow-code (v)
   "Normalise a DIMBLK value: \"_ArchTick\" -> \"ARCHTICK\", \"CLOSED\" -> \"\"."
   (let ((u (string-upcase (string-left-trim "_" (or v "")))))

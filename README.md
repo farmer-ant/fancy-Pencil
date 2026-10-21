@@ -61,6 +61,8 @@ Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT u
   Delete, tabs for Lines, Symbols and Arrows, Text, Fit and Primary Units, and a live preview. Arrowheads:
   closed filled, closed blank, open, right angle, dot, small dot, **architectural tick**, oblique, none.
   Changing a style updates the dimensions that use it. EXPLODE breaks a dimension into its parts.
+  Arrowheads are saved the way AutoCAD stores them (`_ArchTick`, `_Oblique` ... blocks referenced by
+  the dimension style), in both DXF formats and so in DWG, and are read back from AutoCAD drawings.
 
 ### Several drawings at once
 
