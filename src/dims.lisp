@@ -2,7 +2,7 @@
 ;;;; continue and baseline. Dimension geometry lives in an anonymous *D block that is rebuilt
 ;;;; from the definition points whenever the dimension changes, as in AutoCAD.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; ---------- dimension variables & styles ----------
 

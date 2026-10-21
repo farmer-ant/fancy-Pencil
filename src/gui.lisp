@@ -1,6 +1,6 @@
 ;;;; gui.lisp — Tk front end (via a `wish` subprocess), view, rendering, events.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *wish-process* nil)
 (defvar *wish-in* nil "Stream to wish's stdin.")
@@ -34,25 +34,25 @@
 
 (defun run-wish (program script)
   #+sbcl
-  (let ((p (sb-ext:run-program program (list script) :search t :wait nil
+  (let ((p (sb-ext:run-program program (list script "-name" "fancypencil") :search t :wait nil
                                                      :input :stream :output :stream :error nil
                                                      :external-format :utf-8)))
     (values p (sb-ext:process-input p) (sb-ext:process-output p)))
   #+ecl
   (multiple-value-bind (stream code p)
-      (ext:run-program program (list script) :input :stream :output :stream :error nil :wait nil
+      (ext:run-program program (list script "-name" "fancypencil") :input :stream :output :stream :error nil :wait nil
                                              :external-format :utf-8)
     (declare (ignore code))
     (values p stream stream))
   #+ccl
-  (let ((p (ccl:run-program program (list script) :wait nil :input :stream :output :stream :error nil
+  (let ((p (ccl:run-program program (list script "-name" "fancypencil") :wait nil :input :stream :output :stream :error nil
                                                   :external-format :utf-8)))
     (values p (ccl:external-process-input-stream p) (ccl:external-process-output-stream p))))
 
 (defun start-wish ()
   (let ((script (namestring (merge-pathnames "gui.tcl" (script-directory))))
-        (candidates (remove nil (list (getenv "LISPDRAFT_WISH") "wish" "wish8.6" "wish86" "wish86t" "wish9.0" "wish8.7"))))
-    (dolist (c candidates (error "Could not start Tk. Install it (e.g. `sudo apt install tk`) or set LISPDRAFT_WISH to the wish executable."))
+        (candidates (remove nil (list (getenv "FANCYPENCIL_WISH") "wish" "wish8.6" "wish86" "wish86t" "wish9.0" "wish8.7"))))
+    (dolist (c candidates (error "Could not start Tk. Install it (e.g. `sudo apt install tk`) or set FANCYPENCIL_WISH to the wish executable."))
       (multiple-value-bind (p in outs) (ignore-errors (run-wish c script))
         (when (and p in outs)
           (setf *wish-process* p *wish-in* in *wish-out* outs)
@@ -527,7 +527,7 @@
         (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0))
         (sysvar "LWDISPLAY"))
     (sync-current-props)
-    (tk "settitle ~A" (tq (format nil "LispDraft — ~A~A" (drawing-display-name)
+    (tk "settitle ~A" (tq (format nil "Fancy Pencil — ~A~A" (drawing-display-name)
                                   (if (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)) " *" ""))))))
 
 (defun drawing-display-name ()
@@ -748,7 +748,7 @@
   nil)
 (defsubr "alert" (msg)
   (if (eq *ui* :gui)
-      (tk-ask (format nil "tk_messageBox -parent . -title LispDraft -message ~A" (tq (lisp-repr msg nil))))
+      (tk-ask (format nil "tk_messageBox -parent . -title {Fancy Pencil} -message ~A" (tq (lisp-repr msg nil))))
       (out (format nil "** ~A **~%" msg)))
   nil)
 (defsubr "getfiled" (title default ext flags)
@@ -775,7 +775,7 @@
 
 (defun gui-confirm (msg &optional (type "yesno"))
   "Returns \"yes\", \"no\" or \"cancel\"."
-  (tk-ask (format nil "tk_messageBox -parent . -icon question -type ~A -title LispDraft -message ~A" type (tq msg))))
+  (tk-ask (format nil "tk_messageBox -parent . -icon question -type ~A -title {Fancy Pencil} -message ~A" type (tq msg))))
 
 ;;; ---------- layer dialog ----------
 

@@ -1,4 +1,4 @@
-;;; Tests for LispDraft 0.2 features: linetypes, lineweights, hatching, polyline trim/extend,
+;;; Tests for Fancy Pencil 0.2 features: linetypes, lineweights, hatching, polyline trim/extend,
 ;;; fillet/chamfer, PEDIT, dimensions & styles, Express Tools, acet-* functions, aliases, DXF 2000.
 (setq *pass* 0 *fail* 0)
 (defun check (name got want)
@@ -169,7 +169,7 @@
 ;; ---------- aliases ----------
 (defun c:hello () (setq *hello* T) (princ))
 (command "aliasedit" "Add" "HH" "HELLO" "eXit")
-(check "alias added" (lispdraft-alias "HH") "HELLO")
+(check "alias added" (fancypencil-alias "HH") "HELLO")
 
 ;; ---------- DXF 2000 round trip ----------
 (setq before (sslength (ssget "X")))

@@ -1,8 +1,8 @@
-;;;; load.lisp — compile (SBCL) and load LispDraft without needing ASDF/Quicklisp.
-;;;;   sbcl --load load.lisp --eval '(lispdraft:main)'
+;;;; load.lisp — compile (SBCL) and load Fancy Pencil without needing ASDF/Quicklisp.
+;;;;   sbcl --load load.lisp --eval '(fancy-pencil:main)'
 
-(defpackage :lispdraft-loader (:use :cl))
-(in-package :lispdraft-loader)
+(defpackage :fancy-pencil-loader (:use :cl))
+(in-package :fancy-pencil-loader)
 
 (defparameter *root* (make-pathname :name nil :type nil :defaults *load-truename*))
 (defparameter *files* '("package" "geom" "db" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
@@ -22,4 +22,4 @@
         #-(or sbcl ccl)
         (load src)))))
 
-(setf (symbol-value (find-symbol "*GUI-DIR*" :lispdraft)) (merge-pathnames "src/" *root*))
+(setf (symbol-value (find-symbol "*GUI-DIR*" :fancy-pencil)) (merge-pathnames "src/" *root*))

@@ -1,6 +1,8 @@
-# LispDraft
+# Fancy Pencil
 
-![LispDraft: a drawing made by an AutoLISP program, with grips and the Properties palette](docs/screenshot.png)
+<img src="support/icons/fancypencil-128.png" alt="Fancy Pencil icon" width="96" align="right">
+
+![Fancy Pencil: a drawing made by an AutoLISP program, with grips and the Properties palette](docs/screenshot.png)
 
 A 2D drafting program written in Common Lisp that works like AutoCAD and runs AutoLISP.
 Same command names and aliases, the same prompts, a command line with the same input rules,
@@ -12,18 +14,34 @@ AutoLISP routines (`defun c:...`, `command`, `entget`/`entmod`, `ssget` filters,
 
 ```sh
 sudo apt install sbcl tk
-cd lispdraft
-./lispdraft                      # GUI
-./lispdraft drawing.dxf          # open a drawing
-./lispdraft examples/tools.lsp   # load AutoLISP at startup
-./lispdraft --tty                # terminal-only mode (command line + AutoLISP, no window)
+cd fancypencil
+./fancypencil                      # GUI
+./fancypencil drawing.dxf          # open a drawing
+./fancypencil examples/tools.lsp   # load AutoLISP at startup
+./fancypencil --tty                # terminal-only mode (command line + AutoLISP, no window)
 ```
 
 The first start compiles the sources (a few seconds); later starts use the cached build in `build/`.
 Nothing else is needed: no Quicklisp, no libraries. The GUI is Tk, driven over a pipe from Lisp.
-If `wish` isn't on your PATH, set `LISPDRAFT_WISH=/path/to/wish`.
+If `wish` isn't on your PATH, set `FANCYPENCIL_WISH=/path/to/wish`.
 
-Any `acaddoc.lsp` or `lispdraft.lsp` in the current directory, and `~/.lispdraft.lsp`, are loaded
+### Add it to the application launcher
+
+```sh
+sh install.sh              # adds "Fancy Pencil" with its icon to your app menu / dash
+sh install.sh --uninstall  # removes it again
+```
+
+This installs the icon (`support/icons`, SVG plus 16–512 px PNGs) into
+`~/.local/share/icons/hicolor` and a `fancypencil.desktop` entry into `~/.local/share/applications`,
+pointing at wherever this folder is. If you move the folder, run `install.sh` again. Once it shows
+in the launcher you can right-click it and choose *Add to Favorites* to pin it to the dock. DXF files
+can be opened with it from the file manager (*Open With → Fancy Pencil*).
+
+Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT under the old name
+(`~/.config/lispdraft/lispdraft.pgp`) and a `~/.lispdraft.lsp` startup file are still picked up.
+
+Any `acaddoc.lsp` or `fancypencil.lsp` in the current directory, and `~/.fancypencil.lsp`, are loaded
 at startup, and `S::STARTUP` is called if defined, just like AutoCAD.
 
 ## Using it
@@ -89,8 +107,8 @@ exactly as defined.
 ### Command aliases
 
 Aliases come from a `.pgp` file in AutoCAD's acad.pgp format (`L,  *LINE`). The shipped set is in
-`support/lispdraft.pgp`. ALIASEDIT opens an editor; saving writes your own copy to
-`~/.config/lispdraft/lispdraft.pgp`, which is used from then on. You can also edit that file in
+`support/fancypencil.pgp`. ALIASEDIT opens an editor; saving writes your own copy to
+`~/.config/fancypencil/fancypencil.pgp`, which is used from then on. You can also edit that file in
 any text editor and run REINIT. An alias may point at one of your AutoLISP commands, e.g.
 `HH, *HELLO` runs `C:HELLO`. External commands (`NAME, shell command, flags, *prompt,`) are supported.
 
@@ -140,7 +158,7 @@ and every later release. SAVEASR12 (or DXFOUT and choosing R12) writes R12 DXF f
 software; R12 has no lineweights or hatches. Exported files are checked in the test suite with
 the independent ezdxf auditor and come back with zero errors.
 
-LispDraft reads ASCII DXF from R12 through current releases: lines, circles, arcs, points,
+Fancy Pencil reads ASCII DXF from R12 through current releases: lines, circles, arcs, points,
 LWPOLYLINE/POLYLINE (with bulges and widths), TEXT, MTEXT, INSERT with ATTRIBs, nested blocks,
 DIMENSION, HATCH (polyline, line, arc, ellipse and spline boundaries), ELLIPSE, SPLINE and SOLID;
 layers with color, linetype, lineweight, on/off, freeze and lock; linetype and dimension style tables.
@@ -157,14 +175,15 @@ polylines but not ellipses or splines. Express Tools that depend on fonts or ext
 ## Tests
 
 ```sh
-./lispdraft --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp < /dev/null
+./fancypencil --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp < /dev/null
 ```
 
 ## Layout
 
 ```
-lispdraft          launcher script
-load.lisp          compiles & loads the sources (no ASDF needed); lispdraft.asd is provided too
+fancypencil        launcher script
+install.sh         adds Fancy Pencil and its icon to the desktop launcher
+load.lisp          compiles & loads the sources (no ASDF needed); fancypencil.asd is provided too
 src/package.lisp   packages
 src/geom.lisp      points, intersections, transforms
 src/db.lisp        drawing database (entities are DXF association lists, like entget)
@@ -186,5 +205,6 @@ src/props.lisp     Properties palette
 src/express.lisp   .pgp aliases, Express Tools, acet-* functions
 src/utilcmds.lisp  view/file/layer/block/inquiry commands; entget/tblsearch/getvar...
 src/main.lisp      command loop and entry point
-support/lispdraft.pgp  default command aliases
+support/fancypencil.pgp  default command aliases
+support/icons/     application icon (SVG source + PNG sizes)
 ```

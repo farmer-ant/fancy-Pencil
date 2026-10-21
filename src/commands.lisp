@@ -1,6 +1,6 @@
 ;;;; commands.lisp — command registry and drawing commands.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *commands* (make-hash-table :test #'equalp))
 (defvar *aliases* (make-hash-table :test #'equalp))

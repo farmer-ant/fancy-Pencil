@@ -1,7 +1,7 @@
 ;;;; geom.lisp — points, angles, intersections and geometric "pieces".
 ;;;; Points are AutoLISP-style lists (x y z) of double-floats.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defconstant +pi+ (coerce pi 'double-float))
 (defconstant +2pi+ (* 2 +pi+))

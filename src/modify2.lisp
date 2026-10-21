@@ -1,7 +1,7 @@
 ;;;; modify2.lisp — polyline geometry helpers, TRIM/EXTEND on polylines,
 ;;;; FILLET and CHAMFER for lines, arcs, circles and polylines, PEDIT.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; ---------- polyline segments, parameterised as u = segment-index + fraction ----------
 

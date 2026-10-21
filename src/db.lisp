@@ -4,7 +4,7 @@
 ;;;; are nearly free. Angles inside the database are radians (as in AutoLISP);
 ;;;; the DXF reader/writer converts to and from degrees.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defstruct (ename (:constructor %make-ename (handle data)))
   handle data (deleted nil))

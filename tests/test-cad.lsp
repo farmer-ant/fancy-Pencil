@@ -94,8 +94,8 @@
 (check "pline closed" (cdr (assoc 70 pl)) 1)
 (check "pline bulge" (cdr (assoc 42 pl)) 1.0)
 ;; text
-(command "text" '(0 70) 0.5 0 "Hello LispDraft" "")
-(check "text" (cdr (assoc 1 (entget (entlast)))) "Hello LispDraft")
+(command "text" '(0 70) 0.5 0 "Hello Fancy Pencil" "")
+(check "text" (cdr (assoc 1 (entget (entlast)))) "Hello Fancy Pencil")
 ;; block
 (command "block" "BOX" '(0 0) r "")
 (check "block insert" (cdr (assoc 0 (entget (entlast)))) "INSERT")
@@ -118,10 +118,10 @@
 (check "c: command" (cdr (assoc 0 (entget (entlast)))) "LWPOLYLINE")
 ;; DXF round trip
 (setq before (sslength (ssget "X")))
-(command "saveas" "/tmp/lispdraft-test.dxf")
+(command "saveas" "/tmp/fancypencil-test.dxf")
 (command "new")
 (check "new empty" (ssget "X") nil)
-(command "open" "/tmp/lispdraft-test.dxf")
+(command "open" "/tmp/fancypencil-test.dxf")
 (check "dxf roundtrip count" (sslength (ssget "X")) before)
 (check "dxf layer" (cdr (assoc 62 (tblsearch "LAYER" "WALLS"))) 1)
 (check "dxf arc" (sslength (ssget "X" '((0 . "ARC")))) 2)

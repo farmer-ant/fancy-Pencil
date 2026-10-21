@@ -1,6 +1,6 @@
 ;;;; props.lisp — the Properties palette (PROPERTIES, Ctrl+1): view and edit selected objects.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defun fmt-num (x) (if (realp x) (fmt-len x) ""))
 (defun fmt-deg (a) (if (realp a) (fmt-decimal (deg a) (max 0 (or (sysvar "AUPREC") 0))) ""))

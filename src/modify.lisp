@@ -1,6 +1,6 @@
 ;;;; modify.lisp — editing commands.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *last-erased* nil)
 (defvar *clipboard* nil)
@@ -640,14 +640,14 @@
 
 ;;; ---------- clipboard ----------
 
-(defcmd "COPYCLIP" () "Copies selected objects to the LispDraft clipboard."
+(defcmd "COPYCLIP" () "Copies selected objects to the Fancy Pencil clipboard."
   (let ((ents (get-selection)))
     (when ents
       (let ((b (drawing-extents ents)))
         (setf *clipboard* (list (pt (first b) (second b)) (mapcar (lambda (e) (copy-tree (ent-data e))) ents)))
         (out (format nil "~D object~:P copied.~%" (length ents)))))))
 
-(defcmd "PASTECLIP" () "Pastes objects from the LispDraft clipboard."
+(defcmd "PASTECLIP" () "Pastes objects from the Fancy Pencil clipboard."
   (if (null *clipboard*) (out (format nil "Clipboard is empty.~%"))
       (destructuring-bind (base datas) *clipboard*
         (let ((p (gpoint "Specify insertion point: "

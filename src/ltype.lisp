@@ -1,6 +1,6 @@
 ;;;; ltype.lisp — linetypes (acad.lin-compatible), dash generation, lineweights.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; The standard linetypes from acad.lin (imperial). Each pattern is a list of
 ;;; lengths: positive = dash, negative = gap, 0 = dot.

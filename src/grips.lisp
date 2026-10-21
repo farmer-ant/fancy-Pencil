@@ -1,6 +1,6 @@
 ;;;; grips.lisp — AutoCAD-style grips on selected objects and grip editing.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *grip-points* nil "Grip points currently displayed: list of (point . ename).")
 
