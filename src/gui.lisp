@@ -23,6 +23,7 @@
 (defvar *at-line-start* t)
 (defvar *palette-shown* nil)
 (defvar *prompt-owner* nil "The input request whose prompt the command line is showing.")
+(defvar *pick-shift* nil "True when the last left-click was made with Shift held.")
 (defvar *press-pos* nil "Screen position of the last left-button press (for press-drag-release windows).")
 
 ;;; ---------- process ----------
@@ -431,6 +432,13 @@
     (if on (setf (gethash e *hl*) t) (remhash e *hl*))
     (when (ent-live-p e) (rerender-entity e))))
 
+(defun sweep-highlights ()
+  "Drop every highlight that isn't the current noun/verb selection. Run back at Command:, and on
+Escape, so nothing stays dashed after a command (e.g. an object erased while selected, then undone)."
+  (let (stale)
+    (maphash (lambda (e v) (declare (ignore v)) (unless (member e *pickfirst*) (push e stale))) *hl*)
+    (when stale (gui-highlight stale nil))))
+
 ;;; ---------- temporary graphics (cursor, snaps, rubber band) ----------
 
 (defparameter *snap-names*
@@ -605,8 +613,8 @@
       ((string= ty "M") (destructuring-bind (x y) (event-ints ev)
                           (update-cursor x y) (draw-temp) (update-coords)))
       ((string= ty "B")
-       (destructuring-bind (x y) (event-ints ev)
-         (setf *press-pos* (list x y))
+       (destructuring-bind (x y &optional shift) (event-ints ev)
+         (setf *press-pos* (list x y) *pick-shift* (eql shift 1))
          (update-cursor x y)
          (case kind
            ((:point :corner :distance :angle)
@@ -627,6 +635,7 @@
       ((string= ty "E")
        (if (eq kind :command)
            (progn (when *pickfirst* (take-pickfirst) (refresh-grips) (refresh-palette))
+                  (sweep-highlights)
                   (out (format nil "~A*Cancel*~%" (inreq-prompt *req*))))
            (progn (out (format nil "~A*Cancel*~%" (inreq-prompt *req*)))
                   (error 'alisp-cancel))))
@@ -678,6 +687,7 @@
     (when (/= *drawn-modcount* (drawing-modcount *dwg*)) (gui-regen) (gui-sync))
     (when (eq (inreq-kind req) :command)
       (setf *pickfirst* (remove-if-not #'ent-live-p *pickfirst*))
+      (sweep-highlights)
       (refresh-grips)
       (refresh-palette))
     (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
@@ -708,7 +718,8 @@
                ((string= ty "M") (destructuring-bind (x y) (event-ints ev)
                                    (update-cursor x y) (draw-temp) (update-coords)
                                    (when track (return (list 5 (pt3 *cursor-world*))))))
-               ((string= ty "B") (destructuring-bind (x y) (event-ints ev)
+               ((string= ty "B") (destructuring-bind (x y &rest shift) (event-ints ev)
+                                   (declare (ignore shift))
                                    (return (list 3 (s->w x y)))))
                ((string= ty "R") (destructuring-bind (x y) (event-ints ev)
                                    (return (list 25 (s->w x y)))))
@@ -753,10 +764,9 @@
   nil)
 (defsubr "getfiled" (title default ext flags)
   (if (eq *ui* :gui)
-      (let ((r (tk-ask (format nil "~A -parent . -title ~A -initialfile ~A -filetypes {{{~A files} {.~A}} {{All files} *}}~A"
-                               (if (logtest (or flags 0) 1) "tk_getSaveFile" "tk_getOpenFile")
-                               (tq title) (tq (file-namestring (or default ""))) ext ext
-                               (if (logtest (or flags 0) 1) (format nil " -defaultextension .~A" ext) "")))))
+      (let* ((ext (if (and ext (plusp (length (astr ext)))) (astr ext) "*"))
+             (r (tk-ask (format nil "filedlg ~D ~A ~A ~A" (if (logtest (or flags 0) 1) 1 0)
+                                (tq title) (tq (or default "")) (tq ext)))))
         (if (string= r "") nil r))
       (let ((s (get-user-input :string :prompt (format nil "~A: " title) :spaces t)))
         (if (string= s "") nil s))))
@@ -764,11 +774,8 @@
 
 (defun file-dialog (save title &key (ext "dxf") initial)
   (if (eq *ui* :gui)
-      (let ((r (tk-ask (format nil "~A -parent . -title ~A ~A -filetypes {{{~A files} {.~A}} {{All files} *}}~A"
-                               (if save "tk_getSaveFile" "tk_getOpenFile") (tq title)
-                               (if initial (format nil "-initialfile ~A" (tq (file-namestring initial))) "")
-                               (string-upcase ext) ext
-                               (if save (format nil " -defaultextension .~A" ext) "")))))
+      (let ((r (tk-ask (format nil "filedlg ~D ~A ~A ~A" (if save 1 0) (tq title)
+                               (tq (if initial (namestring initial) "")) (tq ext)))))
         (if (string= r "") nil r))
       (let ((s (get-user-input :string :prompt (format nil "~A: " title) :spaces t)))
         (if (string= s "") nil s))))

@@ -25,6 +25,10 @@ The first start compiles the sources (a few seconds); later starts use the cache
 Nothing else is needed: no Quicklisp, no libraries. The GUI is Tk, driven over a pipe from Lisp.
 If `wish` isn't on your PATH, set `FANCYPENCIL_WISH=/path/to/wish`.
 
+Open/Save dialogs use your desktop's own file chooser (`zenity` on GNOME/Ubuntu, `kdialog` on KDE),
+so every mounted drive, bookmark and Recent is in the sidebar. Without either, Tk's simpler dialog is
+used (`sudo apt install zenity` to get the full one). Set `FANCYPENCIL_FILEDIALOG=tk` to force Tk's.
+
 ### Add it to the application launcher
 
 ```sh
@@ -168,7 +172,7 @@ layers with color, linetype, lineweight, on/off, freeze and lock; linetype and d
 Compared with AutoCAD, this version does not have: DWG files (a proprietary format), paper space
 and layouts, text styles and fonts (all text uses one sans-serif font), gradient fills, associative
 hatches and dimensions (they don't follow edits to their boundary objects), UCS, 3D, plotting, and
-ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. TRIM and EXTEND work on lines, arcs, circles and
+ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. TRIM and EXTEND (Shift+click switches between them, as in AutoCAD) work on lines, arcs, circles and
 polylines but not ellipses or splines. Express Tools that depend on fonts or external references
 (TXTEXP, XREF tools) are not included.
 

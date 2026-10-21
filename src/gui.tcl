@@ -286,7 +286,7 @@ proc palemit {key w} { emit PROP $key [$w get]; focus .cmd.e }
 bind all <Control-Key-1> {palette_toggle; break}
 
 bind .c <Motion> {emit M %x %y}
-bind .c <ButtonPress-1> {emit B %x %y; focus .cmd.e}
+bind .c <ButtonPress-1> {emit B %x %y [expr {%s & 1}]; focus .cmd.e}
 bind .c <ButtonRelease-1> {emit U %x %y}
 bind .c <ButtonPress-3> {emit R %x %y}
 bind .c <ButtonPress-2> {emit P %x %y}
@@ -399,6 +399,77 @@ proc ask {id script} {
     emit A $id [string map {"\n" " "} $r]
 }
 proc setgrread {v} { set ::grread $v }
+
+# ---------------------------------------------------------------- file dialog
+# Uses the desktop's own file chooser when one is available (zenity = GNOME/GTK, kdialog = KDE),
+# so the sidebar shows Home, Recent, bookmarks and every mounted drive. Falls back to Tk's dialog.
+set ::lastdir [pwd]
+set ::filedlg_tool ""
+if {[auto_execok zenity] ne ""} {
+    set ::filedlg_tool zenity
+    set ::zenity_major 4
+    catch { regexp {^(\d+)} [exec zenity --version 2>/dev/null] -> ::zenity_major }
+} elseif {[auto_execok kdialog] ne ""} {
+    set ::filedlg_tool kdialog
+}
+if {[info exists env(FANCYPENCIL_FILEDIALOG)]} { set ::filedlg_tool $env(FANCYPENCIL_FILEDIALOG) }
+
+proc run_external_dialog {cmd} {
+    # run the chooser without blocking Tk, so the drawing keeps repainting behind it
+    set ::extdlg_out ""
+    set ::extdlg_done 0
+    if {[catch {open "|$cmd 2>/dev/null" r} ch]} { return -code error $ch }
+    fconfigure $ch -blocking 0 -encoding utf-8
+    fileevent $ch readable [list apply {{ch} {
+        append ::extdlg_out [read $ch]
+        if {[eof $ch]} { fconfigure $ch -blocking 1; catch {close $ch}; set ::extdlg_done 1 }
+    }} $ch]
+    catch {tk busy hold .}
+    update idletasks
+    vwait ::extdlg_done
+    catch {tk busy forget .}
+    return [string trimright $::extdlg_out "\n"]
+}
+
+proc filedlg {save title initial ext} {
+    set dir $::lastdir
+    if {$initial ne "" && [file isdirectory [file dirname $initial]] && [file dirname $initial] ne "."} {
+        set dir [file dirname $initial]
+    }
+    set name [file tail $initial]
+    set EXT [string toupper $ext]
+    set r ""
+    set tool $::filedlg_tool
+    if {$tool eq "zenity"} {
+        set cmd [list zenity --file-selection --title $title --modal \
+                     --file-filter "$EXT files | *.$ext *.$EXT" --file-filter "All files | *"]
+        if {$save} {
+            lappend cmd --save
+            if {$::zenity_major < 4} { lappend cmd --confirm-overwrite }
+        }
+        lappend cmd --filename [expr {$name eq "" ? "[string trimright $dir /]/" : [file join $dir $name]}]
+        if {[catch {set r [run_external_dialog $cmd]}]} { set tool tk }
+    } elseif {$tool eq "kdialog"} {
+        set cmd [list kdialog --title $title [expr {$save ? "--getsavefilename" : "--getopenfilename"}] \
+                     [file join $dir $name] "*.$ext *.$EXT|$EXT files\n*|All files"]
+        if {[catch {set r [run_external_dialog $cmd]}]} { set tool tk }
+    }
+    if {$tool ne "zenity" && $tool ne "kdialog"} {
+        set types [list [list "$EXT files" [list .$ext .$EXT]] {{All files} *}]
+        if {$save} {
+            set r [tk_getSaveFile -parent . -title $title -initialdir $dir -initialfile $name \
+                       -filetypes $types -defaultextension .$ext]
+        } else {
+            set r [tk_getOpenFile -parent . -title $title -initialdir $dir -filetypes $types]
+        }
+    }
+    if {$r ne ""} {
+        if {$save && [file extension $r] eq ""} { append r .$ext }
+        set ::lastdir [file dirname $r]
+    }
+    focus .cmd.e
+    return $r
+}
 
 # ---------------------------------------------------------------- layer dialog
 proc layerdlg {rows {ltypes {}} {lweights {}}} {
