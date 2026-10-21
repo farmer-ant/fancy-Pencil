@@ -542,7 +542,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                                   (if (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)) " *" ""))))))
 
 (defun drawing-display-name ()
-  (let ((f (drawing-filename *dwg*))) (if f (file-namestring f) "Drawing1.dxf")))
+  (let ((f (drawing-filename *dwg*))) (if f (file-namestring f) (untitled-name))))
 
 ;;; ---------- event handling ----------
 
@@ -700,6 +700,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
     (when (eq (inreq-kind req) :command)
       (setf *pickfirst* (remove-if-not #'ent-live-p *pickfirst*))
       (sweep-highlights)
+      (refresh-tabs)
       (refresh-grips)
       (refresh-palette))
     (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
@@ -875,7 +876,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
   (setf *event-buffer* (nreverse *event-buffer*))
   ;; installed font families, so text in a missing font falls back to a look-alike
   (setf *tk-families* (ignore-errors (split-string (tk-ask "join [font families] \x1f") (code-char 31))))
-  (gui-sync))
+  (gui-sync)
+  (refresh-tabs t))
 
 ;;; ---------- generic dialogs ----------
 

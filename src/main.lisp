@@ -19,7 +19,8 @@
 (defparameter *no-repeat-commands*
   '("NEW" "OPEN" "QSAVE" "SAVE" "SAVEAS" "SAVEASR12" "DXFIN" "DXFOUT" "QUIT" "APPLOAD" "SCRIPT"
     "PURGE" "ALIASEDIT" "REINIT" "HELP" "ABOUT" "U" "UNDO" "REDO" "OOPS" "LAYER" "LINETYPE" "LWEIGHT"
-    "DIMSTYLE" "UNITS" "SETVAR" "OSNAP" "PROPERTIES" "SELECTALL" "COPYCLIP" "REGEN" "HPSET")
+    "DIMSTYLE" "UNITS" "SETVAR" "OSNAP" "PROPERTIES" "SELECTALL" "COPYCLIP" "REGEN" "HPSET"
+    "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "STYLE" "TEXTEDIT")
   "Commands that Enter at an empty prompt does not repeat (file, setup and undo commands).")
 
 (defun remember-command (word name)
@@ -27,7 +28,8 @@
     (setf *last-command* word)))
 
 (defparameter *no-undo-commands* '("U" "UNDO" "REDO" "MREDO" "ZOOM" "PAN" "REGEN" "HELP" "ABOUT" "LIST" "DIST" "ID" "AREA"
-                                    "QSAVE" "SAVE" "SAVEAS" "DXFOUT" "NEW" "OPEN" "QUIT" "COPYCLIP" "SELECTALL"))
+                                    "QSAVE" "SAVE" "SAVEAS" "DXFOUT" "NEW" "OPEN" "QUIT" "COPYCLIP" "SELECTALL"
+                                    "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "SAVEASR12"))
 
 (defun print-lisp-result (v)
   (unless (eq v *null-sym*) (out (format nil "~A~%" (lisp-repr v t)))))
@@ -137,7 +139,7 @@
   (format nil "~A ~A — AutoLISP-compatible 2D drafting. Type HELP for commands, or an AutoLISP expression.~%"
           *program-name* *version*))
 
-(defun start (&key (gui t) file lisp-files)
+(defun start (&key (gui t) file files lisp-files)
   "Start Fancy Pencil. With GUI NIL, run on the terminal."
   (setf *gui-dir* (or *gui-dir* (script-directory)))
   (if gui
@@ -149,8 +151,11 @@
       (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
   (load-aliases)
   (out (banner))
-  (when file (open-drawing file))
-  (when (and gui (not file)) (zoom-to-box 0 0 12 9))
+  (current-doc)
+  (when (and gui (not (or file files))) (zoom-to-box 0 0 12 9))
+  ;; every drawing named on the command line opens in its own tab
+  (dolist (f (append (and file (list file)) files)) (open-in-tab f))
+  (when (gui-p) (refresh-tabs t))
   (install-startup-functions)
   (dolist (f lisp-files) (run-lisp-file f))
   (setf *quit-requested* nil)
@@ -163,18 +168,18 @@
 (defun run-tty (&rest args) (apply #'start :gui nil args))
 
 (defun main ()
-  "Command-line entry: fancypencil [--tty] [--load file.lsp]... [drawing.dxf]"
+  "Command-line entry: fancypencil [--tty] [--load file.lsp]... [drawing.dxf|dwg ...]"
   (let* ((args #+sbcl (rest sb-ext:*posix-argv*)   ; SBCL removes its own options already
                #+ecl (let* ((all (ext:command-args)) (p (position "--" all :test #'string=)))
                        (and p (subseq all (1+ p))))
                #+ccl (let* ((all ccl:*command-line-argument-list*) (p (position "--" all :test #'string=)))
                        (and p (subseq all (1+ p))))
                #-(or sbcl ecl ccl) nil)
-         (gui t) (file nil) (lisp nil))
+         (gui t) (files nil) (lisp nil))
     (loop while args do
       (let ((a (pop args)))
         (cond ((string= a "--tty") (setf gui nil))
               ((string= a "--load") (push (pop args) lisp))
               ((and (> (length a) 4) (string-equal (subseq a (- (length a) 4)) ".lsp")) (push a lisp))
-              ((and (plusp (length a)) (char/= (char a 0) #\-)) (setf file a)))))
-    (start :gui gui :file file :lisp-files (nreverse lisp))))
+              ((and (plusp (length a)) (char/= (char a 0) #\-)) (push a files)))))
+    (start :gui gui :files (nreverse files) :lisp-files (nreverse lisp))))
