@@ -247,18 +247,41 @@
                      do (setf r (concatenate 'string (subseq r 0 pos) rep (subseq r (+ pos 3))))))
       r)))
 
+(defun mtext-wrapped-lines (lines h width)
+  "Approximate word-wrap of LINES at WIDTH drawing units (text height H)."
+  (if (or (null width) (<= width 0)) lines
+      (let ((maxc (max 1 (floor width (* 0.62d0 h)))))
+        (loop for line in lines
+              append (let ((out nil) (cur ""))
+                       (dolist (w (split-on-spaces line))
+                         (cond ((string= cur "") (setf cur w))
+                               ((<= (+ (length cur) 1 (length w)) maxc) (setf cur (concatenate 'string cur " " w)))
+                               (t (push cur out) (setf cur w))))
+                       (push cur out)
+                       (nreverse out))))))
+
+(defun split-on-spaces (s)
+  (loop with start = 0 for pos = (position #\Space s :start start)
+        collect (subseq s start pos) while pos do (setf start (1+ pos))))
+
 (defun text-box (data)
   "Approximate four corners of a TEXT/MTEXT entity (for selection & extents)."
   (let* ((p (or (dxf 10 data) (pt 0 0)))
          (h (or (dxf 40 data) 0.2d0))
          (rot (or (dxf 50 data) 0d0))
+         (mtext (equal (dxf 0 data) "MTEXT"))
+         (width (and mtext (dxf 41 data) (plusp (dxf 41 data)) (dxf 41 data)))
          (lines (let ((s (text-string-display (or (dxf 1 data) ""))))
                   (loop with start = 0 for pos = (position #\Newline s :start start)
                         collect (subseq s start pos) while pos do (setf start (1+ pos)))))
-         (w (* h 0.85d0 (max 1 (reduce #'max lines :key #'length :initial-value 0))))
+         (lines (if mtext (mtext-wrapped-lines lines h width) lines))
+         (w (or width (* h 0.85d0 (max 1 (reduce #'max lines :key #'length :initial-value 0)))))
          (hh (* h 1.6d0 (length lines)))
-         (mtext (equal (dxf 0 data) "MTEXT"))
-         (o (if mtext (pt (px p) (- (py p) hh)) (pt (px p) (- (py p) (* 0.25 h)))))
+         (attach (or (and mtext (dxf 71 data)) 1))
+         (o (if mtext
+                (pt (- (px p) (* w (case (mod (1- attach) 3) (0 0) (1 0.5d0) (t 1))))
+                    (- (py p) (* hh (case (floor (1- attach) 3) (0 1) (1 0.5d0) (t 0)))))
+                (pt (px p) (- (py p) (* 0.25 h)))))
          (corners (list o (pt (+ (px o) w) (py o)) (pt (+ (px o) w) (+ (py o) (if mtext hh (* 1.25 h))))
                         (pt (px o) (+ (py o) (if mtext hh (* 1.25 h)))))))
     (mapcar (lambda (c) (rot-pt c p rot)) corners)))
