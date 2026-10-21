@@ -1,7 +1,7 @@
 ;;;; utilcmds.lisp — view, file, layer, block, inquiry and undo commands;
 ;;;; AutoLISP database/system-variable functions.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defun gui-p () (eq *ui* :gui))
 (defun from-lisp-p () (or (in-worker-p) (listp *sync-queue*) *script-queue*))
@@ -466,7 +466,7 @@
 
 (defcmd "HELP" ("?" "F1") "Lists commands."
   (let (names) (maphash (lambda (k v) (declare (ignore v)) (push k names)) *commands*)
-    (out (format nil "~%LispDraft commands (aliases in parentheses):~%"))
+    (out (format nil "~%Fancy Pencil commands (aliases in parentheses):~%"))
     (dolist (n (sort names #'string<))
       (let ((al (let (r) (maphash (lambda (a c) (when (string= c n) (push a r))) *aliases*) (sort r #'string<))))
         (out (format nil "  ~14A ~@[(~{~A~^ ~}) ~]~A~%" n al (gethash n *command-help*)))))
@@ -607,8 +607,8 @@
                                  (if f (directory-namestring f) (namestring (truename ".")))))
       ((string= n "DWGTITLED") (if (drawing-filename *dwg*) 1 0))
       ((string= n "DBMOD") (if (drawing-modified-p) 1 0))
-      ((string= n "ACADVER") "24.3s (LispDraft)")
-      ((string= n "PRODUCT") "LispDraft")
+      ((string= n "ACADVER") "24.3s (Fancy Pencil)")
+      ((string= n "PRODUCT") "Fancy Pencil")
       ((string= n "PLATFORM") (format nil "~A ~A" (software-type) (machine-type)))
       ((string= n "LOGINNAME") (or (getenv "USER") (getenv "USERNAME") "user"))
       ((string= n "CDATE") (multiple-value-bind (s mi h dd mo y) (get-decoded-time)

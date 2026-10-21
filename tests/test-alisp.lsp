@@ -1,4 +1,4 @@
-;;; AutoLISP conformance tests for LispDraft. Run: ./lispdraft --tty tests/test-alisp.lsp
+;;; AutoLISP conformance tests for Fancy Pencil. Run: ./fancypencil --tty tests/test-alisp.lsp
 (setq *pass* 0 *fail* 0)
 (defun check (name got want)
   (if (equal got want 1e-9)

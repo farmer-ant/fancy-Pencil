@@ -1,7 +1,7 @@
 ;;;; input.lisp — prompts, coordinate entry, keywords, object snaps, selection,
 ;;;; and the AutoLISP (COMMAND ...) bridge.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *initget-bits* 0)
 (defvar *initget-keywords* nil)

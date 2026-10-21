@@ -1,4 +1,4 @@
-# gui.tcl - LispDraft's Tk front end. Started by the Lisp process as
+# gui.tcl - Fancy Pencil's Tk front end. Started by the Lisp process as
 #   wish gui.tcl
 # Lisp sends Tcl commands on stdin; this script reports events on stdout,
 # one per line (see `emit`).
@@ -24,7 +24,7 @@ proc readcmd {} {
             set c $::buf
             set ::buf ""
             if {[catch {uplevel #0 $c} err]} {
-                puts stderr "LispDraft Tcl error: $err"
+                puts stderr "Fancy Pencil Tcl error: $err"
                 puts stderr "  in: [string range $c 0 300]"
             }
         }
@@ -41,7 +41,16 @@ set fg     "#d8dde4"
 set dim    "#8a94a3"
 set accent "#3b8ee8"
 
-wm title . "LispDraft"
+wm title . "Fancy Pencil"
+# window / taskbar icon (the launcher icon lives in support/icons)
+catch {
+    set icondir [file join [file dirname [file normalize [info script]]] .. support icons]
+    set icons {}
+    foreach n {16 32 48 64 128} {
+        lappend icons [image create photo -file [file join $icondir fancypencil-$n.png]]
+    }
+    wm iconphoto . -default {*}[lreverse $icons]
+}
 wm geometry . 1280x820
 wm minsize . 800 500
 . configure -background $panel
@@ -157,7 +166,7 @@ foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pic
                "Move/Copy/Rotate (MOCORO)" MOCORO "Copy Multiple (COPYM)" COPYM "Flatten" FLATTEN
                "Select Similar" SELECTSIMILAR "List nested (XLIST)" XLIST "Burst" BURST} { mcmd .mb.express $l $c }
 mcmd .mb.help "Command Reference" HELP
-mcmd .mb.help "About LispDraft" ABOUT
+mcmd .mb.help "About Fancy Pencil" ABOUT
 
 # ---------------------------------------------------------------- toolbar
 ttk::frame .tb -padding {4 3}
@@ -585,5 +594,5 @@ proc aliasdlg {pairs} {
     return $::aliasresult
 }
 emit READY
-# test hook: LISPDRAFT_TEST_TCL=script.tcl is sourced after startup (used by the automated GUI tests)
-if {[info exists env(LISPDRAFT_TEST_TCL)]} { after 1500 [list source $env(LISPDRAFT_TEST_TCL)] }
+# test hook: FANCYPENCIL_TEST_TCL=script.tcl is sourced after startup (used by the automated GUI tests)
+if {[info exists env(FANCYPENCIL_TEST_TCL)]} { after 1500 [list source $env(FANCYPENCIL_TEST_TCL)] }

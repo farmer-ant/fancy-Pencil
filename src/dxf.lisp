@@ -1,6 +1,6 @@
 ;;;; dxf.lisp — DXF import (R12 through current ASCII DXF) and export (R12/AC1009).
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defun dxf-value (code str)
   (let ((s (string-trim '(#\Space #\Tab #\Return) str)))

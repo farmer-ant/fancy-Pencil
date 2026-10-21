@@ -1,4 +1,4 @@
-;;;; LispDraft — a 2D drafting program with an AutoLISP-compatible interpreter.
+;;;; Fancy Pencil — a 2D drafting program with an AutoLISP-compatible interpreter.
 ;;;; package.lisp
 
 (defpackage :alisp-user
@@ -6,14 +6,14 @@
   (:import-from :cl #:nil #:t)
   (:documentation "Home package of every AutoLISP symbol. NIL and T are shared with CL."))
 
-(defpackage :lispdraft
+(defpackage :fancy-pencil
   (:use :cl)
   (:export #:start #:main #:run-tty #:run-lisp-file #:alisp-eval-string))
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
-(defparameter *version* "0.2.1")
-(defparameter *program-name* "LispDraft")
+(defparameter *version* "0.3.0")
+(defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
 (defvar *ui* :tty "Either :TTY or :GUI.")

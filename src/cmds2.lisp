@@ -1,6 +1,6 @@
 ;;;; cmds2.lisp — LINETYPE, LWEIGHT, HATCH, HATCHEDIT, HPSET, REVCLOUD.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; ---------- linetypes ----------
 

@@ -5,7 +5,7 @@
 ;;;; which gives exactly AutoLISP's semantics (including local *error* handlers).
 ;;;; Functions and variables share one namespace: a function is a symbol's value.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; ---------- types ----------
 
@@ -534,7 +534,7 @@
 (defsubr "vl-catch-all-error-message" (x) (if (catch-err-p x) (catch-err-message x) (bad-arg "error object" x)))
 (defsubr ("vl-load-com" "vl-load-reactors" "textscr" "graphscr" "textpage" "grclear" "setview" "vl-doc-set" "vl-arx-import" "help" "setfunhelp") (&rest a)
   (declare (ignore a)) nil)
-(defsubr "ver" () "LispDraft AutoLISP 0.1")
+(defsubr "ver" () "Fancy Pencil AutoLISP 0.1")
 
 ;;; ---------- strings ----------
 

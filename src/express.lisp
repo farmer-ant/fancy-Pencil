@@ -1,7 +1,7 @@
 ;;;; express.lisp — command aliases from a .pgp file (ALIASEDIT, REINIT), Express Tools
 ;;;; commands, and the acet-* AutoLISP functions Express Tools programs rely on.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; ---------- aliases (.pgp) ----------
 ;;; Format is AutoCAD's acad.pgp:  ALIAS,  *COMMAND      ; comments start with ;
@@ -12,10 +12,15 @@
 
 (defun user-pgp-path ()
   (let ((home (or (getenv "HOME") ".")))
+    (merge-pathnames ".config/fancypencil/fancypencil.pgp" (concatenate 'string (string-right-trim "/" home) "/"))))
+
+(defun old-user-pgp-path ()
+  "Where LispDraft (this program's former name) kept the user's aliases."
+  (let ((home (or (getenv "HOME") ".")))
     (merge-pathnames ".config/lispdraft/lispdraft.pgp" (concatenate 'string (string-right-trim "/" home) "/"))))
 
 (defun default-pgp-path ()
-  (merge-pathnames "../support/lispdraft.pgp" (or *gui-dir* (script-directory) "")))
+  (merge-pathnames "../support/fancypencil.pgp" (or *gui-dir* (script-directory) "")))
 
 (defun snapshot-builtin-aliases ()
   (unless *builtin-aliases*
@@ -43,7 +48,7 @@
 
 (defun pgp-text (pairs)
   (with-output-to-string (o)
-    (format o ";  LispDraft command aliases (acad.pgp format)~%")
+    (format o ";  Fancy Pencil command aliases (acad.pgp format)~%")
     (format o ";  ALIAS,  *COMMAND  - edit with ALIASEDIT or any text editor, then run REINIT.~%;~%")
     (dolist (p (sort (copy-list pairs) #'string< :key #'car))
       (format o "~8A *~A~%" (concatenate 'string (car p) ",") (cdr p)))))
@@ -58,6 +63,7 @@
   "Rebuild the alias table: the user's .pgp if present, else the shipped default (else built-ins)."
   (snapshot-builtin-aliases)
   (let ((path (cond ((probe-file (user-pgp-path)) (user-pgp-path))
+                    ((probe-file (old-user-pgp-path)) (old-user-pgp-path))
                     ((probe-file (default-pgp-path)) (default-pgp-path)))))
     (if path
         (multiple-value-bind (pairs ext) (parse-pgp path)
@@ -614,4 +620,4 @@
     (if (and dot (or (null slash) (> dot slash))) (subseq s 0 dot) s)))
 (defsubr "acet-file-find" (f) (find-file-in-support (astr f)))
 
-(defsubr "lispdraft-alias" (a) (values (gethash (astr a) *aliases*)))
+(defsubr "fancypencil-alias" (a) (values (gethash (astr a) *aliases*)))

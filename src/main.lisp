@@ -1,6 +1,6 @@
 ;;;; main.lisp — the Command: loop, dispatch, undo grouping and program entry.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *last-command* nil)
 (defvar *lisp-buffer* "")
@@ -115,7 +115,11 @@
 (defun install-startup-functions ()
   ;; S::STARTUP and acaddoc.lsp style autoload
   (let ((home (getenv "HOME")))
-    (dolist (f (list "acaddoc.lsp" "lispdraft.lsp" (and home (concatenate 'string home "/.lispdraft.lsp"))))
+    (dolist (f (list "acaddoc.lsp" "fancypencil.lsp"
+                         (and home (concatenate 'string home "/.fancypencil.lsp"))
+                         ;; startup file from when the program was called LispDraft
+                         (and home (not (probe-file (concatenate 'string home "/.fancypencil.lsp")))
+                              (concatenate 'string home "/.lispdraft.lsp"))))
       (when (and f (probe-file f))
         (out (format nil "Loading ~A~%" f))
         (run-lisp-file f))))
@@ -134,12 +138,12 @@
           *program-name* *version*))
 
 (defun start (&key (gui t) file lisp-files)
-  "Start LispDraft. With GUI NIL, run on the terminal."
+  "Start Fancy Pencil. With GUI NIL, run on the terminal."
   (setf *gui-dir* (or *gui-dir* (script-directory)))
   (if gui
       (handler-case (gui-init)
         (error (c)
-          (format *error-output* "~&LispDraft could not open its window: ~A~%~
+          (format *error-output* "~&Fancy Pencil could not open its window: ~A~%~
                                   (Is a graphical display available? Use --tty for terminal mode.)~%" c)
           (quit-program)))
       (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
@@ -159,7 +163,7 @@
 (defun run-tty (&rest args) (apply #'start :gui nil args))
 
 (defun main ()
-  "Command-line entry: lispdraft [--tty] [--load file.lsp]... [drawing.dxf]"
+  "Command-line entry: fancypencil [--tty] [--load file.lsp]... [drawing.dxf]"
   (let* ((args #+sbcl (rest sb-ext:*posix-argv*)   ; SBCL removes its own options already
                #+ecl (let* ((all (ext:command-args)) (p (position "--" all :test #'string=)))
                        (and p (subseq all (1+ p))))

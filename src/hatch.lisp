@@ -6,7 +6,7 @@
 ;;;;   (:pattern . (line ...))    optional, only for hatches read from DXF: each line is
 ;;;;                              (angle base-point offset-vector dashes) in world terms.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 ;;; ---------- pattern library (acad.pat, imperial) ----------
 ;;; Each line: (angle-degrees x0 y0 dx dy &rest dashes) where (dx dy) is in the line's own frame.

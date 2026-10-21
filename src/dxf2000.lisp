@@ -1,7 +1,7 @@
 ;;;; dxf2000.lisp — DXF writer for AutoCAD 2000 format (AC1015), the default for SAVE.
 ;;;; Keeps lineweights, linetype scales, LWPOLYLINE, MTEXT, ELLIPSE, SPLINE, HATCH and DIMENSION.
 
-(in-package :lispdraft)
+(in-package :fancy-pencil)
 
 (defvar *h2000* 0 "Handle counter while writing.")
 (defun h2 () (format nil "~X" (incf *h2000*)))

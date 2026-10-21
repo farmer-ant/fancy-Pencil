@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fancy Pencil launcher.  Usage: ./fancypencil [--tty] [file.lsp ...] [drawing.dxf]
+DIR=$(cd "$(dirname "$0")" && pwd)
+exec sbcl --noinform --disable-debugger --load "$DIR/load.lisp" --eval '(fancy-pencil:main)' --end-toplevel-options "$@"
