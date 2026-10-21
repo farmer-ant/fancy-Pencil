@@ -459,7 +459,7 @@
     sel))
 (defun clear-command-highlight ()
   (when *command-highlight*
-    (ui-highlight (remove-if-not #'ent-live-p *command-highlight*) nil)
+    (ui-highlight *command-highlight* nil)
     (setf *command-highlight* nil)))
 
 ;;; ---------- the central input routine ----------

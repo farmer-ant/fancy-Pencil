@@ -342,12 +342,17 @@
   (let ((sel (select-objects :prompt "Select objects or <select all>: " :editable nil)))
     (or sel (remove-if-not #'entity-visible-p (live-entities)))))
 
-(defun trim-or-extend (trimming)
-  (let ((edges (edge-select (if trimming "cutting" "boundary"))) (undo nil))
+(defun trim-or-extend (command-trims)
+  "TRIM (COMMAND-TRIMS true) or EXTEND. As in AutoCAD, a Shift+click does the other operation
+with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
+  (let ((edges (edge-select (if command-trims "cutting" "boundary"))) (undo nil))
     (loop
-      (let ((r (get-user-input :entity :prompt (if trimming "Select object to trim or [eRase/Undo]: "
-                                                   "Select object to extend or [Undo]: ")
-                               :keywords (if trimming '("eRase" "Undo") '("Undo")))))
+      (let* ((r (progn (setf *pick-shift* nil)
+                       (get-user-input :entity :prompt (if command-trims
+                                                           "Select object to trim or shift-select to extend or [eRase/Undo]: "
+                                                           "Select object to extend or shift-select to trim or [eRase/Undo]: ")
+                                               :keywords '("eRase" "Undo"))))
+             (trimming (if *pick-shift* (not command-trims) command-trims)))
         (cond ((null r) (return))
               ((equal r "Undo") (let ((s (pop undo))) (if s (restore-snapshot s) (out (format nil "Nothing to undo.~%")))))
               ((equal r "eRase")
