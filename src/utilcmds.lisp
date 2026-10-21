@@ -328,9 +328,9 @@
         (cond ((string= r "yes") (save-drawing nil) t) ((string= r "no") t) (t nil)))
       t))
 
-(defun ask-file (save title &optional initial)
+(defun ask-file (save title &optional initial (ext "dxf"))
   (if (and (gui-p) (eql (sysvar "FILEDIA") 1) (not (from-lisp-p)))
-      (file-dialog save title :initial initial)
+      (file-dialog save title :initial initial :ext ext)
       (let ((s (gstring (format nil "~A <~A>: " title (or initial "")) t)))
         (cond ((plusp (length s)) s) (initial initial) (t nil)))))
 
@@ -338,9 +338,9 @@
   (if (pathname-type (pathname path)) path (concatenate 'string path "." ext)))
 
 (defun save-drawing (as &key (format nil))
-  "Save as DXF. FORMAT is :R2000 (default, keeps lineweights and hatches) or :R12."
+  "Save as DXF (FORMAT :R2000, the default, or :R12), or as DWG when the name ends in .dwg."
   (let* ((f (if (or as (null (drawing-filename *dwg*)))
-                (ask-file t "Save Drawing As" (or (drawing-filename *dwg*) "Drawing1.dxf"))
+                (ask-file t "Save Drawing As" (or (drawing-filename *dwg*) "Drawing1.dxf") "dxf dwg")
                 (drawing-filename *dwg*)))
          (fmt (or format
                   (and as (from-lisp-p) nil)
@@ -348,26 +348,85 @@
                        (if (equal "R12" (gkw "File format [R12/2000] <2000>: " '("R12" "2000") "2000")) :r12 :r2000))
                   (if (equalp (sysvar "SAVEFORMAT") "R12") :r12 :r2000))))
     (when f
-      (let ((f (ensure-ext f "dxf")))
-        (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
-        (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000")))))))
+      (if (dwg-name-p f)
+          (save-as-dwg f)
+          (let ((f (ensure-ext f "dxf")))
+            (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
+            (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000"))))))))
+
+(defun save-as-dwg (f)
+  "Write F as DWG through ODA File Converter (keeping the previous file as .bak); without it, save
+a DXF next to it instead and leave the DWG untouched."
+  (if (eq (find-dwg-converter) :oda)
+      (let* ((tmp (concatenate 'string (temp-dir "out") "drawing.dxf")))
+        (dxf-export-2000 tmp)
+        (when (probe-file f)
+          (copy-file f (make-pathname :type "bak" :defaults (pathname f))))
+        (multiple-value-bind (ok msg) (dxf->dwg tmp f)
+          (if ok
+              (progn (setf (drawing-filename *dwg*) (namestring f)
+                           (drawing-saved-modcount *dwg*) (drawing-modcount *dwg*))
+                     (out (format nil "Saved ~A (AutoCAD 2018 DWG)~%" f)))
+              (progn (setf (drawing-saved-modcount *dwg*) -1)
+                     (tell-user msg)))))
+      (let ((dxf (namestring (make-pathname :type "dxf" :defaults (pathname f)))))
+        (if (and (gui-p) (not (from-lisp-p)))
+            ;; let the person pick (and confirm overwriting) the DXF name
+            (progn
+              (tell-user (format nil "Saving in DWG format needs ODA File Converter, so the drawing will be saved as DXF ~
+                                      instead. The DWG file is not changed."))
+              (setf dxf (ask-file t "Save Drawing As DXF" dxf "dxf")))
+            ;; scripts: never overwrite an existing file
+            (loop for i from 1 while (probe-file dxf)
+                  do (setf dxf (namestring (make-pathname :name (format nil "~A-~D" (pathname-name (pathname f)) i)
+                                                          :type "dxf" :defaults (pathname f))))))
+        (when dxf
+          (let ((dxf (ensure-ext dxf "dxf")))
+            (dxf-export-2000 dxf)
+            (out (format nil "Saved ~A (AutoCAD 2000 DXF). The DWG file was not changed.~%" dxf)))))))
 
 (defun open-drawing (f)
-  (handler-case
-      (let ((n (dxf-import f)))
-        (setf *pickfirst* nil *view-history* nil)
-        (clrhash *hl*) (clear-geom-cache)
-        (out (format nil "Opened ~A (~D object~:P).~%" f n))
-        (when (gui-p) (zoom-extents) (gui-sync)))
-    (file-error () (out (format nil "Cannot open ~A~%" f)))))
+  (cond
+    ((not (probe-file f)) (tell-user (format nil "Cannot find ~A" f)))
+    ((dwg-file-p f)
+     (out (format nil "Converting ~A from DWG...~%" (file-namestring f)))
+     (when (gui-p) (tk "update idletasks"))
+     (multiple-value-bind (dxf msg) (dwg->dxf f)
+       (if (null dxf)
+           (tell-user msg)
+           (handler-case
+               (let ((n (dxf-import dxf)))
+                 (setf (drawing-filename *dwg*) (namestring (truename f)))
+                 (after-open f n)
+                 (out (format nil "(converted from DWG with ~A)~%"
+                              (if (eq (find-dwg-converter) :oda) "ODA File Converter" "LibreDWG")))
+                 (when (zerop n)
+                   (tell-user (format nil "~A was converted, but no objects came through.~%~%~
+                                           ~:[ODA File Converter could not read anything from this file.~;~
+                                           LibreDWG can't read some DWG files completely. ODA File Converter ~
+                                           (free from opendesign.com) reads every AutoCAD version; once it is ~
+                                           installed, Fancy Pencil uses it automatically.~]"
+                                      (file-namestring f) (not (eq (find-dwg-converter) :oda))))))
+             (error (c) (tell-user (format nil "The converted drawing could not be read: ~A" (cl-error-text c))))))))
+    ((not (dxf-file-p f))
+     (tell-user (format nil "~A is not a DXF or DWG drawing." (file-namestring f))))
+    (t
+     (handler-case (after-open f (dxf-import f))
+       (file-error () (tell-user (format nil "Cannot open ~A" f)))))))
+
+(defun after-open (f n)
+  (setf *pickfirst* nil *view-history* nil)
+  (clrhash *hl*) (clear-geom-cache)
+  (out (format nil "Opened ~A (~D object~:P).~%" f n))
+  (when (gui-p) (zoom-extents) (gui-sync)))
 
 (defcmd "NEW" ("QNEW") "Creates a new drawing."
   (when (ask-save-changes)
     (new-drawing) (setf *pickfirst* nil) (clrhash *hl*) (clear-geom-cache)
     (when (gui-p) (zoom-to-box 0 0 12 9) (gui-sync))))
-(defcmd "OPEN" () "Opens a DXF drawing."
+(defcmd "OPEN" () "Opens a drawing (DXF, or DWG through a converter)."
   (when (ask-save-changes)
-    (let ((f (ask-file nil "Select File")))
+    (let ((f (ask-file nil "Select File" nil "dwg dxf")))
       (when f (open-drawing f)))))
 (defcmd "QSAVE" () "Saves the current drawing." (save-drawing nil))
 (defcmd "SAVE" () "Saves the drawing." (save-drawing nil))

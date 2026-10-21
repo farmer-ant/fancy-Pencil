@@ -48,7 +48,7 @@ Icon=fancypencil
 Terminal=false
 Categories=Graphics;VectorGraphics;Engineering;
 Keywords=CAD;drafting;drawing;DXF;AutoLISP;
-MimeType=image/vnd.dxf;image/x-dxf;application/dxf;
+MimeType=image/vnd.dxf;image/x-dxf;application/dxf;image/vnd.dwg;image/x-dwg;application/acad;
 StartupWMClass=Fancypencil
 StartupNotify=true
 DESK

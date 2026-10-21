@@ -788,6 +788,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
   (if (eq *ui* :gui)
       (let ((r (tk-ask (format nil "filedlg ~D ~A ~A ~A" (if save 1 0) (tq title)
                                (tq (if initial (namestring initial) "")) (tq ext)))))
+        ;; (ext may be several, e.g. "dwg dxf")
         (if (string= r "") nil r))
       (let ((s (get-user-input :string :prompt (format nil "~A: " title) :spaces t)))
         (if (string= s "") nil s))))
