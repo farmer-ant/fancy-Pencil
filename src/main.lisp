@@ -2,8 +2,6 @@
 
 (in-package :fancy-pencil)
 
-(defvar *last-command* nil)
-(defvar *lisp-buffer* "")
 (defvar *command-running* nil)
 
 (defvar *in-undo-group* nil)
@@ -20,16 +18,19 @@
   '("NEW" "OPEN" "QSAVE" "SAVE" "SAVEAS" "SAVEASR12" "DXFIN" "DXFOUT" "QUIT" "APPLOAD" "SCRIPT"
     "PURGE" "ALIASEDIT" "REINIT" "HELP" "ABOUT" "U" "UNDO" "REDO" "OOPS" "LAYER" "LINETYPE" "LWEIGHT"
     "DIMSTYLE" "UNITS" "SETVAR" "OSNAP" "PROPERTIES" "SELECTALL" "COPYCLIP" "REGEN" "HPSET"
-    "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "STYLE" "TEXTEDIT")
+    "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "STYLE" "TEXTEDIT"
+    "DESELECT" "-OSNAP" "DDOSNAP" "CUTCLIP")
   "Commands that Enter at an empty prompt does not repeat (file, setup and undo commands).")
 
 (defun remember-command (word name)
   (unless (member name *no-repeat-commands* :test #'string-equal)
-    (setf *last-command* word)))
+    (setf *last-command* word)
+    (note-recent-command word)))
 
 (defparameter *no-undo-commands* '("U" "UNDO" "REDO" "MREDO" "ZOOM" "PAN" "REGEN" "HELP" "ABOUT" "LIST" "DIST" "ID" "AREA"
                                     "QSAVE" "SAVE" "SAVEAS" "DXFOUT" "NEW" "OPEN" "QUIT" "COPYCLIP" "SELECTALL"
-                                    "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "SAVEASR12"))
+                                    "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "SAVEASR12"
+                                    "DESELECT" "OSNAP" "-OSNAP"))
 
 (defun print-lisp-result (v)
   (unless (eq v *null-sym*) (out (format nil "~A~%" (lisp-repr v t)))))

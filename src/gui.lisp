@@ -642,7 +642,16 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                (take-pickfirst) (sweep-highlights) (refresh-grips) (refresh-palette)
                (setf *edit-target* e
                      *acq-result* (list :text "TEXTEDIT")))))))
-      ((string= ty "R") (echo-input "") (setf *acq-result* (list :text "")))
+      ((string= ty "R")
+       ;; right-click: a menu at the Command: prompt, Shift+right-click a one-time osnap while
+       ;; picking points, otherwise Enter
+       (destructuring-bind (&optional x y rx ry shift) (event-ints ev)
+         (declare (ignore x y))
+         (cond ((and (eql shift 1) rx (member kind '(:point :corner :distance :angle)))
+                (tk "osnapmenu ~D ~D" rx ry))
+               ((and (eq kind :command) rx (plusp (length *lisp-buffer*))) nil)
+               ((and (eq kind :command) rx) (show-command-context-menu rx ry))
+               (t (echo-input "") (setf *acq-result* (list :text ""))))))
       ((string= ty "L") (let ((s (event-rest ev))) (echo-input s) (setf *acq-result* (list :text s))))
       ((string= ty "E")
        (if (eq kind :command)
@@ -668,6 +677,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
 
 (defun transparent-menu (name)
   (cond ((string-equal name "ZOOMEXT") (zoom-extents))
+        ((string-equal name "OSNAP") (osnap-dialog))
         ((string-equal name "REGEN") (gui-regen))))
 
 (defun command-prompt-pick (p)
@@ -734,7 +744,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                ((string= ty "B") (destructuring-bind (x y &rest shift) (event-ints ev)
                                    (declare (ignore shift))
                                    (return (list 3 (s->w x y)))))
-               ((string= ty "R") (destructuring-bind (x y) (event-ints ev)
+               ((string= ty "R") (destructuring-bind (x y &rest more) (event-ints ev)
+                                   (declare (ignore more))
                                    (return (list 25 (s->w x y)))))
                ((string= ty "G") (return (list 2 (or (ignore-errors (parse-integer (event-rest ev))) 0))))
                ((string= ty "L") (return (list 2 13)))

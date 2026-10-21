@@ -484,6 +484,16 @@
                                            (xform-data sub xf)
                                            sub)))
                                (if (equal (dxf 8 nd) "0") (set-dxf 8 layer nd) nd)))))))
+        ((equal type "DIMENSION")
+         ;; a dimension's block is already in drawing coordinates: its lines, arrows and text
+         (let ((b (find-block (dxf 2 data))))
+           (when b
+             (loop for sub in (block-def-entities b)
+                   collect (let ((nd (rem-dxf 5 (copy-tree sub))))
+                             (when (or (null (dxf 8 nd)) (equal (dxf 8 nd) "0")) (setf nd (set-dxf 8 layer nd)))
+                             (when (eql (dxf 62 nd) 0)    ; ByBlock -> the dimension's colour
+                               (setf nd (if color (set-dxf 62 (cdr color) nd) (rem-dxf 62 nd))))
+                             nd)))))
         (t nil)))))
 
 (defun piece->data (pc)
