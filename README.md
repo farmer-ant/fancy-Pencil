@@ -45,6 +45,20 @@ can be opened with it from the file manager (*Open With → Fancy Pencil*).
 Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT under the old name
 (`~/.config/lispdraft/lispdraft.pgp`) and a `~/.lispdraft.lsp` startup file are still picked up.
 
+### Opening and saving DWG files
+
+DWG is AutoCAD's closed binary format, so Fancy Pencil converts it with a free converter:
+
+- **ODA File Converter** (recommended): reads and writes every AutoCAD version. Download the Ubuntu
+  `.deb` from opendesign.com ("ODA File Converter"), then `sudo apt install ./ODAFileConverter_*.deb`.
+- **LibreDWG** `dwg2dxf` (open source): opening only. Not packaged for Ubuntu 24.04; build it from
+  github.com/LibreDWG/libredwg.
+
+Fancy Pencil finds whichever is installed (or set `FANCYPENCIL_DWG_CONVERTER=/path/to/program`).
+OPEN shows DWG and DXF files; a DWG opens like any drawing, and SAVE writes it back as DWG (AutoCAD
+2018 format) with the previous file kept as `name.bak`. Without ODA File Converter, saving asks for a
+DXF name instead and never touches the DWG.
+
 Any `acaddoc.lsp` or `fancypencil.lsp` in the current directory, and `~/.fancypencil.lsp`, are loaded
 at startup, and `S::STARTUP` is called if defined, just like AutoCAD.
 

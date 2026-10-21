@@ -924,18 +924,36 @@ proc run_external_dialog {cmd} {
     return [string trimright $::extdlg_out "\n"]
 }
 
-proc filedlg {save title initial ext} {
+proc filedlg {save title initial exts} {
+    # EXTS: one extension ("dxf") or several ("dwg dxf"); the first is added when a saved name has none
     set dir $::lastdir
     if {$initial ne "" && [file isdirectory [file dirname $initial]] && [file dirname $initial] ne "."} {
         set dir [file dirname $initial]
     }
     set name [file tail $initial]
-    set EXT [string toupper $ext]
+    set ext [lindex $exts 0]
+    # filters: all drawing types together first (when several), then each, then everything
+    set zf {}; set kf {}; set types {}
+    if {[llength $exts] > 1} {
+        set globs {}; set tglobs {}
+        foreach e $exts { lappend globs *.$e *.[string toupper $e]; lappend tglobs .$e .[string toupper $e] }
+        lappend zf --file-filter "Drawings ([join [lmap e $exts {string toupper $e}] ", "]) | [join $globs " "]"
+        lappend kf "[join $globs " "]|Drawings"
+        lappend types [list "Drawings" $tglobs]
+    }
+    foreach e $exts {
+        set E [string toupper $e]
+        lappend zf --file-filter "$E files | *.$e *.$E"
+        lappend kf "*.$e *.$E|$E files"
+        lappend types [list "$E files" [list .$e .$E]]
+    }
+    lappend zf --file-filter "All files | *"
+    lappend kf "*|All files"
+    lappend types {{All files} *}
     set r ""
     set tool $::filedlg_tool
     if {$tool eq "zenity"} {
-        set cmd [list zenity --file-selection --title $title --modal \
-                     --file-filter "$EXT files | *.$ext *.$EXT" --file-filter "All files | *"]
+        set cmd [concat [list zenity --file-selection --title $title --modal] $zf]
         if {$save} {
             lappend cmd --save
             if {$::zenity_major < 4} { lappend cmd --confirm-overwrite }
@@ -944,11 +962,10 @@ proc filedlg {save title initial ext} {
         if {[catch {set r [run_external_dialog $cmd]}]} { set tool tk }
     } elseif {$tool eq "kdialog"} {
         set cmd [list kdialog --title $title [expr {$save ? "--getsavefilename" : "--getopenfilename"}] \
-                     [file join $dir $name] "*.$ext *.$EXT|$EXT files\n*|All files"]
+                     [file join $dir $name] [join $kf "\n"]]
         if {[catch {set r [run_external_dialog $cmd]}]} { set tool tk }
     }
     if {$tool ne "zenity" && $tool ne "kdialog"} {
-        set types [list [list "$EXT files" [list .$ext .$EXT]] {{All files} *}]
         if {$save} {
             set r [tk_getSaveFile -parent . -title $title -initialdir $dir -initialfile $name \
                        -filetypes $types -defaultextension .$ext]

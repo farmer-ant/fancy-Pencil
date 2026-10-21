@@ -6,7 +6,7 @@
 
 (defparameter *root* (make-pathname :name nil :type nil :defaults *load-truename*))
 (defparameter *files* '("package" "geom" "db" "textstyle" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
-                         "commands" "dims" "modify" "modify2" "cmds2" "utilcmds" "props" "express" "textcmds" "main"))
+                         "commands" "dims" "modify" "modify2" "cmds2" "utilcmds" "dwg" "props" "express" "textcmds" "main"))
 
 (let ((*compile-verbose* nil) (*compile-print* nil) (*load-verbose* nil))
   (handler-bind ((style-warning #'muffle-warning)
