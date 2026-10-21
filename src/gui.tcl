@@ -14,7 +14,11 @@ set ::cmdhistpos -1
 
 fconfigure stdin -blocking 0 -encoding utf-8
 fconfigure stdout -encoding utf-8 -buffering full
-proc emit {args} { puts [join $args " "]; flush stdout }
+proc emit {args} {
+    # while the in-place text editor is open, the drawing ignores clicks, keys and menu picks
+    if {[info exists ::mted] && $::mted ne "" && [lindex $args 0] in {M B U R P D Q W L K MENU DBL G PROP CURPROP LAYERSET}} return
+    puts [join $args " "]; flush stdout
+}
 
 proc readcmd {} {
     # drain every complete line that is available, evaluating complete Tcl commands
@@ -286,7 +290,8 @@ proc palemit {key w} { emit PROP $key [$w get]; focus .cmd.e }
 bind all <Control-Key-1> {palette_toggle; break}
 
 bind .c <Motion> {emit M %x %y}
-bind .c <ButtonPress-1> {emit B %x %y [expr {%s & 1}]; focus .cmd.e}
+bind .c <ButtonPress-1> {if {$::mted ne ""} {mted_done ok; break}; emit B %x %y [expr {%s & 1}]; focus .cmd.e}
+bind .c <Double-Button-1> {if {$::mted eq ""} {emit DBL %x %y}}
 bind .c <ButtonRelease-1> {emit U %x %y}
 bind .c <ButtonPress-3> {emit R %x %y}
 bind .c <ButtonPress-2> {emit P %x %y}
@@ -399,6 +404,100 @@ proc ask {id script} {
     emit A $id [string map {"\n" " "} $r]
 }
 proc setgrread {v} { set ::grread $v }
+
+# ---------------------------------------------------------------- in-place text editor
+# MTEXT / DTEXT / TEXTEDIT type straight onto the drawing, like AutoCAD's in-place editor.
+#   mode   mtext: multi-line, word-wrapped to WIDTH px (0 = no wrap); Enter = new line,
+#                 Ctrl+Enter / OK / click outside = done.   Result is MTEXT-encoded (\P, \\).
+#          line : one line (DTEXT and single-line TEXT); Enter = done.  Result is the raw text.
+#   X Y    screen position: top-left corner (mtext) or start of the baseline (line)
+#   Returns "OK <text>" or "CANCEL".
+set ::mted ""
+proc mtedit {mode x y width fpx color init {justify left} {minh 0}} {
+    set fpx [expr {max(11, min(160, $fpx))}]
+    set font [list Helvetica -$fpx]
+    set ls [font metrics $font -linespace]
+    set f .mtedf
+    catch {destroy $f}
+    frame $f -background $::accent -borderwidth 0
+    set t $f.t
+    text $t -font $font -foreground $color -background "#171c23" -insertbackground "#ffffff" \
+        -insertwidth 2 -relief flat -borderwidth 0 -highlightthickness 0 -padx 3 -pady 1 \
+        -undo 1 -selectbackground $::accent -wrap [expr {$mode eq "mtext" && $width > 0 ? "word" : "none"}]
+    $t tag configure all -justify $justify
+    $t insert end $init all
+    pack $t -padx 1 -pady 1 -fill both -expand 1
+    # only the text widget's own bindings: keep the program's global keys (Esc, Ctrl+Z, F8...) out
+    bindtags $t [list $t Text]
+    set hint [expr {$mode eq "mtext" ? "Enter: new line    Ctrl+Enter or click outside: done    Esc: cancel"
+                                      : "Enter: done    Esc: cancel"}]
+    frame .mtedbar -background "#2b313b"
+    label .mtedbar.l -text $hint -background "#2b313b" -foreground "#c9d1db" -font {Helvetica 9}
+    ttk::button .mtedbar.ok -text OK -style Tool.TButton -command {mted_done ok}
+    ttk::button .mtedbar.no -text Cancel -style Tool.TButton -command {mted_done cancel}
+    pack .mtedbar.l -side left -padx 6
+    pack .mtedbar.no .mtedbar.ok -side right -padx 2
+    if {$mode eq "mtext"} {
+        bind $t <Control-Return> {mted_done ok; break}
+        bind $t <KP_Enter> {mted_done ok; break}
+    } else {
+        bind $t <Return> {mted_done ok; break}
+        bind $t <KP_Enter> {mted_done ok; break}
+        set y [expr {$y - [font metrics $font -ascent] - 2}]
+    }
+    bind $t <Escape> {mted_done cancel; break}
+    bind $t <Tab> {$::mted insert insert "    " all; break}
+    bind $t <<Modified>> {mted_fit}
+    bind $t <KeyRelease> {mted_fit}
+    set ::mted $t
+    set ::mted_geom [list $mode $x $y $width $ls $minh]
+    mted_fit
+    place .mtedbar -in .c -x $x -y [expr {$y >= 26 ? $y - 26 : $y + [winfo reqheight $f] + 4}]
+    raise .mtedbar
+    $t mark set insert end
+    $t see insert
+    focus $t
+    set ::mted_result ""
+    vwait ::mted_result
+    set r $::mted_result
+    destroy .mtedbar $f
+    set ::mted ""
+    focus .cmd.e
+    return $r
+}
+proc mted_fit {} {
+    set t $::mted
+    if {$t eq "" || ![winfo exists $t]} return
+    $t edit modified 0
+    $t tag add all 1.0 end
+    lassign $::mted_geom mode x y width ls minh
+    if {$mode eq "mtext" && $width > 0} {
+        set w [expr {$width + 8}]
+    } else {
+        set w 40
+        foreach line [split [$t get 1.0 end-1c] "\n"] {
+            set w [expr {max($w, [font measure [$t cget -font] $line] + $ls)}]
+        }
+    }
+    place .mtedf -in .c -x [expr {$x - 4}] -y [expr {$y - 2}] -width $w -height 400
+    update idletasks
+    set n [$t count -displaylines 1.0 end]
+    if {$n eq "" || $n < 1} { set n 1 }
+    place .mtedf -in .c -x [expr {$x - 4}] -y [expr {$y - 2}] -width $w -height [expr {max($n * $ls + 6, $minh)}]
+    raise .mtedf
+}
+proc mted_done {how} {
+    if {$::mted eq ""} return
+    if {$how eq "cancel"} { set ::mted_result CANCEL; return }
+    set s [$::mted get 1.0 end-1c]
+    lassign $::mted_geom mode
+    if {$mode eq "mtext"} {
+        set s [string map [list "\\" "\\\\" "\n" "\\P"] [string trimright $s "\n"]]
+    } else {
+        set s [string map {"\n" " "} $s]
+    }
+    set ::mted_result "OK $s"
+}
 
 # ---------------------------------------------------------------- file dialog
 # Uses the desktop's own file chooser when one is available (zenity = GNOME/GTK, kdialog = KDE),

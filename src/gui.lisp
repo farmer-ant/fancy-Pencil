@@ -23,6 +23,7 @@
 (defvar *at-line-start* t)
 (defvar *palette-shown* nil)
 (defvar *prompt-owner* nil "The input request whose prompt the command line is showing.")
+(defvar *edit-target* nil "Text object to edit directly (set by a double-click on it).")
 (defvar *pick-shift* nil "True when the last left-click was made with Shift held.")
 (defvar *press-pos* nil "Screen position of the last left-button press (for press-drag-release windows).")
 
@@ -297,9 +298,11 @@
           ((> px-size 3000) nil)
           ((or (< x -4000) (> x (+ *cw* 4000)) (< y -4000) (> y (+ *ch* 4000))) nil)
           (t (multiple-value-bind (anchor justify) (text-anchor data)
-               (list (format nil ".c create text ~A ~A -text ~A -anchor ~A -justify ~A -angle ~,3F -font {Helvetica -~D} -fill ~A -tags {~A}"
+               (list (format nil ".c create text ~A ~A -text ~A -anchor ~A -justify ~A -angle ~,3F -font {Helvetica -~D} -fill ~A -tags {~A}~A"
                              (fmtn x) (fmtn y) (tq s) anchor justify (deg rot) px-size
-                             (if hl "#8fc4ff" color) tags)))))))))
+                             (if hl "#8fc4ff" color) tags
+                             (let ((w (and (equal (dxf 0 data) "MTEXT") (dxf 41 data))))
+                               (if (and w (plusp w)) (format nil " -width ~D" (max 1 (round (* w *vscale*)))) "")))))))))))
 
 (defun sub-color (sub parent-aci)
   (let ((c (dxf 62 sub)))
@@ -630,6 +633,15 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
            (update-cursor x y)
            (echo-input "") (setf *acq-result* (list :point *cursor-world*)))
          (setf *press-pos* nil)))
+      ((string= ty "DBL")
+       ;; double-click on text at the Command: prompt edits it in place, as in AutoCAD
+       (when (eq kind :command)
+         (destructuring-bind (x y) (event-ints ev)
+           (let ((e (pick-entity-at (s->w x y))))
+             (when (and e (member (ent-type e) '("TEXT" "MTEXT" "ATTDEF") :test #'equal))
+               (take-pickfirst) (sweep-highlights) (refresh-grips) (refresh-palette)
+               (setf *edit-target* e
+                     *acq-result* (list :text "TEXTEDIT")))))))
       ((string= ty "R") (echo-input "") (setf *acq-result* (list :text "")))
       ((string= ty "L") (let ((s (event-rest ev))) (echo-input s) (setf *acq-result* (list :text s))))
       ((string= ty "E")

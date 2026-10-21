@@ -81,6 +81,12 @@ It behaves like AutoCAD's command line:
 | Express Tools | LAYISO, LAYUNISO, LAYOFF, LAYFRZ, LAYON, LAYTHW, LAYLCK, LAYULK, LAYCUR, LAYMCH, LAYMRG, LAYDEL, OVERKILL, BREAKLINE, EXTRIM, MPEDIT, TCASE, TCOUNT, TXT2MTXT, MOCORO, COPYM, FLATTEN, SELECTSIMILAR, SSX, GETSEL, XLIST, BURST |
 | Other | U, UNDO, REDO, SELECTALL (Ctrl+A), HELP |
 
+**Text is typed on the drawing.** MTEXT (MT, T): pick two corners (or use Height/Justify/Rotation/Width),
+and an editor opens in that box; text wraps at the box width. Enter starts a new line; Ctrl+Enter, OK or
+a click outside finishes; Esc cancels. TEXT (DT) types each line in place at its insertion point;
+Enter on an empty line ends. Double-click any text, or use TEXTEDIT (ED), to edit it the same way.
+From AutoLISP or scripts, the same commands take their text on the command line.
+
 ### Selection, grips and the Properties palette
 
 Click objects at the `Command:` prompt to select them first. Selected objects show blue grips;
@@ -179,7 +185,7 @@ polylines but not ellipses or splines. Express Tools that depend on fonts or ext
 ## Tests
 
 ```sh
-./fancypencil --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp < /dev/null
+./fancypencil --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp tests/test-v03.lsp < /dev/null
 ```
 
 ## Layout

@@ -615,16 +615,40 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
   (let ((c (parse-color (gstring (format nil "Enter default object color [Truecolor/COlorbook] <~A>: " (sysvar "CECOLOR"))))))
     (when c (setf (sysvar "CECOLOR") (case c (256 "BYLAYER") (0 "BYBLOCK") (t (princ-to-string c)))))))
 
-(defcmd "TEXTEDIT" ("ED" "DDEDIT") "Edits the contents of a text object."
-  (loop
-    (let ((r (get-user-input :entity :prompt "Select an annotation object or [Undo]: " :keywords '("Undo"))))
-      (cond ((null r) (return))
-            ((consp r)
-             (let ((e (sel-entity r)))
-               (if (and e (member (ent-type e) '("TEXT" "MTEXT" "ATTDEF") :test #'equal))
-                   (let ((s (gstring (format nil "Enter new text <~A>: " (dxf 1 (ent-data e))) t)))
-                     (when (plusp (length s)) (set-entity-data e (set-dxf 1 s (ent-data e)))))
-                   (out (format nil "That is not a text object.~%")))))))))
+(defun mtext-top-left (data)
+  "World top-left corner of an MTEXT's box (where the in-place editor opens)."
+  (fourth (text-box data)))
+
+(defun edit-text-entity (e)
+  (let* ((data (ent-data e)) (type (ent-type e)) (old (or (dxf 1 data) "")))
+    (if (use-inplace-editor-p)
+        (let ((new (if (equal type "MTEXT")
+                       (inplace-edit :mtext (mtext-top-left data) (d (or (dxf 41 data) 0)) (d (or (dxf 40 data) 0.2d0))
+                                     :init (text-string-display old) :aci (entity-color-aci e)
+                                     :justify (case (mod (1- (or (dxf 71 data) 1)) 3) (0 "left") (1 "center") (t "right")))
+                       (inplace-edit :line (text-insertion data) nil (d (or (dxf 40 data) 0.2d0))
+                                     :init old :aci (entity-color-aci e)))))
+          (when (and (plusp (length new)) (string/= new old))
+            (set-entity-data e (set-dxf 1 new data))))
+        (let ((s (gstring (format nil "Enter new text <~A>: " old) t)))
+          (when (plusp (length s)) (set-entity-data e (set-dxf 1 s data)))))))
+
+(defun entity-color-aci (e)
+  (let ((c (dxf 62 (ent-data e))))
+    (if (and c (/= c 256) (/= c 0)) (abs c)
+        (let ((l (find-layer (ent-layer e)))) (if l (abs (layer-color l)) 7)))))
+
+(defcmd "TEXTEDIT" ("ED" "DDEDIT" "MTEDIT") "Edits the contents of a text object (in place on the drawing)."
+  (if *edit-target*
+      (let ((e *edit-target*)) (setf *edit-target* nil) (when (ent-live-p e) (edit-text-entity e)))
+      (loop
+        (let ((r (get-user-input :entity :prompt "Select an annotation object or [Undo]: " :keywords '("Undo"))))
+          (cond ((null r) (return))
+                ((consp r)
+                 (let ((e (sel-entity r)))
+                   (if (and e (member (ent-type e) '("TEXT" "MTEXT" "ATTDEF") :test #'equal))
+                       (edit-text-entity e)
+                       (out (format nil "That is not a text object.~%"))))))))))
 
 (defcmd "DIVIDE" ("DIV") "Places evenly spaced point objects along a line, arc or circle."
   (let ((sel (get-user-input :entity :prompt "Select object to divide: ")))
