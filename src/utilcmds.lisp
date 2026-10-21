@@ -489,7 +489,11 @@ a DXF next to it instead and leave the DWG untouched."
              (dolist (k (sort names #'string<)) (out (format nil "~15A ~A~%" k (lisp-repr (getvar k)))))))
           ((plusp (length n)) (setvar-prompt n)))))
 
-(defcmd "OSNAP" ("OS" "-OSNAP" "DSETTINGS" "DS") "Sets running object snap modes."
+(defcmd "OSNAP" ("OS" "DSETTINGS" "DS" "DDOSNAP") "Sets running object snap modes (settings panel)."
+  (if (and (gui-p) (not (from-lisp-p))) (osnap-dialog) (osnap-command-line)))
+(defcmd "-OSNAP" () "Sets running object snap modes at the command line."
+  (osnap-command-line))
+(defun osnap-command-line ()
   (let* ((m (logand (sysvar "OSMODE") 16383))
          (names (loop for (bit . nm) in '((1 . "END") (2 . "MID") (4 . "CEN") (8 . "NOD") (16 . "QUA") (32 . "INT")
                                           (64 . "INS") (128 . "PER") (256 . "TAN") (512 . "NEA"))

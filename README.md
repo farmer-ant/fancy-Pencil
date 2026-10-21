@@ -45,6 +45,23 @@ can be opened with it from the file manager (*Open With → Fancy Pencil*).
 Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT under the old name
 (`~/.config/lispdraft/lispdraft.pgp`) and a `~/.lispdraft.lsp` startup file are still picked up.
 
+### Right-click, object snaps, ALIGN, dimension styles
+
+- **Right-click on the drawing** at the Command: prompt opens a menu: Repeat last command, Recent Input,
+  and with objects selected Erase, Move, Copy, Scale, Rotate, Mirror, Align, Array, Cut/Copy to the
+  clipboard, Deselect All and Properties (Undo/Redo, Zoom, Paste, Select All when nothing is selected).
+  While a command is running, right-click is Enter, as in AutoCAD.
+- **Object snaps:** OSNAP (OS, DS, Tools → Object Snap Settings, or right-click the OSNAP button) opens
+  a panel with Endpoint, Midpoint, Center, Node, Quadrant, Intersection, Insertion, Perpendicular,
+  Tangent and Nearest. **Shift + right-click** while picking a point gives a one-time snap menu.
+  -OSNAP sets them at the command line.
+- **ALIGN (AL):** pick source/destination point pairs; one pair moves, two pairs move and rotate, and
+  optionally scale to fit.
+- **Dimension Style Manager (D, DIMSTYLE):** styles list with Set Current / New (start from any style) /
+  Delete, tabs for Lines, Symbols and Arrows, Text, Fit and Primary Units, and a live preview. Arrowheads:
+  closed filled, closed blank, open, right angle, dot, small dot, **architectural tick**, oblique, none.
+  Changing a style updates the dimensions that use it. EXPLODE breaks a dimension into its parts.
+
 ### Several drawings at once
 
 Every drawing opens in its own tab above the drawing area, as in AutoCAD. OPEN and NEW add a tab

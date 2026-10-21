@@ -110,5 +110,26 @@
 (command "docprev")
 (check "both still open" (count-all) 1)
 
+;; ---------- ALIGN ----------
+(command "new")
+(setvar "OSMODE" 0)
+(command "line" '(0 0) '(2 0) "")
+(setq al (entlast))
+(command "align" al "" '(0 0) '(5 5) "")
+(check "align one pair = move" (list (g al 10) (g al 11)) '((5.0 5.0 0.0) (7.0 5.0 0.0)))
+(command "align" al "" '(5 5) '(10 10) '(7 5) '(10 12) "" "N")
+(check "align rotates" (list (g al 10) (g al 11)) '((10.0 10.0 0.0) (10.0 12.0 0.0)))
+(command "align" al "" '(10 10) '(0 0) '(10 12) '(3 4) "" "Y")
+(check "align scales" (list (g al 10) (g al 11)) '((0.0 0.0 0.0) (3.0 4.0 0.0)))
+;; ---------- arrowheads ----------
+(setvar "DIMBLK" "_ArchTick")
+(command "dimlinear" '(0 0) '(4 0) '(2 1))
+(command "explode" (entlast) "")
+(setq ss (ssget "X" '((0 . "SOLID"))))
+(check "archtick drawn as filled strokes" (if ss (sslength ss) 0) 2)
+(setvar "DIMBLK" "")
+(command "-osnap" "END,MID,PER,TAN")
+(check "-osnap" (getvar "OSMODE") (+ 1 2 128 256))
+
 (princ (strcat "\nv0.3 tests: " (itoa *pass*) " passed, " (itoa *fail*) " failed.\n"))
 (princ)

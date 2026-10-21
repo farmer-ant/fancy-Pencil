@@ -12,10 +12,12 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.5")
+(defparameter *version* "0.3.6")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
 (defvar *ui* :tty "Either :TTY or :GUI.")
 (defvar *vx* 6d0) (defvar *vy* 4.5d0) (defvar *vscale* 60d0)
 (defvar *cw* 1000) (defvar *ch* 600)
+(defvar *last-command* nil "Command repeated by Enter at an empty prompt.")
+(defvar *lisp-buffer* "" "Unfinished AutoLISP typed at the command line.")

@@ -76,6 +76,11 @@ catch {
     ttk::style configure TLabel -background $panel -foreground $fg
     ttk::style configure Dim.TLabel -foreground $dim
     ttk::style configure TFrame -background $panel
+    ttk::style configure TNotebook -background $panel -bordercolor "#1b2027"
+    ttk::style configure TNotebook.Tab -background $panel2 -foreground $fg -padding {10 3}
+    ttk::style map TNotebook.Tab -background [list selected $accent active "#46505e"] -foreground [list selected "#ffffff"]
+    ttk::style configure TCheckbutton -background $panel -foreground $fg
+    ttk::style map TCheckbutton -background [list active $panel]
     ttk::style configure Group.TLabel -foreground $dim -font {Helvetica 8}
 }
 option add *Menu.background $panel2
@@ -158,7 +163,7 @@ mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
 mcmd .mb.tools "Edit Command Aliases..." ALIASEDIT
 mcmd .mb.tools "Reload Aliases" REINIT
-mcmd .mb.tools "Object Snap Settings" OSNAP
+mcmd .mb.tools "Object Snap Settings..." OSNAP
 mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
 mcmd .mb.tools "List" LIST
@@ -299,7 +304,7 @@ bind .c <Motion> {emit M %x %y}
 bind .c <ButtonPress-1> {if {$::mted ne ""} {mted_done ok; break}; emit B %x %y [expr {%s & 1}]; focus .cmd.e}
 bind .c <Double-Button-1> {if {$::mted eq ""} {emit DBL %x %y}}
 bind .c <ButtonRelease-1> {emit U %x %y}
-bind .c <ButtonPress-3> {emit R %x %y}
+bind .c <ButtonPress-3> {emit R %x %y %X %Y [expr {%s & 1}]}
 bind .c <ButtonPress-2> {emit P %x %y}
 bind .c <B2-Motion> {emit D %x %y}
 bind .c <ButtonRelease-2> {emit Q %x %y}
@@ -335,6 +340,7 @@ foreach {t k} {LWT LWT OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
     pack .st.[string tolower $t] -side right -padx 1
 }
 proc togglekey {k} { emit K $k; focus .cmd.e }
+bind .st.osnap <Button-3> {emit MENU 'OSNAP}
 
 pack .st -in .bottom -side bottom -fill x
 pack .cmd -in .bottom -side bottom -fill x
@@ -944,6 +950,426 @@ proc styledlg_done {ok} {
         set ::sty(result) [join $recs \x1e]
     }
     destroy .sty
+}
+
+# ---------------------------------------------------------------- dimension style manager
+# records: list of {name {KEY value KEY value ...}}; current: style name;
+# arrows: list of {code label} for DIMBLK.
+# Returns "CANCEL" or  current \x1e rec \x1e rec ...  with rec = name \x1f KEY \x1f value \x1f ...
+set ::dimfields {
+    "Lines" {
+        DIMCLRD "Dimension line color (0 ByBlock, 256 ByLayer)" entry
+        DIMDLI  "Baseline spacing" entry
+        DIMCLRE "Extension line color" entry
+        DIMEXE  "Extend beyond dimension lines" entry
+        DIMEXO  "Offset from origin" entry
+    }
+    "Symbols and Arrows" {
+        DIMBLK  "Arrowheads" arrows
+        DIMASZ  "Arrow size" entry
+        DIMTSZ  "Tick size (overrides arrowheads when > 0)" entry
+        DIMCEN  "Center mark size" entry
+    }
+    "Text" {
+        DIMTXT  "Text height" entry
+        DIMCLRT "Text color" entry
+        DIMTAD  "Vertical placement" {0 Centered 1 Above}
+        DIMGAP  "Offset from dimension line" entry
+        DIMTIH  "Text alignment" {0 "Aligned with dimension line" 1 Horizontal}
+    }
+    "Fit" {
+        DIMSCALE "Use overall scale of" entry
+    }
+    "Primary Units" {
+        DIMDEC  "Precision (decimal places)" {0 0 1 0.0 2 0.00 3 0.000 4 0.0000 5 0.00000 6 0.000000}
+        DIMLFAC "Measurement scale factor" entry
+        DIMPOST "Prefix / suffix (<> is the measurement)" entry
+        DIMADEC "Angular precision (decimal places)" {0 0 1 0.0 2 0.00 3 0.000 4 0.0000}
+    }
+}
+proc dimdlg_choices {kind} {
+    if {$kind eq "arrows"} {
+        set out {}
+        foreach a $::dimarrows { lappend out {*}$a }
+        return $out
+    }
+    return $kind
+}
+proc dimstyledlg {records current arrows} {
+    set w .dsm
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Dimension Style Manager"
+    wm transient $w .
+    set ::dimarrows $arrows
+    array unset ::dsdata
+    array unset ::dsv
+    array unset ::dsl
+    set ::ds(order) {}
+    foreach r $records {
+        lassign $r name vars
+        lappend ::ds(order) $name
+        set ::dsdata($name) $vars
+    }
+    set ::ds(current) $current
+    set ::ds(sel) ""
+    set f [ttk::frame $w.f -padding 10]
+    pack $f -fill both -expand 1
+    ttk::label $f.cur -text "Current dimension style: $current" -style Dim.TLabel
+    grid $f.cur -row 0 -column 0 -columnspan 2 -sticky w -pady {0 6}
+    # left: styles
+    set left [ttk::frame $f.left]
+    ttk::label $left.l -text "Styles:"
+    listbox $left.list -height 14 -width 22 -exportselection 0 -background $::panel2 -foreground $::fg \
+        -selectbackground $::accent -borderwidth 0 -highlightthickness 0 -activestyle none
+    bind $left.list <<ListboxSelect>> {dimdlg_select [.dsm.f.left.list get [.dsm.f.left.list curselection]]}
+    ttk::button $left.cur -text "Set Current" -command dimdlg_setcurrent
+    ttk::button $left.new -text "New..." -command dimdlg_new
+    ttk::button $left.del -text "Delete" -command dimdlg_delete
+    pack $left.l -side top -anchor w
+    pack $left.list -side top -fill y -expand 1
+    pack $left.cur $left.new $left.del -side top -fill x -pady {4 0}
+    grid $left -row 1 -column 0 -sticky ns -padx {0 12}
+    # right: tabs + preview
+    set right [ttk::frame $f.right]
+    set nb [ttk::notebook $right.nb]
+    set ti 0
+    foreach {tab fields} $::dimfields {
+        set p [ttk::frame $nb.p$ti -padding 10]
+        $nb add $p -text $tab
+        set row 0
+        foreach {key label kind} $fields {
+            ttk::label $p.l$key -text $label
+            if {$kind eq "entry"} {
+                ttk::entry $p.v$key -textvariable ::dsv($key) -width 14
+                bind $p.v$key <KeyRelease> dimdlg_preview
+            } else {
+                set ch [dimdlg_choices $kind]
+                set labels {}
+                foreach {code lbl} $ch { lappend labels $lbl }
+                ttk::combobox $p.v$key -textvariable ::dsl($key) -values $labels -state readonly -width 26
+                bind $p.v$key <<ComboboxSelected>> [list dimdlg_combo $key $kind]
+            }
+            grid $p.l$key -row $row -column 0 -sticky w -pady 3 -padx {0 10}
+            grid $p.v$key -row $row -column 1 -sticky w -pady 3
+            incr row
+        }
+        incr ti
+    }
+    pack $nb -side top -fill both -expand 1
+    canvas $right.pv -width 420 -height 150 -background "#171c23" -highlightthickness 0
+    pack $right.pv -side top -fill x -pady {8 0}
+    grid $right -row 1 -column 1 -sticky nsew
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.ok -text "OK" -command {dimdlg_done 1}
+    ttk::button $bb.cancel -text "Cancel" -command {dimdlg_done 0}
+    pack $bb.cancel $bb.ok -side right -padx 3
+    grid $bb -row 2 -column 0 -columnspan 2 -sticky e -pady {10 0}
+    bind $w <Escape> {dimdlg_done 0}
+    dimdlg_fill
+    dimdlg_select $current
+    set ::ds(result) CANCEL
+    wm geometry $w +[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 60}]
+    grab $w
+    tkwait window $w
+    return $::ds(result)
+}
+proc dimdlg_kind {key} {
+    foreach {tab fields} $::dimfields { foreach {k label kind} $fields { if {$k eq $key} { return $kind } } }
+    return entry
+}
+proc dimdlg_combo {key kind} {
+    foreach {code lbl} [dimdlg_choices $kind] { if {$lbl eq $::dsl($key)} { set ::dsv($key) $code } }
+    dimdlg_preview
+}
+proc dimdlg_fill {} {
+    set l .dsm.f.left.list
+    $l delete 0 end
+    foreach n $::ds(order) { $l insert end $n }
+}
+proc dimdlg_store {} {
+    set n $::ds(sel)
+    if {$n eq "" || ![info exists ::dsdata($n)]} return
+    set vars {}
+    foreach {k v} $::dsdata($n) {
+        if {[info exists ::dsv($k)]} { set v $::dsv($k) }
+        lappend vars $k $v
+    }
+    set ::dsdata($n) $vars
+}
+proc dimdlg_select {name} {
+    if {$name eq ""} return
+    dimdlg_store
+    set ::ds(sel) $name
+    foreach {k v} $::dsdata($name) {
+        set ::dsv($k) $v
+        set kind [dimdlg_kind $k]
+        if {$kind ne "entry"} {
+            set ::dsl($k) $v
+            foreach {code lbl} [dimdlg_choices $kind] { if {[string equal -nocase $code $v]} { set ::dsl($k) $lbl } }
+        }
+    }
+    set i [lsearch -exact $::ds(order) $name]
+    .dsm.f.left.list selection clear 0 end
+    .dsm.f.left.list selection set $i
+    .dsm.f.left.list see $i
+    dimdlg_preview
+}
+proc dimdlg_num {key def} {
+    if {[info exists ::dsv($key)] && [string is double -strict $::dsv($key)]} { return $::dsv($key) }
+    return $def
+}
+proc dimdlg_arrow {c x y dir k code tsz} {
+    # dir: +1 arrow points right (tip at x), -1 points left; k = pixels per unit
+    set asz [expr {[dimdlg_num DIMASZ 0.18] * $k}]
+    if {$tsz > 0} {
+        set t [expr {$tsz * $k}]
+        $c create line [expr {$x - $t}] [expr {$y + $t}] [expr {$x + $t}] [expr {$y - $t}] -fill white
+        return
+    }
+    set b [expr {$x - $dir * $asz}]
+    set h [expr {$asz / 6.0}]
+    switch -- [string toupper $code] {
+        ARCHTICK { set t [expr {$asz / 2.0 / 1.414}]
+                   $c create line [expr {$x - $t}] [expr {$y + $t}] [expr {$x + $t}] [expr {$y - $t}] -fill white -width [expr {max(2, $asz * 0.16)}] }
+        OBLIQUE  { set t [expr {$asz / 2.0 / 1.414}]
+                   $c create line [expr {$x - $t}] [expr {$y + $t}] [expr {$x + $t}] [expr {$y - $t}] -fill white }
+        NONE     {}
+        DOT      { set r [expr {$asz / 4.0}]; $c create oval [expr {$x-$r}] [expr {$y-$r}] [expr {$x+$r}] [expr {$y+$r}] -fill white -outline white }
+        DOTSMALL { set r [expr {$asz / 8.0}]; $c create oval [expr {$x-$r}] [expr {$y-$r}] [expr {$x+$r}] [expr {$y+$r}] -fill white -outline white }
+        OPEN     { $c create line $b [expr {$y - $h}] $x $y $b [expr {$y + $h}] -fill white }
+        OPEN90   { set b2 [expr {$x - $dir * $asz / 2.0}]; set h2 [expr {$asz / 2.0}]
+                   $c create line $b2 [expr {$y - $h2}] $x $y $b2 [expr {$y + $h2}] -fill white }
+        CLOSEDBLANK { $c create polygon $x $y $b [expr {$y - $h}] $b [expr {$y + $h}] -fill "" -outline white }
+        default  { $c create polygon $x $y $b [expr {$y - $h}] $b [expr {$y + $h}] -fill white -outline white }
+    }
+}
+proc dimdlg_preview {} {
+    set c .dsm.f.right.pv
+    if {![winfo exists $c]} return
+    $c delete all
+    set sc [dimdlg_num DIMSCALE 1]
+    # the sample: a 1.2-unit wide object, drawn so the arrow size looks as it would on paper
+    set k 100.0
+    set x1 90; set x2 [expr {$x1 + 2.4 * $k}]; set ybase 138
+    $c create line $x1 $ybase $x1 [expr {$ybase - 20}] -fill "#5aa8ff" -width 2
+    $c create line $x2 $ybase $x2 [expr {$ybase - 20}] -fill "#5aa8ff" -width 2
+    $c create line $x1 $ybase $x2 $ybase -fill "#5aa8ff" -width 2
+    set ks [expr {$k * $sc}]
+    set exo [expr {[dimdlg_num DIMEXO 0.0625] * $ks}]
+    set exe [expr {[dimdlg_num DIMEXE 0.18] * $ks}]
+    set dimy [expr {$ybase - 20 - 0.55 * $k}]
+    $c create line $x1 [expr {$ybase - 20 - $exo}] $x1 [expr {$dimy - $exe}] -fill white
+    $c create line $x2 [expr {$ybase - 20 - $exo}] $x2 [expr {$dimy - $exe}] -fill white
+    $c create line $x1 $dimy $x2 $dimy -fill white
+    set code [expr {[info exists ::dsv(DIMBLK)] ? $::dsv(DIMBLK) : ""}]
+    set tsz [dimdlg_num DIMTSZ 0]
+    dimdlg_arrow $c $x1 $dimy -1 $ks $code $tsz
+    dimdlg_arrow $c $x2 $dimy 1 $ks $code $tsz
+    set txt [expr {max(6, round([dimdlg_num DIMTXT 0.18] * $ks / 0.72))}]
+    set dec [expr {int([dimdlg_num DIMDEC 4])}]
+    set val [format "%.${dec}f" [expr {2.4 * [dimdlg_num DIMLFAC 1]}]]
+    set post [expr {[info exists ::dsv(DIMPOST)] ? $::dsv(DIMPOST) : ""}]
+    if {[string first "<>" $post] >= 0} { set val [string map [list "<>" $val] $post] } elseif {$post ne ""} { set val $post }
+    set gap [expr {[dimdlg_num DIMGAP 0.09] * $ks}]
+    set above [expr {[dimdlg_num DIMTAD 1] != 0}]
+    set ty [expr {$above ? $dimy - $gap : $dimy}]
+    set anchor [expr {$above ? "s" : "center"}]
+    if {!$above} {
+        set tw [expr {[font measure [list Helvetica -$txt] $val] / 2 + $gap}]
+        $c create rectangle [expr {($x1+$x2)/2 - $tw}] [expr {$dimy - 3}] [expr {($x1+$x2)/2 + $tw}] [expr {$dimy + 3}] -fill "#171c23" -outline ""
+    }
+    $c create text [expr {($x1 + $x2) / 2}] $ty -text $val -anchor $anchor -font [list Helvetica -$txt] -fill white
+}
+proc dimdlg_setcurrent {} {
+    set ::ds(current) $::ds(sel)
+    .dsm.f.cur configure -text "Current dimension style: $::ds(current)"
+}
+proc dimdlg_new {} {
+    set w .dsm.ask
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Create New Dimension Style"
+    wm transient $w .dsm
+    set f [ttk::frame $w.f -padding 10]
+    pack $f
+    set ::ds(newname) "Copy of $::ds(sel)"
+    set ::ds(startwith) $::ds(sel)
+    ttk::label $f.l -text "New style name:"
+    ttk::entry $f.e -textvariable ::ds(newname) -width 26
+    ttk::label $f.l2 -text "Start with:"
+    ttk::combobox $f.c -textvariable ::ds(startwith) -values $::ds(order) -state readonly -width 24
+    ttk::button $f.ok -text Continue -command {set ::ds(asked) 1; destroy .dsm.ask}
+    ttk::button $f.no -text Cancel -command {set ::ds(asked) 0; destroy .dsm.ask}
+    grid $f.l $f.e -sticky w -pady 2
+    grid $f.l2 $f.c -sticky w -pady 2
+    grid $f.no $f.ok -sticky e -pady {8 0}
+    bind $f.e <Return> {set ::ds(asked) 1; destroy .dsm.ask}
+    $f.e selection range 0 end
+    focus $f.e
+    set ::ds(asked) 0
+    grab $w
+    tkwait window $w
+    grab .dsm
+    set name [string trim $::ds(newname)]
+    if {!$::ds(asked) || $name eq ""} return
+    if {[lsearch -exact -nocase $::ds(order) $name] >= 0} {
+        tk_messageBox -parent .dsm -title "Dimension Style" -message "A style called $name already exists."
+        return
+    }
+    dimdlg_store
+    set ::dsdata($name) $::dsdata($::ds(startwith))
+    lappend ::ds(order) $name
+    dimdlg_fill
+    set ::ds(sel) ""
+    dimdlg_select $name
+}
+proc dimdlg_delete {} {
+    set n $::ds(sel)
+    if {[string equal -nocase $n Standard]} {
+        tk_messageBox -parent .dsm -title "Dimension Style" -message "The Standard style can't be deleted."
+        return
+    }
+    if {[string equal -nocase $n $::ds(current)]} {
+        tk_messageBox -parent .dsm -title "Dimension Style" -message "$n is the current style. Set another style current first."
+        return
+    }
+    set i [lsearch -exact $::ds(order) $n]
+    set ::ds(order) [lreplace $::ds(order) $i $i]
+    unset ::dsdata($n)
+    set ::ds(sel) ""
+    dimdlg_fill
+    dimdlg_select [lindex $::ds(order) 0]
+}
+proc dimdlg_done {ok} {
+    if {$ok} {
+        dimdlg_store
+        set recs [list $::ds(current)]
+        foreach n $::ds(order) { lappend recs [join [concat [list $n] $::dsdata($n)] \x1f] }
+        set ::ds(result) [join $recs \x1e]
+    }
+    destroy .dsm
+}
+
+# ---------------------------------------------------------------- object snap settings (OSNAP / DSETTINGS)
+# mode: OSMODE value (bit 16384 = snaps turned off with F3). Returns the new value, or "CANCEL".
+set ::osnapmodes {
+    1   Endpoint      end
+    2   Midpoint      mid
+    4   Center        cen
+    8   Node          nod
+    16  Quadrant      qua
+    32  Intersection  int
+    64  Insertion     ins
+    128 Perpendicular per
+    256 Tangent       tan
+    512 Nearest       nea
+}
+proc osnap_glyph {c kind} {
+    # the same markers the drawing shows while snapping
+    set g "#3fd25f"
+    switch $kind {
+        end { $c create rectangle 3 3 15 15 -outline $g -width 2 }
+        mid { $c create polygon 2 15 16 15 9 3 -outline $g -fill {} -width 2 }
+        cen - nod { $c create oval 3 3 15 15 -outline $g -width 2 }
+        qua { $c create polygon 9 2 16 9 9 16 2 9 -outline $g -fill {} -width 2 }
+        int { $c create line 3 3 15 15 -fill $g -width 2; $c create line 3 15 15 3 -fill $g -width 2 }
+        ins { $c create rectangle 3 3 15 15 -outline $g -width 2; $c create line 3 9 15 9 -fill $g }
+        per { $c create line 3 3 3 15 15 15 -fill $g -width 2; $c create line 3 9 9 9 9 15 -fill $g }
+        tan { $c create oval 3 3 15 15 -outline $g -width 2; $c create line 2 3 16 3 -fill $g -width 2 }
+        nea { $c create line 3 3 15 15 3 15 15 3 3 3 -fill $g -width 2 }
+    }
+}
+proc osnapdlg {mode} {
+    set w .osd
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Drafting Settings - Object Snap"
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    set ::osd(on) [expr {($mode & 16384) == 0}]
+    ttk::checkbutton $f.on -text "Object Snap On (F3)" -variable ::osd(on)
+    grid $f.on -row 0 -column 0 -columnspan 4 -sticky w -pady {0 8}
+    ttk::label $f.hdr -text "Object snap modes" -style Dim.TLabel
+    grid $f.hdr -row 1 -column 0 -columnspan 4 -sticky w
+    set i 0
+    foreach {bit label kind} $::osnapmodes {
+        set ::osd($bit) [expr {($mode & $bit) != 0}]
+        set row [expr {2 + $i % 5}]
+        set col [expr {2 * ($i / 5)}]
+        canvas $f.g$bit -width 18 -height 18 -background $::panel -highlightthickness 0
+        osnap_glyph $f.g$bit $kind
+        ttk::checkbutton $f.c$bit -text $label -variable ::osd($bit)
+        grid $f.g$bit -row $row -column $col -padx {0 4} -pady 3
+        grid $f.c$bit -row $row -column [expr {$col + 1}] -sticky w -padx {0 30} -pady 3
+        incr i
+    }
+    set bb [ttk::frame $f.sel]
+    ttk::button $bb.all -text "Select All" -command {foreach {b l k} $::osnapmodes { set ::osd($b) 1 }}
+    ttk::button $bb.none -text "Clear All" -command {foreach {b l k} $::osnapmodes { set ::osd($b) 0 }}
+    pack $bb.all $bb.none -side top -fill x -pady 2
+    grid $bb -row 2 -column 4 -rowspan 3 -sticky n -padx {10 0}
+    ttk::label $f.tip -style Dim.TLabel -wraplength 420 -justify left \
+        -text "Tip: hold Shift and right-click while picking a point for a one-time snap, or type END, MID, CEN, QUA, INT, PER, TAN, NEA at the prompt."
+    grid $f.tip -row 7 -column 0 -columnspan 5 -sticky w -pady {10 0}
+    set b2 [ttk::frame $f.b2]
+    ttk::button $b2.ok -text OK -command {osnapdlg_done 1}
+    ttk::button $b2.no -text Cancel -command {osnapdlg_done 0}
+    pack $b2.no $b2.ok -side right -padx 3
+    grid $b2 -row 8 -column 0 -columnspan 5 -sticky e -pady {10 0}
+    bind $w <Escape> {osnapdlg_done 0}
+    bind $w <Return> {osnapdlg_done 1}
+    set ::osd(result) CANCEL
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
+    grab $w
+    tkwait window $w
+    return $::osd(result)
+}
+proc osnapdlg_done {ok} {
+    if {$ok} {
+        set m 0
+        foreach {bit label kind} $::osnapmodes { if {$::osd($bit)} { set m [expr {$m | $bit}] } }
+        if {!$::osd(on)} { set m [expr {$m | 16384}] }
+        set ::osd(result) $m
+    }
+    destroy .osd
+}
+
+# ---------------------------------------------------------------- right-click menus on the drawing
+# items: list of  {label command}  |  -  |  {> label {items}}
+proc ctxmenu_build {m items} {
+    catch {destroy $m}
+    menu $m -tearoff 0
+    set i 0
+    foreach it $items {
+        if {$it eq "-"} { $m add separator; continue }
+        if {[lindex $it 0] eq ">"} {
+            ctxmenu_build $m.s$i [lindex $it 2]
+            $m add cascade -label [lindex $it 1] -menu $m.s$i
+        } else {
+            lassign $it label cmd
+            $m add command -label $label -command [list emit MENU $cmd]
+        }
+        incr i
+    }
+}
+proc ctxmenu {X Y items} {
+    ctxmenu_build .ctx $items
+    tk_popup .ctx $X $Y
+}
+# Shift + right-click while picking a point: one-time object snap
+proc osnapmenu {X Y} {
+    set m .osm
+    catch {destroy $m}
+    menu $m -tearoff 0
+    foreach {lbl word} {Endpoint END Midpoint MID Intersection INT Center CEN Quadrant QUA Tangent TAN \
+                        Perpendicular PER Insertion INS Node NOD Nearest NEA None NON} {
+        $m add command -label $lbl -command [list emit L $word]
+        if {$word in {INT QUA PER NEA}} { $m add separator }
+    }
+    $m add command -label "Osnap Settings..." -command {emit MENU 'OSNAP}
+    tk_popup $m $X $Y
 }
 
 # ---------------------------------------------------------------- file dialog
