@@ -31,7 +31,13 @@
                                                      (polar c (+ a1 (/ (arc-sweep a1 a2) 2)) r)))
                                                (list :segment i))))))
                 ((member type '("TEXT" "ATTDEF") :test #'equal) (list (cons (pt3 (text-insertion data)) :insert)))
-                ((member type '("MTEXT" "INSERT" "POINT") :test #'equal) (list (g 10 :insert)))
+                ((equal type "MTEXT")
+                 ;; insertion grip plus the top corners of the box, which set the wrap width
+                 (let* ((c (text-box data)) (ins (pt3 (dxf 10 data))))
+                   (cons (cons ins :insert)
+                         (loop for (p id) in (list (list (fourth c) :mtw-left) (list (third c) :mtw-right))
+                               unless (< (dist2d p ins) 1d-9) collect (cons (pt3 p) id)))))
+                ((member type '("INSERT" "POINT") :test #'equal) (list (g 10 :insert)))
                 ((equal type "ELLIPSE")
                  (let* ((c (pt3 (dxf 10 data))) (m (pt3 (dxf 11 data))) (k (or (dxf 40 data) 1d0))
                         (minor (pt (* k (- (py m))) (* k (px m)))))
@@ -65,6 +71,8 @@
     (cond
       ((member id '(:center :insert :move))
        (xform-data data (xf-move dv)))
+      ((and (equal type "MTEXT") (member id '(:mtw-left :mtw-right)))
+       (mtext-width-stretch data id to))
       ((equal type "LINE")
        (case id (:start (set-dxf 10 to data)) (:end (set-dxf 11 to data)) (:mid (xform-data data (xf-move dv)))))
       ((equal type "CIRCLE") (set-dxf 40 (max 1d-9 (dist2d (pt3 (dxf 10 data)) to)) data))

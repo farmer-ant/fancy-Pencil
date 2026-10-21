@@ -147,6 +147,7 @@ foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offse
 mcmd .mb.format "Layer..." LAYER
 mcmd .mb.format "Linetype..." LINETYPE
 mcmd .mb.format "Lineweight..." LWEIGHT
+mcmd .mb.format "Text Style..." STYLE
 mcmd .mb.format "Dimension Style..." DIMSTYLE
 mcmd .mb.format "Hatch Settings..." HPSET
 mcmd .mb.format "Text Size" TEXTSIZE
@@ -339,6 +340,8 @@ bind .cmd.e <Return> {cmdsubmit; break}
 bind .cmd.e <KP_Enter> {cmdsubmit; break}
 bind .cmd.e <space> {if {!$::allowspace} {cmdsubmit; break}}
 bind .cmd.e <Up> {histmove -1; break}
+bind .cmd.e <Button-3> {cmdline_popup %X %Y; break}
+bind .h <Button-3> {hist_popup %X %Y; break}
 bind .cmd.e <Down> {histmove 1; break}
 bind .cmd.e <Delete> {if {[.cmd.e get] eq ""} {emit MENU ERASE; break}}
 bind .cmd.e <KeyPress> {if {$::grread} {if {"%A" ne ""} {emit G [scan "%A" %%c]}; break}}
@@ -407,15 +410,84 @@ proc setgrread {v} { set ::grread $v }
 
 # ---------------------------------------------------------------- in-place text editor
 # MTEXT / DTEXT / TEXTEDIT type straight onto the drawing, like AutoCAD's in-place editor.
-#   mode   mtext: multi-line, word-wrapped to WIDTH px (0 = no wrap); Enter = new line,
-#                 Ctrl+Enter / OK / click outside = done.   Result is MTEXT-encoded (\P, \\).
-#          line : one line (DTEXT and single-line TEXT); Enter = done.  Result is the raw text.
-#   X Y    screen position: top-left corner (mtext) or start of the baseline (line)
-#   Returns "OK <text>" or "CANCEL".
+#   mode    mtext: multi-line, word-wrapped to WIDTH px (0 = no wrap), with a formatting bar.
+#                  Enter = new line; Ctrl+Enter / OK / click outside = done.
+#           line : one line (DTEXT, single-line TEXT); Enter = done.
+#   X Y     screen position: top-left corner (mtext) or start of the baseline (line)
+#   opts    {style family bold italic underline height k styles}
+#           height in drawing units, k = font pixels per drawing unit,
+#           styles = list of {name font bold italic height}
+#   Returns "CANCEL", or "OK " + style \x1f font \x1f height \x1f bold \x1f italic \x1f underline \x1f justify \x1f text
+#   (text MTEXT-encoded in mtext mode: \P new line, \\ \{ \} literal).
 set ::mted ""
-proc mtedit {mode x y width fpx color init {justify left} {minh 0}} {
-    set fpx [expr {max(11, min(160, $fpx))}]
-    set font [list Helvetica -$fpx]
+proc tkfamily {font} {
+    # display family for a style font: AutoCAD .shx files get a look-alike system font,
+    # and a family that isn't installed gets a metric-compatible one
+    set f [string tolower [file tail $font]]
+    if {[file extension $f] eq ".shx"} {
+        if {[regexp {^(romanc|romant|romand|complex|italic|isoct)} $f]} { set fam Times } \
+        elseif {[string match monotxt* $f]} { set fam Courier } \
+        else { set fam Helvetica }
+    } elseif {[file extension $f] in {.ttf .otf .ttc}} {
+        set fam [file rootname [file tail $font]]
+        if {[string match -nocase arial* $fam]} { set fam Arial }
+        if {[string match -nocase times* $fam]} { set fam "Times New Roman" }
+        if {[string match -nocase cour* $fam]} { set fam "Courier New" }
+    } else {
+        set fam $font
+    }
+    if {![info exists ::installed_fams]} { set ::installed_fams [font families] }
+    set i [lsearch -exact -nocase $::installed_fams $fam]
+    if {$i >= 0} { return [lindex $::installed_fams $i] }
+    set lf [string tolower $fam]
+    if {[regexp {mono|cour} $lf]} { set alts {"Liberation Mono" Cousine "DejaVu Sans Mono"}; set last Courier } \
+    elseif {[regexp {serif|roman|times|cambria} $lf] && ![regexp {sans} $lf]} { set alts {"Liberation Serif" Tinos Caladea "DejaVu Serif"}; set last Times } \
+    else { set alts {"Liberation Sans" Arimo Carlito "DejaVu Sans"}; set last Helvetica }
+    foreach a $alts {
+        set i [lsearch -exact -nocase $::installed_fams $a]
+        if {$i >= 0} { return [lindex $::installed_fams $i] }
+    }
+    return $last
+}
+proc mted_font {} {
+    set px [expr {max(9, min(160, round($::mt(height) * $::mt(k))))}]
+    set f [list [tkfamily $::mt(font)] -$px]
+    if {$::mt(bold)} { lappend f bold }
+    if {$::mt(italic)} { lappend f italic }
+    if {$::mt(underline)} { lappend f underline }
+    return $f
+}
+proc mted_restyle {} {
+    if {$::mted eq "" || ![winfo exists $::mted]} return
+    $::mted configure -font [mted_font]
+    $::mted tag configure all -justify $::mt(justify)
+    mted_fit
+}
+proc mted_pickstyle {} {
+    foreach s $::mt(styles) {
+        lassign $s name font bold italic height
+        if {[string equal -nocase $name $::mt(style)]} {
+            set ::mt(font) $font; set ::mt(bold) $bold; set ::mt(italic) $italic
+            if {$height > 0} { set ::mt(height) $height }
+        }
+    }
+    mted_restyle
+}
+proc mted_families {} {
+    if {![info exists ::mt_families]} {
+        set fams [lsort -dictionary -unique [font families]]
+        set ::mt_families [concat {txt.shx simplex.shx romans.shx romand.shx romanc.shx isocp.shx monotxt.shx} $fams]
+    }
+    return $::mt_families
+}
+proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
+    lassign $opts style font bold italic underline height k styles
+    if {$k eq "" || $k <= 0} { set k 1; set height $fpx }
+    array set ::mt [list mode $mode style $style font $font bold [expr {$bold ne "" && $bold}] \
+                        italic [expr {$italic ne "" && $italic}] underline [expr {$underline ne "" && $underline}] \
+                        height $height k $k styles $styles justify $justify]
+    if {$::mt(font) eq ""} { set ::mt(font) Arial }
+    set font [mted_font]
     set ls [font metrics $font -linespace]
     set f .mtedf
     catch {destroy $f}
@@ -426,17 +498,59 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0}} {
         -undo 1 -selectbackground $::accent -wrap [expr {$mode eq "mtext" && $width > 0 ? "word" : "none"}]
     $t tag configure all -justify $justify
     $t insert end $init all
+    $t edit reset
     pack $t -padx 1 -pady 1 -fill both -expand 1
     # only the text widget's own bindings: keep the program's global keys (Esc, Ctrl+Z, F8...) out
     bindtags $t [list $t Text]
-    set hint [expr {$mode eq "mtext" ? "Enter: new line    Ctrl+Enter or click outside: done    Esc: cancel"
-                                      : "Enter: done    Esc: cancel"}]
-    frame .mtedbar -background "#2b313b"
-    label .mtedbar.l -text $hint -background "#2b313b" -foreground "#c9d1db" -font {Helvetica 9}
-    ttk::button .mtedbar.ok -text OK -style Tool.TButton -command {mted_done ok}
-    ttk::button .mtedbar.no -text Cancel -style Tool.TButton -command {mted_done cancel}
-    pack .mtedbar.l -side left -padx 6
-    pack .mtedbar.no .mtedbar.ok -side right -padx 2
+
+    # ---- the bar above the box: formatting (MTEXT) and OK / Cancel
+    set b .mtedbar
+    catch {destroy $b}
+    frame $b -background "#2b313b" -borderwidth 1 -relief solid
+    if {$mode eq "mtext"} {
+        set stylenames {}
+        foreach s $styles { lappend stylenames [lindex $s 0] }
+        ttk::label $b.sl -text "Style" -style Dim.TLabel
+        ttk::combobox $b.style -values $stylenames -textvariable ::mt(style) -width 11 -state readonly
+        bind $b.style <<ComboboxSelected>> {mted_pickstyle; focus $::mted}
+        ttk::label $b.fl -text "Font" -style Dim.TLabel
+        ttk::combobox $b.font -values [mted_families] -textvariable ::mt(font) -width 18
+        bind $b.font <<ComboboxSelected>> {mted_restyle; focus $::mted}
+        bind $b.font <Return> {mted_restyle; focus $::mted; break}
+        ttk::label $b.hl -text "Height" -style Dim.TLabel
+        ttk::entry $b.h -textvariable ::mt(hentry) -width 7
+        set ::mt(hentry) [format %g $height]
+        bind $b.h <Return> {mted_setheight; focus $::mted; break}
+        bind $b.h <FocusOut> {mted_setheight}
+        foreach {w key lbl} {bb bold B ii italic I uu underline U} {
+            checkbutton $b.$w -text $lbl -variable ::mt($key) -indicatoron 0 -command {mted_restyle; focus $::mted} \
+                -width 2 -background "#353c47" -foreground "#d8dde4" -selectcolor $::accent -relief flat \
+                -activebackground "#46505e" -borderwidth 0 -font [list Helvetica 10 [dict get {bold bold italic italic underline underline} $key]]
+        }
+        foreach {w val lbl} {jl left L jc center C jr right R} {
+            radiobutton $b.$w -text $lbl -value $val -variable ::mt(justify) -indicatoron 0 \
+                -command {mted_restyle; focus $::mted} -width 2 -background "#353c47" -foreground "#d8dde4" \
+                -selectcolor $::accent -relief flat -activebackground "#46505e" -borderwidth 0
+        }
+        menubutton $b.sym -text "Symbols" -menu $b.sym.m -background "#353c47" -foreground "#d8dde4" \
+            -relief flat -activebackground "#46505e" -borderwidth 0 -padx 6
+        menu $b.sym.m -tearoff 0
+        mted_symbol_items $b.sym.m
+        grid $b.sl $b.style $b.fl $b.font $b.hl $b.h $b.bb $b.ii $b.uu $b.jl $b.jc $b.jr $b.sym -padx 2 -pady 3 -row 0
+    }
+    ttk::button $b.ok -text OK -style Tool.TButton -command {mted_done ok}
+    ttk::button $b.no -text Cancel -style Tool.TButton -command {mted_done cancel}
+    set hint [expr {$mode eq "mtext" ? "Enter: new line   Ctrl+Enter or click outside: done   Esc: cancel   Right-click: menu"
+                                      : "Enter: done   Esc: cancel   Right-click: menu"}]
+    label $b.hint -text $hint -background "#2b313b" -foreground "#8a94a3" -font {Helvetica 8}
+    if {$mode eq "mtext"} {
+        grid $b.ok -row 0 -column 13 -padx {8 2}
+        grid $b.no -row 0 -column 14 -padx {2 4}
+        grid $b.hint -row 1 -column 0 -columnspan 15 -sticky w -padx 4
+    } else {
+        grid $b.hint $b.ok $b.no -row 0 -padx 3 -pady 2
+    }
+
     if {$mode eq "mtext"} {
         bind $t <Control-Return> {mted_done ok; break}
         bind $t <KP_Enter> {mted_done ok; break}
@@ -449,21 +563,90 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0}} {
     bind $t <Tab> {$::mted insert insert "    " all; break}
     bind $t <<Modified>> {mted_fit}
     bind $t <KeyRelease> {mted_fit}
+    bind $t <Button-3> {mted_popup %X %Y; break}
+    bind $t <Control-b> {set ::mt(bold) [expr {!$::mt(bold)}]; mted_restyle; break}
+    bind $t <Control-i> {set ::mt(italic) [expr {!$::mt(italic)}]; mted_restyle; break}
+    bind $t <Control-u> {set ::mt(underline) [expr {!$::mt(underline)}]; mted_restyle; break}
+    bind $t <Control-a> {$::mted tag add sel 1.0 end; break}
     set ::mted $t
     set ::mted_geom [list $mode $x $y $width $ls $minh]
     mted_fit
-    place .mtedbar -in .c -x $x -y [expr {$y >= 26 ? $y - 26 : $y + [winfo reqheight $f] + 4}]
-    raise .mtedbar
+    update idletasks
+    set bw [winfo reqwidth $b]; set bh [winfo reqheight $b]
+    set bx [expr {max(2, min($x - 4, [winfo width .c] - $bw - 2))}]
+    set by [expr {$y - $bh - 4 >= 0 ? $y - $bh - 4 : $y + [winfo reqheight $f] + 4}]
+    place $b -in .c -x $bx -y $by
+    raise $b
     $t mark set insert end
     $t see insert
     focus $t
     set ::mted_result ""
     vwait ::mted_result
     set r $::mted_result
-    destroy .mtedbar $f
+    destroy $b $f
     set ::mted ""
     focus .cmd.e
     return $r
+}
+proc mted_setheight {} {
+    if {[string is double -strict $::mt(hentry)] && $::mt(hentry) > 0} {
+        set ::mt(height) $::mt(hentry)
+        mted_restyle
+    } else {
+        set ::mt(hentry) [format %g $::mt(height)]
+    }
+}
+proc mted_symbol_items {m} {
+    foreach {lbl ch} [list "Degree  \u00B0" \u00B0 "Plus/Minus  \u00B1" \u00B1 "Diameter  \u2300" \u2300 \
+                          "Almost equal  \u2248" \u2248 "Angle  \u2220" \u2220 "Delta  \u0394" \u0394 \
+                          "Centerline  \u2104" \u2104 "Not equal  \u2260" \u2260 "Ohm  \u03A9" \u03A9 \
+                          "Squared  \u00B2" \u00B2 "Cubed  \u00B3" \u00B3 "Micro  \u00B5" \u00B5] {
+        $m add command -label $lbl -command [list mted_insert $ch]
+    }
+}
+proc mted_insert {s} {
+    if {$::mted eq ""} return
+    catch {$::mted delete sel.first sel.last}
+    $::mted insert insert $s all
+    mted_fit
+    focus $::mted
+}
+proc mted_popup {X Y} {
+    set m .mtedpop
+    catch {destroy $m}
+    menu $m -tearoff 0
+    set t $::mted
+    set hassel [expr {[llength [$t tag ranges sel]] > 0}]
+    $m add command -label "Undo" -accelerator Ctrl+Z -command {catch {$::mted edit undo}; mted_fit}
+    $m add command -label "Redo" -accelerator Ctrl+Y -command {catch {$::mted edit redo}; mted_fit}
+    $m add separator
+    $m add command -label "Cut" -accelerator Ctrl+X -command {tk_textCut $::mted; mted_fit} -state [expr {$hassel ? "normal" : "disabled"}]
+    $m add command -label "Copy" -accelerator Ctrl+C -command {tk_textCopy $::mted} -state [expr {$hassel ? "normal" : "disabled"}]
+    $m add command -label "Paste" -accelerator Ctrl+V -command {tk_textPaste $::mted; $::mted tag add all 1.0 end; mted_fit}
+    $m add command -label "Delete" -command {catch {$::mted delete sel.first sel.last}; mted_fit} -state [expr {$hassel ? "normal" : "disabled"}]
+    $m add separator
+    $m add command -label "Select All" -accelerator Ctrl+A -command {$::mted tag add sel 1.0 end}
+    $m add cascade -label "Insert Symbol" -menu $m.sym
+    menu $m.sym -tearoff 0
+    mted_symbol_items $m.sym
+    if {$::mt(mode) eq "mtext"} {
+        $m add separator
+        $m add command -label "Change Case: UPPER" -command {mted_case toupper}
+        $m add command -label "Change Case: lower" -command {mted_case tolower}
+    }
+    $m add separator
+    $m add command -label "OK" -command {mted_done ok}
+    $m add command -label "Cancel" -command {mted_done cancel}
+    tk_popup $m $X $Y
+}
+proc mted_case {fn} {
+    set t $::mted
+    if {[llength [$t tag ranges sel]]} { set a sel.first; set z sel.last } else { set a 1.0; set z end-1c }
+    set s [string $fn [$t get $a $z]]
+    set ia [$t index $a]
+    $t delete $a $z
+    $t insert $ia $s all
+    mted_fit
 }
 proc mted_fit {} {
     set t $::mted
@@ -471,6 +654,7 @@ proc mted_fit {} {
     $t edit modified 0
     $t tag add all 1.0 end
     lassign $::mted_geom mode x y width ls minh
+    set ls [font metrics [$t cget -font] -linespace]
     if {$mode eq "mtext" && $width > 0} {
         set w [expr {$width + 8}]
     } else {
@@ -485,18 +669,228 @@ proc mted_fit {} {
     if {$n eq "" || $n < 1} { set n 1 }
     place .mtedf -in .c -x [expr {$x - 4}] -y [expr {$y - 2}] -width $w -height [expr {max($n * $ls + 6, $minh)}]
     raise .mtedf
+    catch {raise .mtedbar}
 }
 proc mted_done {how} {
     if {$::mted eq ""} return
     if {$how eq "cancel"} { set ::mted_result CANCEL; return }
+    if {$::mt(mode) eq "mtext"} { mted_setheight }
     set s [$::mted get 1.0 end-1c]
-    lassign $::mted_geom mode
-    if {$mode eq "mtext"} {
-        set s [string map [list "\\" "\\\\" "\n" "\\P"] [string trimright $s "\n"]]
+    if {$::mt(mode) eq "mtext"} {
+        set s [string map [list "\\" "\\\\" "\{" "\\\{" "\}" "\\\}" "\n" "\\P"] [string trimright $s "\n"]]
     } else {
         set s [string map {"\n" " "} $s]
     }
-    set ::mted_result "OK $s"
+    set fields [list $::mt(style) $::mt(font) $::mt(height) $::mt(bold) $::mt(italic) $::mt(underline) $::mt(justify) $s]
+    set ::mted_result "OK [join $fields \x1f]"
+}
+
+# right-click menu for the command line
+proc cmdline_popup {X Y} {
+    set m .cmdpop
+    catch {destroy $m}
+    menu $m -tearoff 0
+    set e .cmd.e
+    set hassel [$e selection present]
+    $m add command -label "Cut" -accelerator Ctrl+X -command {event generate .cmd.e <<Cut>>} -state [expr {$hassel ? "normal" : "disabled"}]
+    $m add command -label "Copy" -accelerator Ctrl+C -command {event generate .cmd.e <<Copy>>} -state [expr {$hassel ? "normal" : "disabled"}]
+    $m add command -label "Paste" -accelerator Ctrl+V -command {event generate .cmd.e <<Paste>>}
+    $m add separator
+    $m add command -label "Select All" -command {.cmd.e selection range 0 end; .cmd.e icursor end}
+    $m add command -label "Clear" -command {.cmd.e delete 0 end}
+    if {[info exists ::cmdhist] && [llength $::cmdhist]} {
+        $m add separator
+        $m add cascade -label "Recent Input" -menu $m.recent
+        menu $m.recent -tearoff 0
+        foreach h [lrange [lreverse [lsort -unique $::cmdhist]] 0 11] {
+            $m.recent add command -label $h -command [list apply {{h} {.cmd.e delete 0 end; .cmd.e insert 0 $h; focus .cmd.e}} $h]
+        }
+    }
+    tk_popup $m $X $Y
+}
+# right-click menu for the command history: copy
+proc hist_popup {X Y} {
+    set m .histpop
+    catch {destroy $m}
+    menu $m -tearoff 0
+    $m add command -label "Copy" -command {catch {clipboard clear; clipboard append [.h get sel.first sel.last]}}
+    $m add command -label "Copy All" -command {clipboard clear; clipboard append [.h get 1.0 end-1c]}
+    $m add command -label "Select All" -command {.h tag add sel 1.0 end}
+    tk_popup $m $X $Y
+}
+
+# ---------------------------------------------------------------- text style dialog (STYLE)
+# records: list of {name font bold italic height width oblique}; current: style name.
+# Returns "CANCEL" or  current \x1e rec \x1e rec ...  with each rec's fields joined by \x1f.
+proc styledlg {records current} {
+    set w .sty
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Text Style"
+    wm transient $w .
+    array unset ::sty
+    array unset ::stydata
+    set ::sty(order) {}
+    foreach r $records {
+        lassign $r name font bold italic height width oblique
+        lappend ::sty(order) $name
+        set ::stydata($name) [list $font $bold $italic $height $width $oblique]
+    }
+    set ::sty(current) $current
+    set ::sty(sel) ""
+    set f [ttk::frame $w.f -padding 10]
+    pack $f -fill both -expand 1
+    ttk::label $f.cur -text "Current text style: $current" -style Dim.TLabel
+    grid $f.cur -row 0 -column 0 -columnspan 3 -sticky w -pady {0 6}
+    # styles list
+    ttk::label $f.sl -text "Styles:"
+    listbox $f.list -height 12 -width 20 -exportselection 0 -background $::panel2 -foreground $::fg \
+        -selectbackground $::accent -borderwidth 0 -highlightthickness 0 -activestyle none
+    grid $f.sl -row 1 -column 0 -sticky w
+    grid $f.list -row 2 -column 0 -rowspan 8 -sticky nsew -padx {0 12}
+    bind $f.list <<ListboxSelect>> {styledlg_select [.sty.f.list get [.sty.f.list curselection]]}
+    # font
+    ttk::label $f.fl -text "Font name:"
+    ttk::combobox $f.font -values [mted_families] -textvariable ::sty(font) -width 26
+    bind $f.font <<ComboboxSelected>> styledlg_preview
+    bind $f.font <KeyRelease> styledlg_preview
+    ttk::label $f.stl -text "Font style:"
+    set fs [ttk::frame $f.fs]
+    ttk::checkbutton $fs.b -text Bold -variable ::sty(bold) -command styledlg_preview
+    ttk::checkbutton $fs.i -text Italic -variable ::sty(italic) -command styledlg_preview
+    pack $fs.b $fs.i -side left -padx {0 10}
+    ttk::label $f.hl -text "Height (0 = ask when placing):"
+    ttk::entry $f.h -textvariable ::sty(height) -width 10
+    ttk::label $f.wl -text "Width factor:"
+    ttk::entry $f.wf -textvariable ::sty(width) -width 10
+    ttk::label $f.ol -text "Oblique angle:"
+    ttk::entry $f.ob -textvariable ::sty(oblique) -width 10
+    canvas $f.pv -width 320 -height 80 -background "#171c23" -highlightthickness 0
+    set row 1
+    foreach {l v} [list $f.fl $f.font $f.stl $f.fs $f.hl $f.h $f.wl $f.wf $f.ol $f.ob] {
+        grid $l -row $row -column 1 -sticky w -pady 2
+        grid $v -row $row -column 2 -sticky w -pady 2
+        incr row
+    }
+    grid $f.pv -row $row -column 1 -columnspan 2 -sticky ew -pady {8 0}
+    # buttons
+    set lb [ttk::frame $f.lb]
+    ttk::button $lb.cur -text "Set Current" -command styledlg_setcurrent
+    ttk::button $lb.new -text "New..." -command styledlg_new
+    ttk::button $lb.del -text "Delete" -command styledlg_delete
+    pack $lb.cur $lb.new $lb.del -side left -padx {0 4}
+    grid $lb -row 10 -column 0 -columnspan 2 -sticky w -pady {10 0}
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.ok -text "OK" -command {styledlg_done 1}
+    ttk::button $bb.cancel -text "Cancel" -command {styledlg_done 0}
+    pack $bb.cancel $bb.ok -side right -padx 3
+    grid $bb -row 10 -column 2 -sticky e -pady {10 0}
+    bind $w <Escape> {styledlg_done 0}
+    styledlg_fill
+    styledlg_select $current
+    set ::sty(result) CANCEL
+    wm geometry $w +[expr {[winfo rootx .] + 180}]+[expr {[winfo rooty .] + 100}]
+    grab $w
+    tkwait window $w
+    return $::sty(result)
+}
+proc styledlg_fill {} {
+    set l .sty.f.list
+    $l delete 0 end
+    foreach n $::sty(order) { $l insert end $n }
+}
+proc styledlg_store {} {
+    # keep the fields of the style being edited
+    set n $::sty(sel)
+    if {$n eq "" || ![info exists ::stydata($n)]} return
+    set ::stydata($n) [list $::sty(font) $::sty(bold) $::sty(italic) $::sty(height) $::sty(width) $::sty(oblique)]
+}
+proc styledlg_select {name} {
+    if {$name eq ""} return
+    styledlg_store
+    set ::sty(sel) $name
+    lassign $::stydata($name) ::sty(font) ::sty(bold) ::sty(italic) ::sty(height) ::sty(width) ::sty(oblique)
+    set i [lsearch -exact $::sty(order) $name]
+    .sty.f.list selection clear 0 end
+    .sty.f.list selection set $i
+    .sty.f.list see $i
+    styledlg_preview
+}
+proc styledlg_preview {} {
+    set c .sty.f.pv
+    $c delete all
+    set f [list [tkfamily $::sty(font)] -30]
+    if {$::sty(bold)} { lappend f bold }
+    if {$::sty(italic)} { lappend f italic }
+    $c create text 12 40 -anchor w -text "AaBbCc 123" -font $f -fill "#ffffff"
+}
+proc styledlg_setcurrent {} {
+    set ::sty(current) $::sty(sel)
+    .sty.f.cur configure -text "Current text style: $::sty(current)"
+}
+proc styledlg_new {} {
+    set name [styledlg_askname]
+    if {$name eq ""} return
+    if {[lsearch -exact -nocase $::sty(order) $name] >= 0} {
+        tk_messageBox -parent .sty -title "Text Style" -message "A style called $name already exists."
+        return
+    }
+    styledlg_store
+    set ::stydata($name) $::stydata($::sty(sel))
+    lappend ::sty(order) $name
+    styledlg_fill
+    set ::sty(sel) ""
+    styledlg_select $name
+}
+proc styledlg_askname {} {
+    set w .sty.ask
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "New Text Style"
+    wm transient $w .sty
+    set f [ttk::frame $w.f -padding 10]
+    pack $f
+    set ::sty(newname) "Style[expr {[llength $::sty(order)]}]"
+    ttk::label $f.l -text "Style name:"
+    ttk::entry $f.e -textvariable ::sty(newname) -width 24
+    ttk::button $f.ok -text OK -command {set ::sty(asked) 1; destroy .sty.ask}
+    ttk::button $f.no -text Cancel -command {set ::sty(asked) 0; destroy .sty.ask}
+    grid $f.l $f.e -sticky w -pady 2
+    grid $f.no $f.ok -sticky e -pady {8 0}
+    bind $f.e <Return> {set ::sty(asked) 1; destroy .sty.ask}
+    $f.e selection range 0 end
+    focus $f.e
+    set ::sty(asked) 0
+    grab $w
+    tkwait window $w
+    grab .sty
+    return [expr {$::sty(asked) ? [string trim $::sty(newname)] : ""}]
+}
+proc styledlg_delete {} {
+    set n $::sty(sel)
+    if {[string equal -nocase $n Standard]} {
+        tk_messageBox -parent .sty -title "Text Style" -message "The Standard style can't be deleted."
+        return
+    }
+    if {[string equal -nocase $n $::sty(current)]} {
+        tk_messageBox -parent .sty -title "Text Style" -message "$n is the current style. Set another style current first."
+        return
+    }
+    set i [lsearch -exact $::sty(order) $n]
+    set ::sty(order) [lreplace $::sty(order) $i $i]
+    unset ::stydata($n)
+    set ::sty(sel) ""
+    styledlg_fill
+    styledlg_select [lindex $::sty(order) 0]
+}
+proc styledlg_done {ok} {
+    if {$ok} {
+        styledlg_store
+        set recs [list $::sty(current)]
+        foreach n $::sty(order) { lappend recs [join [concat [list $n] $::stydata($n)] \x1f] }
+        set ::sty(result) [join $recs \x1e]
+    }
+    destroy .sty
 }
 
 # ---------------------------------------------------------------- file dialog
