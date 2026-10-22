@@ -177,6 +177,21 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+### Layers: No Plot
+
+The Layer Properties Manager has a **Plot** column: click it to switch a layer between Plot and
+No Plot. A No Plot layer is shown on screen but left out when you plot (as is AutoCAD's
+Defpoints layer). It is saved in the drawing (DXF group 290), so AutoCAD sees it too. At the
+command line: `-LAYER` → `Plot` → `No` → layer names.
+
+### Align (AL)
+
+Modify → Align. Select objects, then pick a source point and where it goes, and a second
+source point and where it goes; the objects follow the mouse while you pick. Answer **Yes** to
+"Scale objects based on alignment points?" to stretch them so the two source points land
+exactly on the two destination points (the scale factor is shown); **No** only moves and turns
+them. Your last answer is the default next time.
+
 ### Match Properties (MATCHPROP, MA, PAINTER)
 
 Modify → Match Properties, or right-click a selected object → Match Properties. Pick the source
@@ -240,6 +255,10 @@ While typing in the text editor, unknown words get a red underline; right-click 
 suggestions, Add to Dictionary or Ignore.
 
 ### Command aliases
+
+Tools → Command Aliases → **Open Alias File** opens your alias file (`fancypencil.pgp`) in your
+text editor; save it there and the changes are used straight away (no REINIT needed).
+**Open Alias Folder** shows where it lives, and **Edit Aliases...** is the built-in editor.
 
 Aliases come from a `.pgp` file in AutoCAD's acad.pgp format (`L,  *LINE`). The shipped set is in
 `support/fancypencil.pgp`. ALIASEDIT opens an editor; saving writes your own copy to

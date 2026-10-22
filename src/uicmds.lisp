@@ -5,14 +5,36 @@
 
 ;;; ---------- ALIGN ----------
 
-(defcmd "ALIGN" ("AL") "Moves, rotates and optionally scales objects to line up with other objects."
+(defvar *align-scale* "No" "Last answer to ALIGN's scale question (offered as the default next time).")
+
+(defun align-xf (s1 d1 s2 d2 scale)
+  "Move S1 to D1, turn S1->S2 onto D1->D2 and, when SCALE, stretch it to the same length."
+  (let ((xf (xf-move (v- d1 s1))))
+    (when (and s2 d2 (> (dist2d s1 s2) 1d-12) (> (dist2d d1 d2) 1d-12))
+      (setf xf (xf-compose xf (xf-rotate d1 (- (ang d1 d2) (ang s1 s2)))))
+      (when scale (setf xf (xf-compose xf (xf-scaler d1 (/ (dist2d d1 d2) (dist2d s1 s2)))))))
+    xf))
+
+(defun align-preview (ents fn)
+  "A drag function showing ENTS transformed by (FN cursor)."
+  (let ((datas (mapcar #'ent-data ents)))
+    (lambda (cur)
+      (let ((xf (funcall fn cur)))
+        (and xf (mapcar (lambda (dd) (list :data (xform-data dd xf))) datas))))))
+
+(defcmd "ALIGN" ("AL") "Moves, rotates and optionally scales objects so two points line up with two others."
   (let ((ents (get-selection)))
     (when ents
       (let* ((s1 (gpoint "Specify first source point: "))
-             (d1 (and (pointp s1) (gpoint "Specify first destination point: " :base s1))))
-        (when (and (pointp s1) (pointp d1))
-          (let* ((s2 (gpoint "Specify second source point or <continue>: "))
-                 (d2 (and (pointp s2) (gpoint "Specify second destination point: " :base s2))))
+             (d1 (and (pointp s1)
+                      (gpoint "Specify first destination point: " :base s1
+                              :drag (align-preview ents (lambda (c) (xf-move (v- c s1))))))))
+        (when (pointp d1)
+          (let* ((s2 (gpoint "Specify second source point or <continue>: "
+                             :drag (align-preview ents (lambda (c) (declare (ignore c)) (xf-move (v- d1 s1))))))
+                 (d2 (and (pointp s2)
+                          (gpoint "Specify second destination point: " :base d1
+                                  :drag (align-preview ents (lambda (c) (align-xf s1 d1 s2 c (string-equal *align-scale* "Yes"))))))))
             (if (not (and (pointp s2) (pointp d2)))
                 ;; one pair: a plain move
                 (transform-entities ents (xf-move (v- d1 s1)))
@@ -21,13 +43,13 @@
                   (let ((s3 (gpoint "Specify third source point or <continue>: ")))
                     (when (pointp s3) (gpoint "Specify third destination point: " :base s3)))
                   (let* ((ls (dist2d s1 s2)) (ld (dist2d d1 d2))
-                         (scale (and (> ls 1d-12)
-                                     (equal (gkw "Scale objects based on alignment points? [Yes/No] <N>: " '("Yes" "No") "No") "Yes")))
-                         (xf (xf-compose (xf-move (v- d1 s1))
-                                         (xf-rotate d1 (- (ang d1 d2) (ang s1 s2))))))
-                    (when (and scale (> ld 1d-12))
-                      (setf xf (xf-compose xf (xf-scaler d1 (/ ld ls)))))
-                    (transform-entities ents xf))))))))))
+                         (ans (gkw (format nil "Scale objects based on alignment points? [Yes/No] <~A>: " *align-scale*)
+                                   '("Yes" "No") *align-scale*))
+                         (scale (string-equal ans "Yes")))
+                    (setf *align-scale* (if scale "Yes" "No"))
+                    (transform-entities ents (align-xf s1 d1 s2 d2 scale))
+                    (when (and scale (> ls 1d-12))
+                      (out (format nil "Scaled by ~A.~%" (fmt-num (/ ld ls))))))))))))))
 
 ;;; ---------- right-click on the drawing ----------
 

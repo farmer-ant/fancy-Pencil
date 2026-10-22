@@ -10,7 +10,8 @@
   handle data (deleted nil))
 
 (defstruct layer
-  name (color 7) (ltype "CONTINUOUS") (on t) (frozen nil) (locked nil) (lineweight -3))
+  name (color 7) (ltype "CONTINUOUS") (on t) (frozen nil) (locked nil) (lineweight -3)
+  (plot t))              ; NIL: a no-plot layer (shown on screen, left out of plots)
 
 (defstruct ltype name (desc "") (pattern nil))
 

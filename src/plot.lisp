@@ -191,7 +191,7 @@
   (let ((type (dxf 0 data)))
     (when (> depth 8) (return-from plot-data nil))
     (let ((layer (find-layer (dxf 8 data))))
-      (when (and layer (or (not (layer-visible-p layer)) (string-equal (layer-name layer) "Defpoints")))
+      (when (and layer (or (not (layer-visible-p layer)) (not (layer-plot layer)) (string-equal (layer-name layer) "Defpoints")))
         (return-from plot-data nil)))
     (let ((color (plot-color aci))
           (lw (plot-lw-mm (entity-lineweight data parent-lw))))
