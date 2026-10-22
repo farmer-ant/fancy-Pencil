@@ -177,6 +177,26 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+### Copy and paste between drawings
+
+Edit → Copy (Ctrl+C) puts the selected objects on the clipboard; switch to another drawing tab, or
+another Fancy Pencil window, and use Edit → Paste (Ctrl+V) to place them at a point you pick.
+Objects arrive with what they need: their layers (colour, linetype, lineweight), linetypes, text
+styles, dimension styles and block definitions. If the target drawing already has a layer, style
+or block of the same name, its own definition is used, as in AutoCAD.
+
+| Command | Keys | |
+|---|---|---|
+| COPYCLIP | Ctrl+C | copy the selection (base point: its lower-left corner) |
+| COPYBASE | Ctrl+Shift+C | copy with a base point you pick |
+| CUTCLIP | Ctrl+X | copy, then erase |
+| PASTECLIP | Ctrl+V | paste at a point you pick |
+| PASTEBLOCK | Ctrl+Shift+V | paste as one block |
+| PASTEORIG | | paste at the same coordinates as the original |
+
+While typing in the text editor or a dialog, Ctrl+C/V copy and paste text as usual; on the
+command line they copy selected text, or paste text once you've started typing.
+
 ### Plotting (PLOT, Ctrl+P)
 
 File → Plot... (or PLOT / PRINT, Ctrl+P) opens the Plot dialog:

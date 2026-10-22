@@ -79,14 +79,6 @@
   (take-pickfirst)
   (when (gui-p) (sweep-highlights) (refresh-grips) (refresh-palette)))
 
-(defcmd "CUTCLIP" () "Copies the selection to the clipboard and erases it."
-  (let ((ents (get-selection)))
-    (when ents
-      (let ((b (drawing-extents ents)))
-        (setf *clipboard* (list (pt (first b) (second b)) (mapcar (lambda (e) (copy-tree (ent-data e))) ents))))
-      (dolist (e ents) (delete-entity e))
-      (out (format nil "~D object~:P cut to the clipboard.~%" (length ents))))))
-
 ;;; ---------- Object Snap settings ----------
 
 (defun osnap-dialog ()

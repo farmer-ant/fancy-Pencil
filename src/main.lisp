@@ -6,13 +6,15 @@
 
 (defvar *in-undo-group* nil)
 (defun with-undo-group (thunk)
-  (let ((snap (take-snapshot)) (mc (drawing-modcount *dwg*)) (*in-undo-group* t))
-    (unwind-protect (funcall thunk)
-      (when (/= mc (drawing-modcount *dwg*))
-        (push snap (drawing-undo *dwg*))
-        (setf (drawing-redo *dwg*) nil)
-        (when (> (length (drawing-undo *dwg*)) 200)
-          (setf (drawing-undo *dwg*) (subseq (drawing-undo *dwg*) 0 200)))))))
+  (let ((snap (take-snapshot)) (dwg *dwg*) (mc (drawing-modcount *dwg*)) (undos *undo-ran*))
+    (unwind-protect (let ((*in-undo-group* t)) (funcall thunk))
+      ;; undoing is not itself a step to undo (*undo-ran* counts U/REDO, from any thread);
+      ;; the step belongs to the drawing it started in, even if another tab is current now
+      (when (and (= undos *undo-ran*) (/= mc (drawing-modcount dwg)))
+        (push snap (drawing-undo dwg))
+        (setf (drawing-redo dwg) nil)
+        (when (> (length (drawing-undo dwg)) 200)
+          (setf (drawing-undo dwg) (subseq (drawing-undo dwg) 0 200)))))))
 
 (defparameter *no-repeat-commands*
   '("NEW" "OPEN" "QSAVE" "SAVE" "SAVEAS" "SAVEASR12" "DXFIN" "DXFOUT" "QUIT" "APPLOAD" "SCRIPT"

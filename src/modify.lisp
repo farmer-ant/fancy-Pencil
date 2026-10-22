@@ -632,19 +632,5 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
                               (:pt (second pc)))
                     do (add (list (cons 0 "POINT") (cons 10 p)))))))))))
 
-;;; ---------- clipboard ----------
+;;; clipboard commands: see clip.lisp
 
-(defcmd "COPYCLIP" () "Copies selected objects to the Fancy Pencil clipboard."
-  (let ((ents (get-selection)))
-    (when ents
-      (let ((b (drawing-extents ents)))
-        (setf *clipboard* (list (pt (first b) (second b)) (mapcar (lambda (e) (copy-tree (ent-data e))) ents)))
-        (out (format nil "~D object~:P copied.~%" (length ents)))))))
-
-(defcmd "PASTECLIP" () "Pastes objects from the Fancy Pencil clipboard."
-  (if (null *clipboard*) (out (format nil "Clipboard is empty.~%"))
-      (destructuring-bind (base datas) *clipboard*
-        (let ((p (gpoint "Specify insertion point: "
-                         :drag (lambda (cur) (mapcar (lambda (dd) (list :data (xform-data dd (xf-move (v- cur base))))) datas)))))
-          (when (pointp p)
-            (dolist (dd datas) (add-entity (rem-dxf 5 (xform-data dd (xf-move (v- p base)))))))))))

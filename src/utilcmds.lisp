@@ -140,7 +140,7 @@
 ;;; ---------- undo ----------
 
 (defun undo-one ()
-  (let ((snap (pop (drawing-undo *dwg*))))
+  (let ((snap (progn (incf *undo-ran*) (pop (drawing-undo *dwg*)))))
     (if snap
         (progn (push (take-snapshot) (drawing-redo *dwg*)) (restore-snapshot snap) t)
         (progn (out (format nil "Everything has been undone~%")) nil))))
@@ -153,7 +153,7 @@
         (loop while (drawing-undo *dwg*) do (undo-one))
         (loop repeat (or n 1) while (undo-one)))))
 (defcmd "REDO" ("MREDO") "Reverses the effects of the previous UNDO."
-  (let ((snap (pop (drawing-redo *dwg*))))
+  (let ((snap (progn (incf *undo-ran*) (pop (drawing-redo *dwg*)))))
     (if snap (progn (push (take-snapshot) (drawing-undo *dwg*)) (restore-snapshot snap) (out (format nil "Redo~%")))
         (out (format nil "Nothing to redo~%")))))
 
