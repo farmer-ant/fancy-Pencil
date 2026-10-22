@@ -32,6 +32,10 @@
 :underline :justify); :text is MTEXT-encoded in :mtext mode. Esc cancels the command."
   ;; clear the rubber band / crosshair left by the previous prompt
   (tk-send-string ".c delete tmp")
+  ;; spelling: the window underlines unknown words using this word list
+  (ignore-errors
+   (ensure-spell-dictionary)
+   (tk "set ::spell_file ~A; set ::spell_custom ~A" (tq (namestring (spell-cache-path))) (tq (namestring (custom-dict-path)))))
   (let* ((st (or (find-textstyle style) (current-textstyle)))
          (given font)
          (font (or font (textstyle-font st)))

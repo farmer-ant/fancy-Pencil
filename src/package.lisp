@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.12")
+(defparameter *version* "0.3.13")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -21,3 +21,4 @@
 (defvar *cw* 1000) (defvar *ch* 600)
 (defvar *last-command* nil "Command repeated by Enter at an empty prompt.")
 (defvar *lisp-buffer* "" "Unfinished AutoLISP typed at the command line.")
+(defvar *plotting* nil "True while generating a plot (turns off screen-only simplifications).")

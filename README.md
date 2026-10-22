@@ -177,6 +177,34 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+### Plotting (PLOT, Ctrl+P)
+
+File → Plot... (or PLOT / PRINT, Ctrl+P) opens the Plot dialog:
+
+- **Printer/plotter**: "PDF file" or any printer your system knows (from CUPS, `lpstat`).
+- **Paper size**: Letter, Legal, Tabloid, ANSI C–E, ARCH A–E and ISO A4–A0; portrait or landscape.
+- **Plot area**: Display, Extents, Limits or Window (pick two corners on the drawing).
+- **Scale**: Fit to paper, 1:1, 1:2 … 1:100, or architectural scales such as `1/4" = 1'-0"` and
+  `1/8" = 1'-0"`; drawing units (inches or feet) are taken from the drawing. Centre on paper.
+- **Black only** (monochrome) and **plot with lineweights**.
+- **Preview** shows the page before you plot. A PDF can be opened in your viewer when it's written;
+  printing goes through `lp` at true scale (no "fit to page" by the printer).
+
+`-PLOT` asks the same questions at the command line, for scripts and AutoLISP:
+`(command "-plot" "" "ARCH D" "Landscape" "Extents" "1/8\"=1'-0\"" "No" "/tmp/plan.pdf")`.
+
+### Spelling (SPELL, SP)
+
+Tools → Spelling... checks TEXT, MTEXT, attributes and dimension text. Select objects, or press
+Enter to check the whole drawing. Each unknown word is shown on screen with suggestions:
+Change, Change All, Ignore, Ignore All, Add to Dictionary. The dictionary is your system's
+Hunspell English dictionary when installed (`/usr/share/hunspell/en_US`), otherwise the copy in
+`support/dict`, plus common drafting words and abbreviations; words you add go to
+`~/.config/fancypencil/custom.dic`.
+
+While typing in the text editor, unknown words get a red underline; right-click one for
+suggestions, Add to Dictionary or Ignore.
+
 ### Command aliases
 
 Aliases come from a `.pgp` file in AutoCAD's acad.pgp format (`L,  *LINE`). The shipped set is in
@@ -238,12 +266,12 @@ layers with color, linetype, lineweight, on/off, freeze and lock; linetype and d
 
 ## What's not there (yet)
 
-Compared with AutoCAD, this version does not have: DWG files (a proprietary format), paper space
-and layouts, text styles and fonts (all text uses one sans-serif font), gradient fills, associative
-hatches and dimensions (they don't follow edits to their boundary objects), UCS, 3D, plotting, and
-ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. TRIM and EXTEND (Shift+click switches between them, as in AutoCAD) work on lines, arcs, circles and
-polylines but not ellipses or splines. Express Tools that depend on fonts or external references
-(TXTEXP, XREF tools) are not included.
+Compared with AutoCAD, this version does not have: paper space and layouts (plotting is from
+model space), gradient fills, associative hatches and dimensions (they don't follow edits to
+their boundary objects), UCS, 3D, and ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. DWG
+files are opened and saved through a converter (ODA File Converter or LibreDWG). TRIM and EXTEND
+(Shift+click switches between them) work on lines, arcs, circles and polylines but not ellipses
+or splines. Express Tools that depend on external references (XREF tools) are not included.
 
 ## Tests
 
