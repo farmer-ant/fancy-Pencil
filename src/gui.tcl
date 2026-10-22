@@ -118,6 +118,13 @@ mcmd .mb.file "Exit" QUIT
 mcmd .mb.edit "Undo" U Ctrl+Z
 mcmd .mb.edit "Redo" REDO Ctrl+Y
 .mb.edit add separator
+mcmd .mb.edit "Cut" CUTCLIP Ctrl+X
+mcmd .mb.edit "Copy" COPYCLIP Ctrl+C
+mcmd .mb.edit "Copy with Base Point" COPYBASE Ctrl+Shift+C
+mcmd .mb.edit "Paste" PASTECLIP Ctrl+V
+mcmd .mb.edit "Paste as Block" PASTEBLOCK Ctrl+Shift+V
+mcmd .mb.edit "Paste to Original Coordinates" PASTEORIG
+.mb.edit add separator
 mcmd .mb.edit "Erase" ERASE Del
 mcmd .mb.edit "Select All" SELECTALL Ctrl+A
 
@@ -391,8 +398,28 @@ bind all <Control-ISO_Left_Tab> {emit MENU DOCPREV; break}
 bind all <Control-Shift-Tab> {emit MENU DOCPREV; break}
 bind all <Control-F4> {emit MENU CLOSE; break}
 bind all <Control-a> {emit MENU SELECTALL; break}
-bind all <Control-c> {emit MENU COPYCLIP; break}
-bind all <Control-v> {emit MENU PASTECLIP; break}
+# Ctrl+C/X/V copy, cut and paste drawing objects, except while typing in a text box:
+# the text editor and dialog fields keep their own text copy/paste; on the command line,
+# Ctrl+C with text selected copies the text, and Ctrl+V pastes text once you've started typing.
+proc clipkey {cmd} {
+    set w [focus]
+    if {$w ne "" && [winfo exists $w] && $w ne ".cmd.e" &&
+        [winfo class $w] in {Text Entry TEntry TCombobox Spinbox TSpinbox Listbox}} return
+    if {$w eq ".cmd.e"} {
+        # the command line's own text copy/paste already ran (see its bindings below)
+        if {$cmd in {COPYCLIP CUTCLIP COPYBASE} && [.cmd.e selection present]} return
+        if {$cmd in {PASTECLIP PASTEBLOCK} && [string trim [.cmd.e get]] ne ""} return
+    }
+    emit MENU $cmd
+}
+bind all <Control-c> {clipkey COPYCLIP; break}
+bind all <Control-v> {clipkey PASTECLIP; break}
+bind all <Control-x> {clipkey CUTCLIP; break}
+bind all <Control-C> {clipkey COPYBASE; break}
+bind all <Control-V> {clipkey PASTEBLOCK; break}
+bind .cmd.e <Control-c> {if {[.cmd.e selection present]} { continue } { clipkey COPYCLIP; break }}
+bind .cmd.e <Control-x> {if {[.cmd.e selection present]} { continue } { clipkey CUTCLIP; break }}
+bind .cmd.e <Control-v> {if {[string trim [.cmd.e get]] ne ""} { continue } { clipkey PASTECLIP; break }}
 wm protocol . WM_DELETE_WINDOW {emit MENU QUIT}
 focus .cmd.e
 
