@@ -124,6 +124,8 @@
                       (list (pt x0 y0) (pt x1 y0) (pt x1 y1) (pt x0 y1))))
            (proj (mapcar (lambda (c) (+ (* (- (px c) (px base)) (px nrm)) (* (- (py c) (py base)) (py nrm)))) corners)))
       (when (< (abs spacing) 1d-12) (return-from hatch-family-segments nil))
+      (when (and (eq *ui* :gui) (< (* (abs spacing) *vscale*) 2d0))
+        (return-from hatch-family-segments :too-dense))
       (let ((k0 (floor (/ (reduce #'min proj) spacing))) (k1 (ceiling (/ (reduce #'max proj) spacing))))
         (when (> k0 k1) (rotatef k0 k1))
         (when (> (- k1 k0) max-lines) (return-from hatch-family-segments :too-dense))
