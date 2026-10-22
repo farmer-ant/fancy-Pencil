@@ -8,23 +8,33 @@
 (defparameter *files* '("package" "geom" "db" "textstyle" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
                          "commands" "dims" "leader" "modify" "modify2" "cmds2" "utilcmds" "dwg" "props" "express" "textcmds" "docs" "uicmds" "clip" "matchprop" "spell" "plot" "main"))
 
+;; A compiled file is used only if it was built from exactly this source file: each one has a
+;; stamp recording its source's date and size. (Comparing dates alone fails after an update,
+;; because unpacked files carry their release date, which can be older than the old build.)
+;; Once one file is recompiled, every file after it is too: they may use its structures and macros.
+(defun source-stamp (src)
+  (format nil "~D ~D" (file-write-date src) (with-open-file (i src :element-type '(unsigned-byte 8)) (file-length i))))
+
+(defun stamp-matches-p (stamp-file src)
+  (and (probe-file stamp-file)
+       (equal (with-open-file (i stamp-file) (read-line i nil "")) (source-stamp src))))
+
 (let ((*compile-verbose* nil) (*compile-print* nil) (*load-verbose* nil))
   (handler-bind ((style-warning #'muffle-warning)
                  #+sbcl (sb-ext:compiler-note #'muffle-warning))
-    ;; once one file is recompiled, every file after it is too: they may depend on its
-    ;; structures and macros (an update otherwise could load stale compiled code and fail)
-    (let ((rebuild nil) (newest 0))
+    (let ((rebuild nil))
      (dolist (f *files*)
       (let ((src (merge-pathnames (format nil "src/~A.lisp" f) *root*)))
         #+(or sbcl ccl)
-        (let ((fasl (merge-pathnames (format nil "build/~A-~A.fasl" f (lisp-implementation-type)) *root*)))
+        (let* ((fasl (merge-pathnames (format nil "build/~A-~A.fasl" f (lisp-implementation-type)) *root*))
+               (stamp (make-pathname :type "stamp" :defaults fasl)))
           (ensure-directories-exist fasl)
-          (when (or rebuild (not (probe-file fasl))
-                    (> (file-write-date src) (file-write-date fasl))
-                    (< (file-write-date fasl) newest))     ; older than a file it builds on
+          (when (or rebuild (not (probe-file fasl)) (not (stamp-matches-p stamp src)))
             (setf rebuild t)
-            (compile-file src :output-file fasl))
-          (setf newest (max newest (file-write-date fasl)))
+            (ignore-errors (delete-file stamp))
+            (compile-file src :output-file fasl)
+            (with-open-file (o stamp :direction :output :if-exists :supersede)
+              (write-line (source-stamp src) o)))
           (load fasl))
         #-(or sbcl ccl)
         (load src))))))
