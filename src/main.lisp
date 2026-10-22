@@ -19,7 +19,7 @@
     "PURGE" "ALIASEDIT" "REINIT" "HELP" "ABOUT" "U" "UNDO" "REDO" "OOPS" "LAYER" "LINETYPE" "LWEIGHT"
     "DIMSTYLE" "UNITS" "SETVAR" "OSNAP" "PROPERTIES" "SELECTALL" "COPYCLIP" "REGEN" "HPSET"
     "CLOSE" "CLOSEALL" "DOCSWITCH" "DOCCLOSE" "DOCNEXT" "DOCPREV" "SYSWINDOWS" "STYLE" "TEXTEDIT"
-    "DESELECT" "-OSNAP" "DDOSNAP" "CUTCLIP")
+    "DESELECT" "-OSNAP" "DDOSNAP" "CUTCLIP" "PLOT" "-PLOT")
   "Commands that Enter at an empty prompt does not repeat (file, setup and undo commands).")
 
 (defun remember-command (word name)

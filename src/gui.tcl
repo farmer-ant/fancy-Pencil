@@ -108,6 +108,7 @@ mcmd .mb.file "Close" CLOSE Ctrl+F4
 mcmd .mb.file "Close All" CLOSEALL
 mcmd .mb.file "Save" QSAVE Ctrl+S
 mcmd .mb.file "Save As..." SAVEAS
+mcmd .mb.file "Plot..." PLOT Ctrl+P
 .mb.file add separator
 mcmd .mb.file "Import DXF..." DXFIN
 mcmd .mb.file "Export DXF..." DXFOUT
@@ -164,6 +165,7 @@ mcmd .mb.tools "Load AutoLISP..." APPLOAD
 mcmd .mb.tools "Edit Command Aliases..." ALIASEDIT
 mcmd .mb.tools "Reload Aliases" REINIT
 mcmd .mb.tools "Object Snap Settings..." OSNAP
+mcmd .mb.tools "Spelling..." SPELL
 mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
 mcmd .mb.tools "List" LIST
@@ -383,6 +385,7 @@ bind all <Control-y> {emit MENU REDO; break}
 bind all <Control-s> {emit MENU QSAVE; break}
 bind all <Control-o> {emit MENU OPEN; break}
 bind all <Control-n> {emit MENU NEW; break}
+bind all <Control-p> {emit MENU PLOT; break}
 bind all <Control-Tab> {emit MENU DOCNEXT; break}
 bind all <Control-ISO_Left_Tab> {emit MENU DOCPREV; break}
 bind all <Control-Shift-Tab> {emit MENU DOCPREV; break}
@@ -578,6 +581,8 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
         -insertwidth 2 -relief flat -borderwidth 0 -highlightthickness 0 -padx 3 -pady 1 \
         -undo 1 -selectbackground $::accent -wrap [expr {$mode eq "mtext" && $width > 0 ? "word" : "none"}]
     $t tag configure all -justify $justify
+    $t tag configure misspelled -underline 1
+    catch {$t tag configure misspelled -underlinefg "#ff5050"}
     $t insert end $init all
     $t edit reset
     pack $t -padx 1 -pady 1 -fill both -expand 1
@@ -643,8 +648,9 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     bind $t <Escape> {mted_done cancel; break}
     bind $t <Tab> {$::mted insert insert "    " all; break}
     bind $t <<Modified>> {mted_fit}
-    bind $t <KeyRelease> {mted_fit}
-    bind $t <Button-3> {mted_popup %X %Y; break}
+    bind $t <KeyRelease> {mted_fit; mted_spell_later}
+    bind $t <<Paste>> {+after idle mted_spell_later}
+    bind $t <Button-3> {$::mted mark set spellpt @%x,%y; mted_popup %X %Y; break}
     bind $t <Control-b> {set ::mt(bold) [expr {!$::mt(bold)}]; mted_restyle; break}
     bind $t <Control-i> {set ::mt(italic) [expr {!$::mt(italic)}]; mted_restyle; break}
     bind $t <Control-u> {set ::mt(underline) [expr {!$::mt(underline)}]; mted_restyle; break}
@@ -652,6 +658,7 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     set ::mted $t
     set ::mted_geom [list $mode $x $y $width $ls $minh]
     mted_fit
+    after 200 mted_spellcheck
     update idletasks
     set bw [winfo reqwidth $b]; set bh [winfo reqheight $b]
     set bx [expr {max(2, min($x - 4, [winfo width .c] - $bw - 2))}]
@@ -698,6 +705,22 @@ proc mted_popup {X Y} {
     menu $m -tearoff 0
     set t $::mted
     set hassel [expr {[llength [$t tag ranges sel]] > 0}]
+    # a misspelled word under the mouse: suggestions first
+    if {[lsearch [$t tag names spellpt] misspelled] >= 0} {
+        set r [$t tag prevrange misspelled "spellpt + 1 char"]
+        if {$r ne ""} {
+            lassign $r a b
+            set word [$t get $a $b]
+            set sugs [spell_suggest $word]
+            if {[llength $sugs] == 0} { $m add command -label "(no suggestions)" -state disabled }
+            foreach sg $sugs {
+                $m add command -label $sg -font {Helvetica 10 bold}                     -command [list apply {{a b sg} {$::mted delete $a $b; $::mted insert $a $sg all; mted_fit; mted_spellcheck}} $a $b $sg]
+            }
+            $m add command -label "Add \"$word\" to Dictionary" -command [list apply {{w} {spell_add $w; mted_spellcheck}} $word]
+            $m add command -label "Ignore \"$word\"" -command [list apply {{w} {set ::spell_ignore([string tolower $w]) 1; mted_spellcheck}} $word]
+            $m add separator
+        }
+    }
     $m add command -label "Undo" -accelerator Ctrl+Z -command {catch {$::mted edit undo}; mted_fit}
     $m add command -label "Redo" -accelerator Ctrl+Y -command {catch {$::mted edit redo}; mted_fit}
     $m add separator
@@ -1393,6 +1416,223 @@ proc osnapmenu {X Y} {
     $m add command -label "Osnap Settings..." -command {emit MENU 'OSNAP}
     tk_popup $m $X $Y
 }
+
+# ---------------------------------------------------------------- plot dialog
+# Returns "CANCEL" or  action \x1f device \x1f paper \x1f landscape \x1f area \x1f scale \x1f units \x1f
+#                      center \x1f mono \x1f lineweights \x1f copies      (action: OK, PREVIEW or PICK)
+proc plotdlg {devices device papers paper landscape area scales scale units center mono lw copies wintext} {
+    set w .plot
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Plot"
+    wm transient $w .
+    array unset ::pl
+    array set ::pl [list device $device paper $paper landscape $landscape area $area scale $scale units $units \
+                        center $center mono $mono lw $lw copies $copies result CANCEL]
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    set r 0
+    foreach {lbl var vals} [list "Printer / plotter" device $devices "Paper size" paper $papers] {
+        ttk::label $f.l$var -text $lbl
+        ttk::combobox $f.$var -textvariable ::pl($var) -values $vals -state readonly -width 34
+        grid $f.l$var -row $r -column 0 -sticky w -pady 3 -padx {0 10}
+        grid $f.$var -row $r -column 1 -columnspan 2 -sticky w -pady 3
+        bind $f.$var <<ComboboxSelected>> plotdlg_preview
+        incr r
+    }
+    ttk::label $f.lcopies -text "Copies (printer)"
+    ttk::spinbox $f.copies -from 1 -to 99 -textvariable ::pl(copies) -width 5
+    grid $f.lcopies -row $r -column 0 -sticky w -pady 3; grid $f.copies -row $r -column 1 -sticky w -pady 3; incr r
+    ttk::label $f.lori -text "Orientation"
+    set of [ttk::frame $f.ori]
+    ttk::radiobutton $of.l -text Landscape -variable ::pl(landscape) -value 1 -command plotdlg_preview
+    ttk::radiobutton $of.p -text Portrait -variable ::pl(landscape) -value 0 -command plotdlg_preview
+    pack $of.l $of.p -side left -padx {0 10}
+    grid $f.lori -row $r -column 0 -sticky w -pady 3; grid $of -row $r -column 1 -columnspan 2 -sticky w; incr r
+    ttk::label $f.larea -text "What to plot"
+    ttk::combobox $f.area -textvariable ::pl(area) -values {Extents Display Limits Window} -state readonly -width 12
+    ttk::button $f.pick -text "Window <" -command {set ::pl(result) PICK; destroy .plot}
+    grid $f.larea -row $r -column 0 -sticky w -pady 3; grid $f.area -row $r -column 1 -sticky w; grid $f.pick -row $r -column 2 -sticky w
+    incr r
+    if {$wintext ne ""} {
+        ttk::label $f.win -text "Window: $wintext" -style Dim.TLabel
+        grid $f.win -row $r -column 1 -columnspan 2 -sticky w; incr r
+    }
+    ttk::label $f.lscale -text "Plot scale"
+    ttk::combobox $f.scale -textvariable ::pl(scale) -values $scales -width 20
+    grid $f.lscale -row $r -column 0 -sticky w -pady 3; grid $f.scale -row $r -column 1 -columnspan 2 -sticky w; incr r
+    ttk::label $f.lunits -text "Drawing units are"
+    ttk::combobox $f.units -textvariable ::pl(units) -values {Inches Feet Millimeters Meters} -state readonly -width 12
+    grid $f.lunits -row $r -column 0 -sticky w -pady 3; grid $f.units -row $r -column 1 -sticky w; incr r
+    set opts [ttk::frame $f.opts]
+    ttk::checkbutton $opts.c -text "Center the plot" -variable ::pl(center)
+    ttk::checkbutton $opts.m -text "Black ink only (monochrome)" -variable ::pl(mono)
+    ttk::checkbutton $opts.w -text "Plot lineweights" -variable ::pl(lw)
+    pack $opts.c $opts.m $opts.w -side top -anchor w
+    grid $opts -row $r -column 0 -columnspan 3 -sticky w -pady {6 0}; incr r
+    canvas $f.pv -width 180 -height 140 -background $::panel -highlightthickness 0
+    grid $f.pv -row 0 -column 3 -rowspan 8 -padx {16 0} -sticky n
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.pre -text "Preview" -command {set ::pl(result) PREVIEW; destroy .plot}
+    ttk::button $bb.ok -text "Plot" -command {set ::pl(result) OK; destroy .plot}
+    ttk::button $bb.no -text "Cancel" -command {set ::pl(result) CANCEL; destroy .plot}
+    pack $bb.pre -side left
+    pack $bb.no $bb.ok -side right -padx 3
+    grid $bb -row $r -column 0 -columnspan 4 -sticky ew -pady {12 0}
+    bind $w <Escape> {set ::pl(result) CANCEL; destroy .plot}
+    plotdlg_preview
+    wm geometry $w +[expr {[winfo rootx .] + 160}]+[expr {[winfo rooty .] + 90}]
+    safegrab $w
+    tkwait window $w
+    if {$::pl(result) eq "CANCEL"} { return CANCEL }
+    return [join [list $::pl(result) $::pl(device) $::pl(paper) $::pl(landscape) $::pl(area) $::pl(scale) \
+                      $::pl(units) $::pl(center) $::pl(mono) $::pl(lw) $::pl(copies)] \x1f]
+}
+proc plotdlg_preview {} {
+    set c .plot.f.pv
+    if {![winfo exists $c]} return
+    $c delete all
+    # paper outline in the right proportions
+    if {[regexp {\(([0-9.]+) x ([0-9.]+) (in|mm)\)} $::pl(paper) -> a b u]} {} else { set a 11; set b 17 }
+    set long [expr {max($a,$b)}]; set short [expr {min($a,$b)}]
+    if {$::pl(landscape)} { set pw $long; set ph $short } else { set pw $short; set ph $long }
+    set k [expr {min(160.0 / $pw, 120.0 / $ph)}]
+    set x0 [expr {90 - $pw * $k / 2}]; set y0 [expr {70 - $ph * $k / 2}]
+    $c create rectangle [expr {$x0+3}] [expr {$y0+3}] [expr {$x0 + $pw*$k + 3}] [expr {$y0 + $ph*$k + 3}] -fill "#1b2027" -outline ""
+    $c create rectangle $x0 $y0 [expr {$x0 + $pw*$k}] [expr {$y0 + $ph*$k}] -fill white -outline "#8a94a3"
+    set m 6
+    $c create rectangle [expr {$x0+$m}] [expr {$y0+$m}] [expr {$x0 + $pw*$k - $m}] [expr {$y0 + $ph*$k - $m}] -outline $::accent -dash {3 2}
+}
+
+# ---------------------------------------------------------------- spelling
+# word list written by the Lisp side (one lower-case word per line); custom words are appended
+set ::spell_loaded 0
+proc spell_load {} {
+    if {$::spell_loaded} { return 1 }
+    if {![info exists ::spell_file] || ![file readable $::spell_file]} { return 0 }
+    set ch [open $::spell_file r]
+    fconfigure $ch -encoding utf-8
+    foreach w [split [read $ch] "\n"] { if {$w ne ""} { set ::spell_words($w) 1 } }
+    close $ch
+    set ::spell_loaded 1
+    return 1
+}
+proc spell_ok {w} {
+    set lw [string tolower [string trimright $w ']]
+    if {[string length $lw] < 2 || [regexp {[0-9]} $lw]} { return 1 }
+    if {[info exists ::spell_words($lw)] || [info exists ::spell_ignore($lw)]} { return 1 }
+    if {[string match *'s $lw] && [info exists ::spell_words([string range $lw 0 end-2])]} { return 1 }
+    return 0
+}
+proc spell_suggest {w} {
+    set lw [string tolower $w]
+    set letters "abcdefghijklmnopqrstuvwxyz'"
+    set out {}
+    set n [string length $lw]
+    for {set i 0} {$i <= $n} {incr i} {
+        set a [string range $lw 0 [expr {$i-1}]]; set b [string range $lw $i end]
+        set cands {}
+        if {$b ne ""} { lappend cands $a[string range $b 1 end] }
+        if {[string length $b] > 1} { lappend cands $a[string index $b 1][string index $b 0][string range $b 2 end] }
+        foreach c [split $letters ""] {
+            if {$b ne ""} { lappend cands $a$c[string range $b 1 end] }
+            lappend cands $a$c$b
+        }
+        foreach x $cands { if {[info exists ::spell_words($x)] && $x ni $out} { lappend out $x } }
+    }
+    # likeliest first: swapped letters (same letters as typed), then same length, then the rest
+    set key [join [lsort [split $lw ""]] ""]
+    set ranked {}
+    foreach x $out {
+        set r [expr {[join [lsort [split $x ""]] ""] eq $key ? 0 : ([string length $x] == $n ? 1 : 2)}]
+        lappend ranked [list $r [llength $ranked] $x]
+    }
+    set out {}
+    foreach e [lsort -command {apply {{p q} {expr {[lindex $p 0] != [lindex $q 0] ? [lindex $p 0] - [lindex $q 0] : [lindex $p 1] - [lindex $q 1]}}}} $ranked] { lappend out [lindex $e 2] }
+    # same capitalisation as the word typed
+    set res {}
+    foreach x [lrange $out 0 7] {
+        if {[string toupper $w] eq $w} { lappend res [string toupper $x] } \
+        elseif {[string toupper [string index $w 0]] eq [string index $w 0]} { lappend res [string totitle $x] } \
+        else { lappend res $x }
+    }
+    return $res
+}
+proc spell_add {w} {
+    set lw [string tolower $w]
+    set ::spell_words($lw) 1
+    catch {
+        file mkdir [file dirname $::spell_custom]
+        set ch [open $::spell_custom a]; fconfigure $ch -encoding utf-8; puts $ch $w; close $ch
+    }
+}
+# underline unknown words in the in-place editor (after a short pause in typing)
+proc mted_spellcheck {} {
+    set t $::mted
+    if {$t eq "" || ![winfo exists $t] || ![spell_load]} return
+    $t tag remove misspelled 1.0 end
+    set text [$t get 1.0 end-1c]
+    foreach r [regexp -all -inline -indices {[[:alpha:]][[:alpha:]']*} $text] {
+        lassign $r a b
+        set w [string range $text $a $b]
+        if {![spell_ok $w]} { $t tag add misspelled "1.0 + $a chars" "1.0 + [expr {$b + 1}] chars" }
+    }
+}
+proc mted_spell_later {} {
+    catch {after cancel $::mted_spell_id}
+    set ::mted_spell_id [after 400 mted_spellcheck]
+}
+
+# the Check Spelling dialog (SPELL). Returns "CANCEL" or action \x1f replacement
+proc spelldlg {word context suggestions dictname} {
+    set w .spl
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Check Spelling"
+    wm transient $w .
+    set ::spl(result) CANCEL
+    set ::spl(new) [expr {[llength $suggestions] ? [lindex $suggestions 0] : $word}]
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    ttk::label $f.l1 -text "Not in dictionary:"
+    ttk::label $f.word -text $word -font {Helvetica 11 bold} -foreground "#ff8080"
+    ttk::label $f.ctx -text $context -style Dim.TLabel -wraplength 380
+    ttk::label $f.l2 -text "Change to:"
+    ttk::entry $f.new -textvariable ::spl(new) -width 30
+    ttk::label $f.l3 -text "Suggestions:"
+    listbox $f.sug -height 7 -width 30 -background $::panel2 -foreground $::fg -selectbackground $::accent \
+        -borderwidth 0 -highlightthickness 0 -exportselection 0
+    foreach s $suggestions { $f.sug insert end $s }
+    if {[llength $suggestions]} { $f.sug selection set 0 } else { $f.sug insert end "(no suggestions)" }
+    bind $f.sug <<ListboxSelect>> {set i [.spl.f.sug curselection]; if {$i ne ""} { set v [.spl.f.sug get $i]; if {![string match (* $v]} { set ::spl(new) $v } }}
+    bind $f.sug <Double-Button-1> {spl_done CHANGE}
+    grid $f.l1 -row 0 -column 0 -sticky w
+    grid $f.word -row 0 -column 1 -sticky w
+    grid $f.ctx -row 1 -column 0 -columnspan 2 -sticky w -pady {2 8}
+    grid $f.l2 -row 2 -column 0 -sticky w
+    grid $f.new -row 2 -column 1 -sticky w -pady 2
+    grid $f.l3 -row 3 -column 0 -sticky nw
+    grid $f.sug -row 3 -column 1 -sticky w -pady 2
+    set bb [ttk::frame $f.bb]
+    foreach {b lbl act} {ch Change CHANGE cha "Change All" CHANGEALL ig Ignore IGNORE iga "Ignore All" IGNOREALL add "Add to Dictionary" ADD} {
+        ttk::button $bb.$b -text $lbl -command [list spl_done $act]
+        pack $bb.$b -side top -fill x -pady 2
+    }
+    ttk::button $bb.no -text "Close" -command {spl_done CANCEL}
+    pack $bb.no -side top -fill x -pady {12 0}
+    grid $bb -row 0 -column 2 -rowspan 4 -sticky n -padx {14 0}
+    ttk::label $f.dict -text "Dictionary: $dictname" -style Dim.TLabel
+    grid $f.dict -row 4 -column 0 -columnspan 3 -sticky w -pady {8 0}
+    bind $w <Escape> {spl_done CANCEL}
+    bind $w <Return> {spl_done CHANGE}
+    wm geometry $w +[expr {[winfo rootx .] + 240}]+[expr {[winfo rooty .] + 140}]
+    safegrab $w
+    focus $f.new
+    tkwait window $w
+    if {$::spl(result) eq "CANCEL"} { return CANCEL }
+    return "$::spl(result)\x1f$::spl(new)"
+}
+proc spl_done {act} { set ::spl(result) $act; destroy .spl }
 
 # ---------------------------------------------------------------- file dialog
 # Uses the desktop's own file chooser when one is available (zenity = GNOME/GTK, kdialog = KDE),

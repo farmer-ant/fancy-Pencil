@@ -579,7 +579,11 @@ NOSNAP turns off object snap, grid snap and ortho (used for selection windows)."
             (let ((raw (ui-acquire req)))
               (ecase (first raw)
                 (:text (multiple-value-setq (value ok) (interpret-text (second raw) req)))
-                (:point (setf value (second raw) ok t))
+                ;; a click at a distance/angle prompt is measured from the base point (or asks for a
+                ;; second point), exactly like a typed point
+                (:point (if (member kind '(:distance :angle))
+                            (multiple-value-setq (value ok) (interpret-value (second raw) req))
+                            (setf value (second raw) ok t)))
                 (:pick (setf value (if (eq kind :entity) raw (second raw)) ok t))
                 (:value (multiple-value-setq (value ok) (interpret-value (second raw) req))))))
         (cond

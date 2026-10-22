@@ -186,5 +186,20 @@
 (check "r12: vertical dim still vertical" (< (abs (- (g (ssname ss 0) 50) (/ pi 2))) 1e-6) T)
 (command "close")
 
+;; ---------- 0.3.13: circle radius from a picked point, -PLOT, SPELL ----------
+(command "new")
+(command "circle" '(0 0) '(3 4))
+(check "circle radius from picked point" (g (entlast) 40) 5.0)
+(command "line" '(0 0) '(10 5) "")
+(command "text" '(1 1) 0.25 0 "BEDRROM recieve kitchen" "")
+(vl-file-delete "/tmp/fp-plot.pdf")
+(command "-plot" "" "Letter" "Landscape" "Extents" "Fit" "No" "/tmp/fp-plot.pdf")
+(check "-PLOT writes a PDF" (if (findfile "/tmp/fp-plot.pdf") T nil) T)
+(setq f (open "/tmp/fp-plot.pdf" "r"))
+(check "PDF header" (substr (read-line f) 1 5) "%PDF-")
+(close f)
+(command "spell" "")
+(command "close")
+
 (princ (strcat "\nv0.3 tests: " (itoa *pass*) " passed, " (itoa *fail*) " failed.\n"))
 (princ)
