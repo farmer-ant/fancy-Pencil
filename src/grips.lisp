@@ -49,7 +49,7 @@
                 ((equal type "HATCH")
                  (let ((b (entity-pieces-bbox data)))
                    (and b (list (cons (pt (/ (+ (first b) (third b)) 2) (/ (+ (second b) (fourth b)) 2)) :move)))))
-                ((equal type "SPLINE")
+                ((member type '("SPLINE" "LEADER") :test #'equal)
                  (loop for p in data for i from 0
                        when (and (consp p) (eql (car p) 10)) collect (cons (pt3 (cdr p)) (list :ctrl i))))
                 (t nil))))))

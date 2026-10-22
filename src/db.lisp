@@ -27,6 +27,7 @@
   (modcount 0)
   (saved-modcount 0)
   (filename nil)
+  (skipped nil)          ; object types the file had that Fancy Pencil couldn't keep: ((type . n) ...)
   (undo nil) (redo nil))
 
 (defvar *dwg* (make-drawing))
@@ -108,11 +109,18 @@
     (ensure-layer (dxf 8 data))
     data))
 
+(defvar *keep-dimension-blocks* nil
+  "True while opening a file: a dimension keeps the picture (block) saved with it, as in AutoCAD,
+and is only redrawn by Fancy Pencil once it is edited.")
+
 (defun add-entity (data)
   (let* ((data (normalize-entity-data data))
          (h (new-handle))
          (data (cons (assoc 0 data) (cons (cons 5 h) (rem-dxf 0 (rem-dxf 5 data)))))
-         (data (if (equal (dxf 0 data) "DIMENSION") (maybe-rebuild-dimension data) data))
+         (data (if (and (equal (dxf 0 data) "DIMENSION")
+                        (not (and *keep-dimension-blocks* (dxf 2 data) (find-block (dxf 2 data)))))
+                   (maybe-rebuild-dimension data)
+                   data))
          (e (%make-ename h data)))
     (vector-push-extend e (drawing-entities *dwg*))
     (touch)
@@ -317,6 +325,7 @@
       ((equal type "ELLIPSE") (ellipse-pieces data))
       ((equal type "HATCH") (hatch-pieces data))
       ((equal type "SPLINE") (spline-pieces data))
+      ((equal type "LEADER") (leader-pieces data))
       ((equal type "SOLID")
        (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
          (loop for (a b) on (append c (list (first c))) while b collect (list :seg (pt3 a) (pt3 b)))))
@@ -463,6 +472,7 @@
       ((equal type "SOLID") (map-points data '(10 11 12 13) fp))
       ((equal type "HATCH") (xform-hatch data xf))
       ((equal type "SPLINE") (map-points data '(10 11 12 13) fp))
+      ((equal type "LEADER") (xform-leader data xf))
       (t (map-points data '(10 11) fp)))))
 
 ;;; ---------- explode ----------
@@ -484,6 +494,9 @@
                                            (xform-data sub xf)
                                            sub)))
                                (if (equal (dxf 8 nd) "0") (set-dxf 8 layer nd) nd)))))))
+        ((equal type "LEADER")
+         (loop for sub in (leader-display-entities data)
+               collect (let ((nd (set-dxf 8 layer (rem-dxf 62 sub)))) (if color (append nd (list color)) nd))))
         ((equal type "DIMENSION")
          ;; a dimension's block is already in drawing coordinates: its lines, arrows and text
          (let ((b (find-block (dxf 2 data))))

@@ -65,6 +65,14 @@ Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT u
   Arrowheads are saved the way AutoCAD stores them (`_ArchTick`, `_Oblique` ... blocks referenced by
   the dimension style), in both DXF formats and so in DWG, and are read back from AutoCAD drawings.
 
+### What survives opening an AutoCAD drawing
+
+Dimensions keep the appearance AutoCAD saved with them (and are only redrawn by Fancy Pencil when you
+edit one); leaders (callout arrows) are kept and editable; draw order ("Send to Back") is honoured; hatches
+keep their island style and full-circle boundaries. Not yet supported: raster images, PDF/DWF/DGN
+underlays, regions, 3D solids, tables, multileaders and paper-space layouts. When a drawing contains
+any of these, opening it says so, and saving over that file asks first.
+
 ### Several drawings at once
 
 Every drawing opens in its own tab above the drawing area, as in AutoCAD. OPEN and NEW add a tab

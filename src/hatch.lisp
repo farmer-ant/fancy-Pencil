@@ -197,7 +197,8 @@
   "Convert raw HATCH group pairs (code . value) to the internal form.
 DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radians)."
   (let ((pairs (coerce g 'vector)) (i 0) (n (length g))
-        (common nil) (loops nil) (pattern nil) (name "ANSI31") (solid 0) (scale 1d0) (angle 0d0))
+        (common nil) (loops nil) (loop-flags nil) (pattern nil) (name "ANSI31") (solid 0) (scale 1d0) (angle 0d0)
+        (style nil))
     (labels ((peek () (and (< i n) (car (aref pairs i))))
              (next () (prog1 (cdr (aref pairs i)) (incf i)))
              (take (code) (when (eql (peek) code) (next)))
@@ -231,10 +232,17 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
                         (2 (let* ((c (pt (or (take 10) 0d0) (or (take 20) 0d0)))
                                   (r (or (take 40) 0d0)) (s (din (or (take 50) 0d0))) (e (din (or (take 51) 0d0)))
                                   (ccw (eql (take 73) 1)))
-                             (if ccw
-                                 (push (list (polar c s r) (tan (/ (arc-sweep s e) 4))) verts)
-                                 (let ((a1 (- s)) (a2 (- e)))
-                                   (push (list (polar c a1 r) (- (tan (/ (norm-ang (- a1 a2)) 4)))) verts)))))
+                             (cond
+                               ;; a whole circle (0 to 360): two half arcs, or it would collapse to a point
+                               ((>= (abs (- e s)) (- +2pi+ 1d-6))
+                                (let ((b (if ccw 1d0 -1d0)) (a0 (if ccw s (- s))))
+                                  (push (list (polar c a0 r) b) verts)
+                                  (push (list (polar c (+ a0 +pi+) r) b) verts)))
+                               (ccw
+                                (push (list (polar c s r) (tan (/ (arc-sweep s e) 4))) verts))
+                               (t
+                                (let ((a1 (- s)) (a2 (- e)))
+                                  (push (list (polar c a1 r) (- (tan (/ (norm-ang (- a1 a2)) 4)))) verts))))))
                         (3 (let* ((c (pt (or (take 10) 0d0) (or (take 20) 0d0)))
                                   (m (pt (or (take 11) 0d0) (or (take 21) 0d0)))
                                   (ratio (or (take 40) 1d0)) (s (din (or (take 50) 0d0))) (e (din (or (take 51) +2pi+)))
@@ -258,11 +266,12 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
                         (t nil))))))
             ;; source boundary objects
             (let ((ns (or (take 97) 0))) (dotimes (k ns) (take 330)))
-            (when (> (length verts) 1) (push (nreverse verts) loops)))))
+            (when (> (length verts) 1) (push (nreverse verts) loops) (push flags loop-flags)))))
       ;; pattern data
       (loop while (< i n)
             do (let ((c (peek)))
                  (case c
+                   (75 (setf style (next)))
                    (52 (setf angle (din (next))))
                    (41 (setf scale (next)))
                    (78 (let ((nl (next)))
@@ -278,6 +287,10 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
             (nreverse common)
             (list (cons 2 name) (cons 70 solid) (cons 41 (d scale)) (cons 52 (d angle))
                   (cons :loops (nreverse loops)))
+            ;; island style (75) and each boundary's flags (outer, text box ...), written back as found
+            (when style (list (cons 75 style)))
+            (when (some (lambda (f) (logtest f (logior 1 8 16))) loop-flags)
+              (list (cons :loop-flags (nreverse loop-flags))))
             (when (and pattern (not (eql solid 1))) (list (cons :pattern (nreverse pattern)))))))
 
 ;;; ---------- transforms ----------
