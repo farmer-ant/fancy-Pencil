@@ -159,6 +159,9 @@ foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offse
                "Array (rectangular)" ARRAYRECT "Array (polar)" ARRAYPOLAR Erase ERASE} {
     mcmd .mb.modify $l $c
 }
+.mb.modify add separator
+mcmd .mb.modify "Match Properties" MATCHPROP
+mcmd .mb.modify "Properties" PROPERTIES
 mcmd .mb.format "Layer..." LAYER
 mcmd .mb.format "Linetype..." LINETYPE
 mcmd .mb.format "Lineweight..." LWEIGHT
@@ -1406,6 +1409,63 @@ proc osnapdlg_done {ok} {
         set ::osd(result) $m
     }
     destroy .osd
+}
+
+# ---------------------------------------------------------------- Match Properties settings
+# items: list of {key label on}. Returns "CANCEL" or the keys switched on, space separated.
+proc matchpropdlg {items} {
+    set w .mpd
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Property Settings"
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    set ::mpd(keys) {}
+    ttk::label $f.h1 -text "Basic Properties" -style Dim.TLabel
+    ttk::label $f.h2 -text "Special Properties" -style Dim.TLabel
+    grid $f.h1 -row 0 -column 0 -sticky w -pady {0 4}
+    grid $f.h2 -row 0 -column 1 -sticky w -pady {0 4} -padx {30 0}
+    set basic {color layer ltype ltscale lineweight thickness}
+    set rb 1; set rs 1
+    foreach it $items {
+        lassign $it key label on
+        lappend ::mpd(keys) $key
+        set ::mpd($key) $on
+        ttk::checkbutton $f.c$key -text $label -variable ::mpd($key)
+        if {$key in $basic} {
+            grid $f.c$key -row $rb -column 0 -sticky w -pady 2; incr rb
+        } else {
+            grid $f.c$key -row $rs -column 1 -sticky w -pady 2 -padx {30 0}; incr rs
+        }
+    }
+    set n [expr {max($rb, $rs)}]
+    ttk::label $f.tip -style Dim.TLabel -wraplength 380 -justify left \
+        -text "Special properties copy only between objects of the same kind: text style, height, width and oblique angle; dimension style; hatch pattern, scale and angle; polyline width."
+    grid $f.tip -row $n -column 0 -columnspan 2 -sticky w -pady {10 0}
+    set b [ttk::frame $f.b]
+    ttk::button $b.all -text "Select All" -command {foreach k $::mpd(keys) { set ::mpd($k) 1 }}
+    ttk::button $b.none -text "Clear All" -command {foreach k $::mpd(keys) { set ::mpd($k) 0 }}
+    ttk::button $b.ok -text OK -command {matchpropdlg_done 1}
+    ttk::button $b.no -text Cancel -command {matchpropdlg_done 0}
+    pack $b.all $b.none -side left -padx 3
+    pack $b.no $b.ok -side right -padx 3
+    grid $b -row [expr {$n + 1}] -column 0 -columnspan 2 -sticky ew -pady {12 0}
+    bind $w <Escape> {matchpropdlg_done 0}
+    bind $w <Return> {matchpropdlg_done 1}
+    set ::mpd(result) CANCEL
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    tkwait window $w
+    return $::mpd(result)
+}
+proc matchpropdlg_done {ok} {
+    if {$ok} {
+        set on {}
+        foreach k $::mpd(keys) { if {$::mpd($k)} { lappend on $k } }
+        set ::mpd(result) [concat OK $on]
+    }
+    destroy .mpd
 }
 
 # ---------------------------------------------------------------- right-click menus on the drawing

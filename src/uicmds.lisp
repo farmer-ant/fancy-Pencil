@@ -61,6 +61,7 @@
          (list (list "Erase" "ERASE") (list "Move" "MOVE") (list "Copy Selection" "COPY")
                (list "Scale" "SCALE") (list "Rotate" "ROTATE") (list "Mirror" "MIRROR")
                (list "Align" "ALIGN") (list "Array" "ARRAY")
+               (list "Match Properties" "MATCHPROP")
                :sep
                (list "Cut" "CUTCLIP") (list "Copy to Clipboard" "COPYCLIP")
                :sep

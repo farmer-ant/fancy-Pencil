@@ -586,30 +586,7 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
                        (if l (dolist (e ents) (set-entity-data e (set-dxf 8 (layer-name l) (ent-data e))))
                            (out (format nil "Cannot find layer \"~A\".~%" n)))))))))))))
 
-(defun match-props (src dst)
-  "Copy layer, color, linetype, linetype scale and lineweight from SRC to DST."
-  (let ((d (set-dxf 8 (dxf 8 src) dst)))
-    (dolist (code '(62 6 48 370) d)
-      (setf d (if (assoc code src) (set-dxf code (dxf code src) d) (rem-dxf code d))))))
-
-(defcmd "MATCHPROP" ("MA" "PAINTER") "Applies the layer and color of a source object to others."
-  (let ((src (get-user-input :entity :prompt "Select source object: ")))
-    (when (consp src)
-      (let ((s (sel-entity src)))
-        (when s
-          (out (format nil "Current active settings:  Color Layer Ltype Ltscale Lineweight~%"))
-          (loop
-            (let ((r (get-user-input :select-point :prompt "Select destination object(s): ")))
-              (cond ((null r) (return))
-                    ((pointp r)
-                     (let ((e (pick-entity-at r)))
-                       (if e (set-entity-data e (match-props (ent-data s) (ent-data e)))
-                           (let ((p2 (get-user-input :corner :base r :prompt "Specify opposite corner: "
-                                                             :drag (window-selection-drag r) :nosnap t)))
-                             (when (pointp p2)
-                               (dolist (e (filter-editable (entities-in-window r p2 (< (px p2) (px r)))))
-                                 (unless (eq e s)
-                                   (set-entity-data e (match-props (ent-data s) (ent-data e))))))))))))))))))
+;;; MATCHPROP: see matchprop.lisp
 
 (defcmd "COLOR" ("COL" "-COLOR") "Sets the color for new objects."
   (let ((c (parse-color (gstring (format nil "Enter default object color [Truecolor/COlorbook] <~A>: " (sysvar "CECOLOR"))))))
