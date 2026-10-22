@@ -418,8 +418,25 @@ proc setlayers {names current color} {
 }
 proc settitle {s} { wm title . $s }
 proc ask {id script} {
-    set r [uplevel #0 $script]
+    # always answer: the Lisp side is waiting for this reply, so an error must not leave it hanging
+    if {[catch {uplevel #0 $script} r]} {
+        puts stderr "Fancy Pencil Tcl error: $r\n$::errorInfo"
+        # a half-opened text editor would keep blocking clicks and keys: clear it
+        set ::mted ""
+        catch {destroy .mtedf .mtedbar}
+        catch {grab release [grab current]}
+        catch {focus .cmd.e}
+        emit A $id ""
+        emit TCLERR [string map {"\n" " "} $r]
+        return
+    }
     emit A $id [string map {"\n" " "} $r]
+}
+# take the keyboard/mouse for a dialog once the desktop has actually shown it
+proc safegrab {w} {
+    if {![winfo exists $w]} return
+    if {![winfo viewable $w]} { catch {tkwait visibility $w} }
+    catch {grab $w}
 }
 proc setgrread {v} { set ::grread $v }
 
@@ -849,7 +866,7 @@ proc styledlg {records current} {
     styledlg_select $current
     set ::sty(result) CANCEL
     wm geometry $w +[expr {[winfo rootx .] + 180}]+[expr {[winfo rooty .] + 100}]
-    grab $w
+    safegrab $w
     tkwait window $w
     return $::sty(result)
 }
@@ -920,9 +937,9 @@ proc styledlg_askname {} {
     $f.e selection range 0 end
     focus $f.e
     set ::sty(asked) 0
-    grab $w
+    safegrab $w
     tkwait window $w
-    grab .sty
+    safegrab .sty
     return [expr {$::sty(asked) ? [string trim $::sty(newname)] : ""}]
 }
 proc styledlg_delete {} {
@@ -1070,7 +1087,7 @@ proc dimstyledlg {records current arrows} {
     dimdlg_select $current
     set ::ds(result) CANCEL
     wm geometry $w +[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 60}]
-    grab $w
+    safegrab $w
     tkwait window $w
     return $::ds(result)
 }
@@ -1208,9 +1225,9 @@ proc dimdlg_new {} {
     $f.e selection range 0 end
     focus $f.e
     set ::ds(asked) 0
-    grab $w
+    safegrab $w
     tkwait window $w
-    grab .dsm
+    safegrab .dsm
     set name [string trim $::ds(newname)]
     if {!$::ds(asked) || $name eq ""} return
     if {[lsearch -exact -nocase $::ds(order) $name] >= 0} {
@@ -1322,7 +1339,7 @@ proc osnapdlg {mode} {
     bind $w <Return> {osnapdlg_done 1}
     set ::osd(result) CANCEL
     wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
-    grab $w
+    safegrab $w
     tkwait window $w
     return $::osd(result)
 }
@@ -1580,7 +1597,7 @@ proc formdlg {title rows oklabel} {
     set ::formresult ""
     wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
     focus $f.v0
-    grab $w
+    safegrab $w
     tkwait window $w
     return $::formresult
 }
@@ -1649,7 +1666,7 @@ proc aliasdlg {pairs} {
             .alias.f.a delete 0 end; .alias.f.a insert 0 $a; .alias.f.c delete 0 end; .alias.f.c insert 0 $c }
     }
     set ::aliasresult ""
-    grab $w
+    safegrab $w
     tkwait window $w
     return $::aliasresult
 }

@@ -37,7 +37,7 @@
 (defun run-wish (program script)
   #+sbcl
   (let ((p (sb-ext:run-program program (list script "-name" "fancypencil") :search t :wait nil
-                                                     :input :stream :output :stream :error nil
+                                                     :input :stream :output :stream :error t
                                                      :external-format :utf-8)))
     (values p (sb-ext:process-input p) (sb-ext:process-output p)))
   #+ecl
@@ -605,6 +605,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                                  (gui-sync) t))
       ((string= ty "LAYERACT") (layer-dialog-action (event-rest ev)) t)
       ((string= ty "A") t)
+      ((string= ty "TCLERR") (out (format nil "; window error: ~A~%" (event-rest ev))) t)
       ((string= ty "PALETTE") (setf *palette-shown* (string= (event-rest ev) "1")) (refresh-palette) t)
       ((string= ty "CURPROP") (apply-current-prop (event-rest ev)) t)
       (t nil))))
