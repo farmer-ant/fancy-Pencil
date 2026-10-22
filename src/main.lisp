@@ -44,9 +44,18 @@
         (progn (co-finish-interactively) (when print (print-lisp-result v))))
     (setf *initget-bits* 0 *initget-keywords* nil)))
 
+(defun log-backtrace (c)
+  "Write an internal error and where it happened to stderr (the terminal, or ~/.cache/fancypencil.log)."
+  (unless (typep c '(or alisp-cancel alisp-exit alisp-error))
+    (ignore-errors
+     (format *error-output* "~&Fancy Pencil internal error: ~A~%" c)
+     #+sbcl (sb-debug:print-backtrace :count 25 :stream *error-output*)
+     (force-output *error-output*))))
+
 (defun run-builtin (name fn)
   (let ((*command-running* name))
-    (handler-case
+    (handler-bind ((error #'log-backtrace))
+     (handler-case
         (unwind-protect
              (if (member name *no-undo-commands* :test #'string-equal)
                  (funcall fn)
@@ -55,7 +64,7 @@
       (alisp-cancel () nil)
       (alisp-exit () nil)
       (alisp-error (c) (out (format nil "~A~%" (alisp-error-msg c))))
-      (error (c) (out (format nil "; error: ~A~%" (cl-error-text c)))))))
+      (error (c) (out (format nil "; error: ~A~%" (cl-error-text c))))))))
 
 (defun execute-command (text)
   "Run what was typed at the Command: prompt."
@@ -161,7 +170,7 @@
   (dolist (f lisp-files) (run-lisp-file f))
   (setf *quit-requested* nil)
   (loop until *quit-requested*
-        do (handler-case (command-loop-step)
+        do (handler-case (handler-bind ((error #'log-backtrace)) (command-loop-step))
              (alisp-exit () (when (eq *ui* :tty) (setf *quit-requested* t)))
              (error (c) (out (format nil "; error: ~A~%" (cl-error-text c))))))
   (quit-program))
