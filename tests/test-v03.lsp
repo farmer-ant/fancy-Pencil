@@ -153,5 +153,13 @@
 (check "r12: archtick kept" (getvar "DIMBLK") "ARCHTICK")
 (command "close")
 
+;; ---------- repeating commands in any order (Recent Input list) ----------
+(command "line" '(0 0) '(1 0) "")
+(command "circle" '(5 5) 1)
+(command "line" '(0 1) '(1 1) "")
+(command "circle" '(6 6) 1)
+(command "line" '(0 2) '(1 2) "")
+(check "line after circle after line" (g (entlast) 10) '(0.0 2.0 0.0))
+
 (princ (strcat "\nv0.3 tests: " (itoa *pass*) " passed, " (itoa *fail*) " failed.\n"))
 (princ)

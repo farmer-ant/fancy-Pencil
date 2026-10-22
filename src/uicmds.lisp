@@ -34,9 +34,9 @@
 (defvar *recent-commands* nil "Most recent first; shown under Recent Input.")
 
 (defun note-recent-command (word)
-  (let ((w (string-upcase word)))
-    (setf *recent-commands* (subseq (cons w (remove w *recent-commands* :test #'string-equal))
-                                    0 (min 10 (1+ (length *recent-commands*)))))))
+  (let* ((w (string-upcase word))
+         (l (cons w (remove w *recent-commands* :test #'string-equal))))
+    (setf *recent-commands* (subseq l 0 (min 10 (length l))))))
 
 (defun tcl-menu-items (items)
   "ITEMS: (label command) | :sep | (:sub label items) -> a Tcl list for ctxmenu."
