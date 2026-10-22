@@ -19,6 +19,7 @@
   (string-left-trim "_.'+" (string-trim " " s)))
 
 (defun canonical-command-name (name)
+  (when (fboundp 'reload-aliases-if-changed) (ignore-errors (funcall 'reload-aliases-if-changed)))
   (let* ((n (strip-command-prefix name)))
     (cond ((gethash n *commands*) (string-upcase n))
           ((gethash n *aliases*) (gethash n *aliases*))

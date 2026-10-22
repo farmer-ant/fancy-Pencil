@@ -260,6 +260,7 @@
           (w out 70 (logior (if (layer-frozen l) 1 0) (if (layer-locked l) 4 0)))
           (w out 62 (* (if (layer-on l) 1 -1) (max 1 (abs (layer-color l)))))
           (w out 6 (let ((n (layer-ltype l))) (if (continuous-name-p n) "Continuous" n)))
+          (w out 290 (if (layer-plot l) 1 0))
           (w out 370 (layer-lineweight l))
           (w out 390 h-placeholder))
         (w out 0 "ENDTAB")

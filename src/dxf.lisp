@@ -288,7 +288,8 @@
               (setf (layer-color l) (max 1 (abs c)) (layer-on l) (>= c 0)
                     (layer-frozen l) (logtest 1 flags) (layer-locked l) (logtest 4 flags)
                     (layer-ltype l) (or (dxf 6 g) "CONTINUOUS")
-                    (layer-lineweight l) (or (dxf 370 g) -3)))))))
+                    (layer-lineweight l) (or (dxf 370 g) -3)
+                    (layer-plot l) (not (eql (dxf 290 g) 0))))))))
     ;; blocks
     (let ((cur nil) (body nil))
       (dolist (g blocks)

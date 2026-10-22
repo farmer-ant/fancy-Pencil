@@ -160,6 +160,7 @@ foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offse
     mcmd .mb.modify $l $c
 }
 .mb.modify add separator
+mcmd .mb.modify "Align" ALIGN
 mcmd .mb.modify "Match Properties" MATCHPROP
 mcmd .mb.modify "Properties" PROPERTIES
 mcmd .mb.format "Layer..." LAYER
@@ -172,8 +173,12 @@ mcmd .mb.format "Text Size" TEXTSIZE
 mcmd .mb.format "Point Style" PDMODE
 mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
-mcmd .mb.tools "Edit Command Aliases..." ALIASEDIT
-mcmd .mb.tools "Reload Aliases" REINIT
+menu .mb.tools.alias -tearoff 0
+.mb.tools add cascade -label "Command Aliases" -menu .mb.tools.alias
+mcmd .mb.tools.alias "Edit Aliases..." ALIASEDIT
+mcmd .mb.tools.alias "Open Alias File (fancypencil.pgp)" ALIASFILE
+mcmd .mb.tools.alias "Open Alias Folder" ALIASFOLDER
+mcmd .mb.tools.alias "Reload Aliases" REINIT
 mcmd .mb.tools "Object Snap Settings..." OSNAP
 mcmd .mb.tools "Spelling..." SPELL
 mcmd .mb.tools "Distance" DIST
@@ -1815,7 +1820,7 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Layer Properties Manager"
-        wm geometry $w 720x420+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
+        wm geometry $w 790x420+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
         wm transient $w .
         ttk::frame $w.tb -padding 6
         foreach {lbl act} {"New Layer" new "Delete" delete "Set Current" current} {
@@ -1836,14 +1841,14 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         ttk::button $w.tb2.ws -text "Set Lineweight" -command {layeract lweight [.ld.tb2.lw get]}
         pack $w.tb2.ll $w.tb2.lt $w.tb2.ls $w.tb2.wl $w.tb2.lw $w.tb2.ws -side left -padx 2
         pack $w.tb2 -side top -fill x
-        ttk::treeview $w.t -columns {status name on freeze lock color ltype lweight} -show headings -selectmode browse
-        foreach {c t wd} {status "" 26 name Name 170 on On 50 freeze Freeze 60 lock Lock 60 color Color 50 ltype Linetype 100 lweight Lineweight 80} {
+        ttk::treeview $w.t -columns {status name on freeze lock plot color ltype lweight} -show headings -selectmode browse
+        foreach {c t wd} {status "" 26 name Name 170 on On 50 freeze Freeze 60 lock Lock 60 plot Plot 64 color Color 50 ltype Linetype 100 lweight Lineweight 80} {
             $w.t heading $c -text $t
             $w.t column $c -width $wd -anchor [expr {$c eq "name" ? "w" : "center"}]
         }
         pack $w.t -side top -fill both -expand 1 -padx 6
         ttk::label $w.hint -style Dim.TLabel -padding 6 \
-            -text "Click On / Freeze / Lock cells to toggle. Double-click a layer to make it current."
+            -text "Click On / Freeze / Lock / Plot cells to toggle (a No Plot layer shows on screen but is left out of plots). Double-click a layer to make it current."
         pack $w.hint -side top -fill x
         ttk::button $w.close -text Close -command {destroy .ld; focus .cmd.e}
         pack $w.close -side bottom -anchor e -padx 6 -pady 6
@@ -1858,10 +1863,12 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
     if {$sel ne ""} { set selname [lindex [$w.t item $sel -values] 1] }
     $w.t delete [$w.t children {}]
     foreach r $rows {
-        lassign $r name on frz lck color cur ltype lweight
+        lassign $r name on frz lck color cur ltype lweight plt
+        if {$plt eq ""} { set plt 1 }
         if {$cur} { set mark [format %c 0x2713] } else { set mark "" }
         set id [$w.t insert {} end -values [list $mark $name \
-                    [expr {$on ? "On" : "off"}] [expr {$frz ? "Frozen" : "-"}] [expr {$lck ? "Locked" : "-"}] $color $ltype $lweight]]
+                    [expr {$on ? "On" : "off"}] [expr {$frz ? "Frozen" : "-"}] [expr {$lck ? "Locked" : "-"}] \
+                    [expr {$plt ? "Plot" : "No Plot"}] $color $ltype $lweight]]
         if {$name eq $selname} { $w.t selection set $id }
     }
     raise $w
@@ -1881,6 +1888,7 @@ proc layerclick {x y} {
         "#3" { emit LAYERACT on $name }
         "#4" { emit LAYERACT freeze $name }
         "#5" { emit LAYERACT lock $name }
+        "#6" { emit LAYERACT plot $name }
     }
 }
 proc layeract {act {arg ""}} {

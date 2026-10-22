@@ -62,6 +62,9 @@
 (defun load-aliases ()
   "Rebuild the alias table: the user's .pgp if present, else the shipped default (else built-ins)."
   (snapshot-builtin-aliases)
+  (multiple-value-prog1 (load-aliases-1) (note-pgp-date)))
+
+(defun load-aliases-1 ()
   (let ((path (cond ((probe-file (user-pgp-path)) (user-pgp-path))
                     ((probe-file (old-user-pgp-path)) (old-user-pgp-path))
                     ((probe-file (default-pgp-path)) (default-pgp-path)))))
@@ -81,6 +84,61 @@
 (defcmd "REINIT" () "Reloads the command alias (.pgp) file."
   (multiple-value-bind (n from) (load-aliases)
     (out (format nil "~D aliases loaded from ~A.~%" n from))))
+
+;;; ---------- the alias file itself (Tools > Command Aliases) ----------
+
+(defvar *pgp-seen-date* nil "Write date of the user's .pgp when it was last loaded.")
+(defvar *pgp-checked-at* 0)
+
+(defun note-pgp-date ()
+  (setf *pgp-seen-date* (ignore-errors (file-write-date (user-pgp-path)))))
+
+(defun reload-aliases-if-changed ()
+  "Pick up edits made to the alias file in a text editor (checked at most once a second)."
+  (let ((now (get-universal-time)))
+    (when (/= now *pgp-checked-at*)
+      (setf *pgp-checked-at* now)
+      (let ((d (ignore-errors (and (probe-file (user-pgp-path)) (file-write-date (user-pgp-path))))))
+        (when (and d (not (eql d *pgp-seen-date*)))
+          (let ((first-time (null *pgp-seen-date*)))
+            (setf *pgp-seen-date* d)
+            (unless first-time
+              (multiple-value-bind (n from) (ignore-errors (load-aliases))
+                (when n (out (format nil "Alias file changed: ~D aliases reloaded from ~A.~%" n from)))))))))))
+
+(defun ensure-user-pgp ()
+  "Make sure the user's own alias file exists (a copy of the shipped one, comments and all)."
+  (let ((p (user-pgp-path)))
+    (unless (probe-file p)
+      (ensure-directories-exist p)
+      (let ((src (cond ((probe-file (old-user-pgp-path)) (old-user-pgp-path))
+                       ((probe-file (default-pgp-path)) (default-pgp-path)))))
+        (if src
+            (with-open-file (o p :direction :output :if-exists :supersede :external-format :utf-8)
+              (dolist (l (read-file-lines src)) (write-line l o)))
+            (write-pgp p (current-alias-pairs)))))
+    (note-pgp-date)
+    p))
+
+(defun open-in-text-editor (path)
+  "Open PATH in the desktop's text editor (a .pgp file would otherwise go to an encryption tool)."
+  (let ((f (shell-quote (namestring path))))
+    (run-shell
+     (format nil "( d=$(xdg-mime query default text/plain 2>/dev/null); ~
+                    if [ -n \"$d\" ] && command -v gtk-launch >/dev/null 2>&1 && gtk-launch \"${d%.desktop}\" ~A >/dev/null 2>&1; then exit 0; fi; ~
+                    for e in gnome-text-editor gedit kate kwrite mousepad xed pluma featherpad leafpad; do ~
+                      if command -v $e >/dev/null 2>&1; then exec $e ~A >/dev/null 2>&1; fi; done; ~
+                    xdg-open ~A >/dev/null 2>&1 ) </dev/null >/dev/null 2>&1 &" f f f))))
+
+(defcmd "ALIASFILE" ("PGP") "Opens your command alias file (fancypencil.pgp) in a text editor."
+  (let ((p (ensure-user-pgp)))
+    (out (format nil "Alias file: ~A~%Save it in the editor and the changes are used straight away.~%" (namestring p)))
+    (when (gui-p) (open-in-text-editor p))))
+
+(defcmd "ALIASFOLDER" () "Opens the folder that holds your command alias file."
+  (let ((p (ensure-user-pgp)))
+    (out (format nil "~A~%" (directory-namestring p)))
+    (when (gui-p) (run-shell (format nil "(xdg-open ~A >/dev/null 2>&1 &)" (shell-quote (directory-namestring p)))))))
 
 (defcmd "ALIASEDIT" ("ALIASES") "Edits command aliases."
   (if (and (gui-p) (not (from-lisp-p)))
