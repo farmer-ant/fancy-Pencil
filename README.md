@@ -177,6 +177,20 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+### Match Properties (MATCHPROP, MA, PAINTER)
+
+Modify → Match Properties, or right-click a selected object → Match Properties. Pick the source
+object (or select it first), then click or window the objects to change; Enter ends.
+Type **S** (Settings) at the prompt to choose what is copied:
+
+- **Basic** (any object): color, layer, linetype, linetype scale, lineweight, thickness.
+- **Special** (same kind of object only): text style, height, width factor and oblique angle
+  (MTEXT: style and height); dimension style and overrides, and leader arrows; hatch pattern,
+  scale and angle (solid or pattern); polyline width and linetype generation.
+
+Everything is on by default, as in AutoCAD. Objects on locked layers are skipped, and one U
+undoes the whole command.
+
 ### Copy and paste between drawings
 
 Edit → Copy (Ctrl+C) puts the selected objects on the clipboard; switch to another drawing tab, or
