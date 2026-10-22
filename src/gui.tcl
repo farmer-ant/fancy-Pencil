@@ -340,7 +340,8 @@ foreach {t k} {LWT LWT OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
     pack .st.[string tolower $t] -side right -padx 1
 }
 proc togglekey {k} { emit K $k; focus .cmd.e }
-bind .st.osnap <Button-3> {emit MENU 'OSNAP}
+# open on release: while the button is held the desktop keeps the mouse, so a dialog couldn't take it
+bind .st.osnap <ButtonRelease-3> {emit MENU 'OSNAP}
 
 pack .st -in .bottom -side bottom -fill x
 pack .cmd -in .bottom -side bottom -fill x
@@ -436,7 +437,11 @@ proc ask {id script} {
 proc safegrab {w} {
     if {![winfo exists $w]} return
     if {![winfo viewable $w]} { catch {tkwait visibility $w} }
-    catch {grab $w}
+    if {[catch {grab $w}]} {
+        # refused (e.g. a mouse button is still held): try again shortly
+        after 150 [list catch [list grab $w]]
+        after 600 [list catch [list grab $w]]
+    }
 }
 proc setgrread {v} { set ::grread $v }
 
