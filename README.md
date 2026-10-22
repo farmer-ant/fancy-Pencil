@@ -24,6 +24,7 @@ cd fancypencil
 The first start compiles the sources (a few seconds); later starts use the cached build in `build/`.
 Nothing else is needed: no Quicklisp, no libraries. The GUI is Tk, driven over a pipe from Lisp.
 If `wish` isn't on your PATH, set `FANCYPENCIL_WISH=/path/to/wish`.
+When started from the app launcher, error messages go to `~/.cache/fancypencil.log`.
 
 Open/Save dialogs use your desktop's own file chooser (`zenity` on GNOME/Ubuntu, `kdialog` on KDE),
 so every mounted drive, bookmark and Recent is in the sidebar. Without either, Tk's simpler dialog is
