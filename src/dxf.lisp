@@ -116,6 +116,10 @@
        (setf data (map-codes data '(50 51) #'rad)))
       ((member type '("TEXT" "INSERT" "ATTDEF" "ATTRIB") :test #'equal)
        (setf data (map-codes data '(50 51) #'rad)))
+      ((equal type "DIMENSION")
+       ;; rotation (50), oblique extension lines (52) and text rotation (53) are in degrees
+       (setf data (map-codes data '(50 52 53) #'rad)))
+      ((equal type "LEADER") (setf data (leader-from-dxf g data)))
       ((equal type "MTEXT")
        ;; rotation: the direction vector (11) wins; group 50 is in degrees despite the DXF reference
        (let ((dir (dxf 11 data)))
@@ -153,10 +157,10 @@
            (let ((verts (loop while (and groups (equal (cdr (first (first groups))) "VERTEX"))
                               collect (pop groups))))
              (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups))
-             (let ((pl (polyline-from-group g verts))) (when pl (push pl out)))))
+             (let ((pl (polyline-from-group g verts))) (when pl (push (with-src-handle pl g) out)))))
           ((member type '("SEQEND" "VERTEX") :test #'equal) nil)
           ((equal type "INSERT")
-           (push (rem-dxf 66 (convert-in g)) out)
+           (push (with-src-handle (rem-dxf 66 (convert-in g)) g) out)
            (loop while (and groups (equal (cdr (first (first groups))) "ATTRIB"))
                  do (let* ((a (convert-in (pop groups))))
                       (unless (logtest 1 (or (dxf 70 a) 0))
@@ -166,11 +170,69 @@
                               out))))
            (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups)))
           ((equal (dxf 67 g) 1) nil)    ; paper space
-          (t (push (convert-in g) out)))))
+          (t (push (with-src-handle (convert-in g) g) out)))))
     (nreverse out)))
+
+(defun with-src-handle (data g)
+  "Remember the entity's handle in the file (for AutoCAD's draw order table)."
+  (let ((h (dxf 5 g)))
+    (if (and data h) (append data (list (cons :src-handle (princ-to-string h)))) data)))
+
+(defun handle-number (h)
+  (or (ignore-errors (parse-integer (princ-to-string h) :radix 16)) 0))
+
+(defun sortents-map (objects tables)
+  "AutoCAD's model-space draw order (SORTENTSTABLE): entity handle -> sort key, or NIL."
+  (let* ((ms (find-if (lambda (r) (and (equal (cdr (first r)) "BLOCK_RECORD")
+                                       (equalp (dxf 2 r) "*Model_Space")))
+                      tables))
+         (ms-handle (and ms (princ-to-string (dxf 5 ms))))
+         ;; model space's extension dictionary, which owns its draw order table
+         (ms-dict (and ms (dxf 360 ms) (princ-to-string (dxf 360 ms)))))
+    (dolist (g objects)
+      (when (equal (cdr (first g)) "SORTENTSTABLE")
+        ;; it belongs to the block record named by the 330 after the AcDbSortentsTable marker; some
+        ;; writers (LibreDWG) leave that out, so also accept the table owned by model space's dictionary
+        (let* ((after (member-if (lambda (p) (and (consp p) (eql (car p) 100) (equal (cdr p) "AcDbSortentsTable"))) g))
+               (block (let ((p (second after))) (and (consp p) (eql (car p) 330) (princ-to-string (cdr p)))))
+               (dict (let ((p (find 330 g :key (lambda (x) (and (consp x) (car x)))))) (and p (princ-to-string (cdr p))))))
+          (when (or (and block ms-handle (equalp block ms-handle))
+                    (and (null block) dict ms-dict (equalp dict ms-dict)))
+            (let ((map (make-hash-table :test #'equalp)))
+              (loop for (p q) on (rest after)
+                    when (and (consp p) (eql (car p) 331) (consp q) (eql (car q) 5))
+                      do (setf (gethash (princ-to-string (cdr p)) map) (handle-number (cdr q))))
+              (return-from sortents-map map))))))
+    nil))
+
+(defun apply-draw-order (datas map)
+  "Order converted entities as AutoCAD draws them; objects without a handle stay with the one before."
+  (if (null map)
+      datas
+      (let ((key 0) (i 0))
+        (mapcar #'third
+                (sort
+                 (mapcar (lambda (d)
+                           (let ((h (dxf :src-handle d)))
+                             (when h (setf key (or (gethash h map) (handle-number h))))
+                             (list key (incf i) d)))
+                         datas)
+                 (lambda (a b) (or (< (first a) (first b))
+                                   (and (= (first a) (first b)) (< (second a) (second b))))))))))
+
+(defvar *import-skipped* nil "Object types the last DXF import could not keep: ((type . count) ...).")
+
+(defun block-record-name (tables handle)
+  (dxf 2 (find-if (lambda (r) (and (equal (cdr (first r)) "BLOCK_RECORD")
+                                   (equalp (princ-to-string (dxf 5 r)) (princ-to-string handle))))
+                  tables)))
 
 (defun dxf-import (path &key (replace t))
   "Load PATH into the current drawing (clearing it first when REPLACE)."
+  (let ((*keep-dimension-blocks* t))
+    (dxf-import-1 path replace)))
+
+(defun dxf-import-1 (path replace)
   (let* ((pairs (dxf-pairs (read-file-lines path)))
          (tables (split-entities (section-pairs pairs "TABLES")))
          (blocks (split-entities (section-pairs pairs "BLOCKS")))
@@ -196,6 +258,9 @@
                            (let ((n (dxf 5 g))) (and (stringp n) (not (dxf 105 g)) n)))))
             (when (and name (known-arrow-name-p name))
               (setf (getf vars :dimblk) (arrow-code name))))
+          (let ((lname (and (dxf 341 g) (block-record-name tables (dxf 341 g)))))
+            (when (and lname (known-arrow-name-p lname))
+              (setf (getf vars :dimldrblk) (arrow-code lname))))
           (setf (drawing-dimstyles *dwg*)
                 (append (remove (dxf 2 g) (drawing-dimstyles *dwg*) :key #'dimstyle-name :test #'string-equal)
                         (list (make-dimstyle :name (dxf 2 g) :vars vars)))))))
@@ -235,17 +300,29 @@
                 ((equal type "ENDBLK")
                  (when (and cur (not (member (block-def-name cur) '("*Model_Space" "*Paper_Space" "$MODEL_SPACE" "$PAPER_SPACE")
                                              :test (lambda (a b) (and (stringp a) (search b a :test #'char-equal))))))
-                   (setf (block-def-entities cur) (convert-entity-list (nreverse body)))
+                   (setf (block-def-entities cur) (mapcar (lambda (x) (rem-dxf :src-handle x))
+                                                          (convert-entity-list (nreverse body))))
                    (push cur (drawing-blocks *dwg*)))
                  (setf cur nil body nil))
                 (t (push g body))))))
-    ;; entities
-    (dolist (data (convert-entity-list ents))
-      (when (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT"
-                                   "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH")
-                    :test #'equal)
-        (add-entity data)
-        (incf count)))
+    ;; entities (anything Fancy Pencil can't keep is counted, so opening can say so)
+    (setf *import-skipped* nil)
+    (dolist (data (mapcar (lambda (x) (rem-dxf :src-handle x))
+                          (apply-draw-order (convert-entity-list ents)
+                                            (sortents-map (split-entities (section-pairs pairs "OBJECTS")) tables))))
+      (if (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
+                                 "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH")
+                  :test #'equal)
+          (progn
+            (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
+              (let ((name (block-record-name tables (dxf :ldr-blk-handle data))))
+                (setf data (rem-dxf :ldr-blk-handle data))
+                (when (and name (known-arrow-name-p name))
+                  (setf data (append data (list (cons :ldr-blk (arrow-code name))))))))
+            (add-entity data)
+            (incf count))
+          (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
+            (if c (incf (cdr c)) (push (cons (dxf 0 data) 1) *import-skipped*)))))
     (setf (drawing-saved-modcount *dwg*) (drawing-modcount *dwg*))
     count))
 
@@ -272,6 +349,7 @@
 (defun angle-codes-for (type)
   (cond ((equal type "ARC") '(50 51))
         ((member type '("TEXT" "INSERT" "ATTDEF" "ATTRIB" "MTEXT") :test #'equal) '(50 51))
+        ((equal type "DIMENSION") '(50 52 53))
         (t nil)))
 
 (defun write-entity (out data)
@@ -296,6 +374,10 @@
                do (write-entity out (list (cons 0 "TEXT") (cons 8 (dxf 8 data))
                                           (cons 10 (polar p (- rot (/ +pi+ 2)) (* i h 1.6d0)))
                                           (cons 40 h) (cons 1 line) (cons 50 rot))))))
+      ((equal type "LEADER")                                ; no R12 equivalent: its lines and arrowhead
+       (dolist (sub (leader-display-entities data))
+         (write-entity out (append (rem-dxf 62 (rem-dxf 8 sub)) (list (cons 8 (or (dxf 8 data) "0")))
+                                   (let ((c (assoc 62 data))) (and c (list c)))))))
       ((member type '("ELLIPSE" "SPLINE") :test #'equal)    ; no R12 equivalent: write a polyline
        (let ((pts (if (equal type "ELLIPSE") (ellipse-points data) (spline-points data))))
          (when (> (length pts) 1)

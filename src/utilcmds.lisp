@@ -347,6 +347,13 @@
                   (and as (not (from-lisp-p)) (not (gui-p))
                        (if (equal "R12" (gkw "File format [R12/2000] <2000>: " '("R12" "2000") "2000")) :r12 :r2000))
                   (if (equalp (sysvar "SAVEFORMAT") "R12") :r12 :r2000))))
+    (when (and f (drawing-skipped *dwg*) (drawing-filename *dwg*)
+               (equal (ignore-errors (namestring (truename f))) (ignore-errors (namestring (truename (drawing-filename *dwg*))))))
+      (if (and (gui-p) (not (from-lisp-p)))
+          (unless (string= "yes" (gui-confirm (format nil "~A had ~A that Fancy Pencil can't keep. Saving over it will remove them.~%~%Save over it anyway? (No = choose a new name)"
+                                                      (file-namestring f) (skipped-summary (drawing-skipped *dwg*)))))
+            (setf f (ask-file t "Save Drawing As" (drawing-filename *dwg*) "dxf dwg")))
+          (out (format nil "Note: ~A had ~A that are not kept.~%" (file-namestring f) (skipped-summary (drawing-skipped *dwg*))))))
     (when f
       (if (dwg-name-p f)
           (save-as-dwg f)
@@ -414,11 +421,35 @@ a DXF next to it instead and leave the DWG untouched."
      (handler-case (after-open f (dxf-import f))
        (file-error () (tell-user (format nil "Cannot open ~A" f)))))))
 
+(defparameter *object-type-names*
+  '(("IMAGE" "raster image" "raster images") ("PDFUNDERLAY" "PDF underlay" "PDF underlays")
+    ("DWFUNDERLAY" "DWF underlay" "DWF underlays") ("DGNUNDERLAY" "DGN underlay" "DGN underlays")
+    ("REGION" "region" "regions") ("3DSOLID" "3D solid" "3D solids") ("BODY" "body" "bodies")
+    ("MLINE" "multiline" "multilines") ("MULTILEADER" "multileader" "multileaders")
+    ("TABLE" "table" "tables") ("WIPEOUT" "wipeout" "wipeouts") ("OLE2FRAME" "OLE object" "OLE objects")
+    ("ACAD_TABLE" "table" "tables") ("XLINE" "construction line" "construction lines") ("RAY" "ray" "rays")
+    ("TOLERANCE" "tolerance frame" "tolerance frames") ("MESH" "mesh" "meshes") ("3DFACE" "3D face" "3D faces")))
+
+(defun skipped-summary (skipped)
+  (format nil "~{~A~^, ~}"
+          (mapcar (lambda (c)
+                    (let ((nm (assoc (car c) *object-type-names* :test #'string-equal)))
+                      (format nil "~D ~A" (cdr c)
+                              (cond ((null nm) (format nil "~A object~:P" (car c) (cdr c)))
+                                    ((= (cdr c) 1) (second nm)) (t (third nm))))))
+                  (sort (copy-list skipped) #'> :key #'cdr))))
+
 (defun after-open (f n)
   (setf *pickfirst* nil *view-history* nil)
   (clrhash *hl*) (clear-geom-cache)
+  (setf (drawing-skipped *dwg*) *import-skipped*)
   (out (format nil "Opened ~A (~D object~:P).~%" f n))
-  (when (gui-p) (zoom-extents) (gui-sync)))
+  (when (gui-p) (zoom-extents) (gui-sync))
+  (when *import-skipped*
+    (tell-user (format nil "~A also contains ~A, which Fancy Pencil can't show or keep yet.~%~%~
+                            The file itself is unchanged. Saving over it would leave these out, so use ~
+                            Save As with a new name if you want to keep the original complete."
+                       (file-namestring f) (skipped-summary *import-skipped*)))))
 
 (defcmd "NEW" ("QNEW") "Creates a new drawing in its own tab."
   (new-doc)
@@ -568,6 +599,7 @@ a DXF next to it instead and leave the DWG untouched."
                ((equal type "LWPOLYLINE") (assoc 10 data))
                ((equal type "INSERT") (and (stringp (dxf 2 data)) (find-block (dxf 2 data)) (pointp (dxf 10 data))))
                ((member type '("ELLIPSE" "SPLINE" "SOLID" "DIMENSION") :test #'equal) t)
+               ((equal type "LEADER") (>= (count 10 data :key (lambda (p) (and (consp p) (car p)))) 2))
                ((equal type "HATCH") (and (dxf :loops data) t))
                (t nil)))))
 

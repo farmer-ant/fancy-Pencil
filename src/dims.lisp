@@ -297,6 +297,13 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
                      (angular-dim-geometry (pt3 (dxf 15 data)) (pt3 (dxf 13 data)) (pt3 (dxf 14 data)) (pt3 (dxf 10 data)) (dxf 1 data) vars)
                    (setf data (set-dxf 42 meas data))
                    es)))))))
+    ;; text the user dragged elsewhere (flag 128) stays where it was put; 11 is its middle point
+    (when (and ents (logtest 128 (or (dxf 70 data) 0)) (dxf 11 data))
+      (setf ents (mapcar (lambda (e)
+                           (if (equal (dxf 0 e) "MTEXT")
+                               (set-dxf 71 5 (set-dxf 10 (pt3 (dxf 11 data)) e))
+                               e))
+                         ents)))
     (if ents
         (let ((name (unique-dim-block-name)))
           (push (make-block-def :name name :base (pt 0 0) :entities ents) (drawing-blocks *dwg*))

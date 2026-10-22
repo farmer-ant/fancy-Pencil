@@ -7,7 +7,7 @@
 
 (defun type-display-name (type)
   (cond ((equal type "LWPOLYLINE") "Polyline") ((equal type "INSERT") "Block Reference")
-        ((equal type "MTEXT") "MText") ((equal type "DIMENSION") "Dimension")
+        ((equal type "MTEXT") "MText") ((equal type "DIMENSION") "Dimension") ((equal type "LEADER") "Leader")
         (t (string-capitalize type))))
 
 (defun common-value (sel fn)

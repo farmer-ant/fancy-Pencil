@@ -99,6 +99,7 @@
          (dolist (c '(10 11 12 13)) (wp out c (pt3 (or (dxf c data) (dxf 12 data) (pt 0 0))))))
         ((equal type "HATCH") (common) (write-hatch-body out data))
         ((equal type "DIMENSION") (common) (write-dimension-body out data))
+        ((equal type "LEADER") (common) (write-leader-2000 out data))
         (t nil)))))
 
 (defun write-hatch-body (out data)
@@ -109,13 +110,18 @@
     (w out 2 (if solid "SOLID" name)) (w out 70 (if solid 1 0)) (w out 71 0)
     (w out 91 (length loops))
     (loop for lp in loops for first = t then nil
+          for fl = (let ((fs (dxf :loop-flags data)))
+                     (if (and fs (= (length fs) (length loops)))
+                         (nth (position lp loops) fs)
+                         (if first 1 0)))
           do (let ((bulgy (some (lambda (v) (/= (second v) 0)) lp)))
-               (w out 92 (if first 3 2)) (w out 72 (if bulgy 1 0)) (w out 73 1) (w out 93 (length lp))
+               ;; keep outer/text-box/outermost bits; we always write the boundary as a polyline (2)
+               (w out 92 (logior 2 (logand fl (logior 1 8 16)))) (w out 72 (if bulgy 1 0)) (w out 73 1) (w out 93 (length lp))
                (dolist (v lp)
                  (wp out 10 (first v) t)
                  (when bulgy (w out 42 (d (second v)))))
                (w out 97 0)))
-    (w out 75 0) (w out 76 1)
+    (w out 75 (or (dxf 75 data) 0)) (w out 76 1)
     (unless solid
       (let ((lines (hatch-pattern-lines data)))
         (w out 52 (deg (or (dxf 52 data) 0d0))) (w out 41 (d (or (dxf 41 data) 1))) (w out 77 0)
@@ -132,6 +138,8 @@
     (w out 100 "AcDbDimension") (w out 2 (or (dxf 2 data) ""))
     (wp out 10 (pt3 (or (dxf 10 data) (pt 0 0)))) (wp out 11 (pt3 (or (dxf 11 data) (pt 0 0))))
     (w out 70 (logior 32 type (logand (or (dxf 70 data) 0) 128))) (w out 1 (or (dxf 1 data) ""))
+    (when (realp (dxf 42 data)) (w out 42 (d (dxf 42 data))))
+    (when (realp (dxf 53 data)) (w out 53 (deg (dxf 53 data))))
     (w out 3 (if (find-dimstyle (dxf 3 data)) (dimstyle-name (find-dimstyle (dxf 3 data))) "Standard"))
     (case type
       ((0 1) (w out 100 "AcDbAlignedDimension")
