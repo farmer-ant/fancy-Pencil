@@ -374,15 +374,76 @@
               (width (max pw (lineweight-pixels (entity-lineweight data parent-lw))))
               (pattern (ltype-pattern-for (entity-ltype-name data parent-lt)))
               (scale (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1))))
-         (loop for pc in (data-pieces data)
-               append (loop for tp in (if xf (transform-piece pc xf) (list pc))
-                            append (if pattern
-                                       (render-linetyped tp pattern scale color tags hl width)
-                                       (render-piece tp color tags :dash hl :width width)))))))))
+         (if (and (or (not pattern)
+                      ;; dashes too small to see at this zoom: drawn solid anyway
+                      (< (* scale (reduce #'+ (mapcar #'abs pattern)) *vscale*) 3))
+                  (member type '("LWPOLYLINE" "SPLINE" "ELLIPSE" "LEADER") :test #'equal))
+             ;; many short straight pieces: one canvas line per connected run (far fewer items)
+             (render-chained (loop for pc in (data-pieces data)
+                                   append (if xf (transform-piece pc xf) (list pc)))
+                             color tags hl width)
+             (loop for pc in (data-pieces data)
+                   append (loop for tp in (if xf (transform-piece pc xf) (list pc))
+                                append (if pattern
+                                           (render-linetyped tp pattern scale color tags hl width)
+                                           (render-piece tp color tags :dash hl :width width))))))))))
+
+(defun render-chained (pieces color tags hl width)
+  "Draw connected straight pieces as multi-point canvas lines, dropping points under a pixel apart;
+other pieces (arcs, circles) are drawn one by one."
+  (let ((out nil) (run nil) (last-end nil) (m 2000d0))
+    (labels ((flush ()
+               (when (>= (length run) 4)
+                 (push (format nil ".c create line ~{~A~^ ~} -fill ~A -width ~A~A -tags {~A}"
+                               (mapcar #'fmtn (reverse run)) color width (if hl " -dash {6 3}" "") tags)
+                       out))
+               (setf run nil last-end nil))
+             (add-xy (x y)
+               (if (and run (< (+ (abs (- x (second run))) (abs (- y (first run)))) 0.75d0))
+                   nil
+                   (setf run (list* y x run)))))
+      (dolist (pc pieces)
+        (if (eq (first pc) :seg)
+            (multiple-value-bind (x1 y1) (w->s (second pc))
+              (multiple-value-bind (x2 y2) (w->s (third pc))
+                (let ((c (clip-seg x1 y1 x2 y2 (- m) (- m) (+ *cw* m) (+ *ch* m))))
+                  (cond
+                    ((null c) (flush))
+                    (t
+                     (let ((joined (and last-end (< (dist2d last-end (second pc)) 1d-9)
+                                        (= (first c) x1) (= (second c) y1))))
+                       (unless joined
+                         (flush)
+                         (add-xy (first c) (second c))))
+                     (add-xy (third c) (fourth c))
+                     ;; keep the last point even when it was close to the previous one
+                     (unless (and (= (first run) (fourth c)) (= (second run) (third c)))
+                       (setf run (list* (fourth c) (third c) (cddr run))))
+                     (setf last-end (if (and (= (third c) x2) (= (fourth c) y2)) (third pc) nil))
+                     (unless last-end (flush)))))))
+            (progn (flush)
+                   (setf out (append (reverse (render-piece pc color tags :dash hl :width width)) out)))))
+      (flush)
+      (nreverse out))))
 
 (defun entity-render-cmds (e)
-  (let ((data (ename-data e)))
-    (render-data data (entity-aci data) (format nil "ent h~A" (ename-handle e)) (gethash e *hl*))))
+  "Canvas commands for entity E. Level of detail, as in AutoCAD: objects outside the view are
+skipped, and an object smaller than about a pixel and a half is drawn as one tiny mark."
+  (let* ((data (ename-data e))
+         (tags (format nil "ent h~A" (ename-handle e)))
+         (b (ignore-errors (entity-bbox e))))
+    (if (and b (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)))
+        (multiple-value-bind (vx0 vy0 vx1 vy1) (view-rect 50)
+          (destructuring-bind (x0 y0 x1 y1) b
+            (cond
+              ((or (> x0 vx1) (< x1 vx0) (> y0 vy1) (< y1 vy0)) nil)
+              ((and (< (* (- x1 x0) *vscale*) 1.5d0) (< (* (- y1 y0) *vscale*) 1.5d0))
+               (multiple-value-bind (sx sy) (w->s (pt (/ (+ x0 x1) 2) (/ (+ y0 y1) 2)))
+                 (list (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}"
+                               (fmtn sx) (fmtn sy) (fmtn (+ sx 1)) (fmtn sy)
+                               (if (gethash e *hl*) "#8fc4ff" (aci->hex (entity-aci data))) tags))))
+              (t (render-data data (entity-aci data) tags (gethash e *hl*))))))
+        (render-data data (entity-aci data) tags (gethash e *hl*)))))
 
 (defun grid-cmds ()
   (when (eql (sysvar "GRIDMODE") 1)
