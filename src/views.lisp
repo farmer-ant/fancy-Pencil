@@ -124,3 +124,32 @@
         (progn (setf (sysvar "SNAPISOPAIR") (cond ((string-equal k "Left") 0) ((string-equal k "Right") 2) (t 1)))
                (out (format nil "Current isoplane: ~A~%" (isoplane-name)))
                (when (gui-p) (draw-temp) (gui-sync))))))
+
+;;; ---------- the view picker (a small panel of cube pictures, top right of the drawing) ----------
+
+(defparameter *cube-faces*
+  ;; normal, corner indices (cube corners are (+-1 +-1 +-1)), color
+  '(((0 0 1) ((-1 -1 1) (1 -1 1) (1 1 1) (-1 1 1)) "#7fb2e5")       ; top: blue, like AutoCAD's
+    ((0 0 -1) ((-1 -1 -1) (-1 1 -1) (1 1 -1) (1 -1 -1)) "#56606c")
+    ((0 -1 0) ((-1 -1 -1) (1 -1 -1) (1 -1 1) (-1 -1 1)) "#d9dde3")   ; front
+    ((0 1 0) ((1 1 -1) (-1 1 -1) (-1 1 1) (1 1 1)) "#9aa3ad")
+    ((1 0 0) ((1 -1 -1) (1 1 -1) (1 1 1) (1 -1 1)) "#b8c0c9")       ; right
+    ((-1 0 0) ((-1 1 -1) (-1 -1 -1) (-1 -1 1) (-1 1 1)) "#8a939e")))
+
+(defun view-cube-picture (name)
+  "Polygons (color x1 y1 ...) of a cube seen in view NAME, fitted to about 22 pixels, y down."
+  (let* ((v (make-view name))
+         (r (if v (second v) (pt 1 0 0))) (u (if v (third v) (pt 0 1 0))) (dir (if v (fourth v) (pt 0 0 1)))
+         (scale (if (and v (> (abs (pz dir)) 1d-9) (> (+ (abs (px dir)) (abs (py dir))) 1d-9)) 6.4d0 9.5d0)))
+    (loop for (n corners col) in *cube-faces*
+          when (> (vdot3 (pt3 n) dir) 1d-6)
+            collect (cons col (loop for c in corners
+                                    for p = (pt3 c)
+                                    append (list (round (* scale (vdot3 p r))) (round (- (* scale (vdot3 p u))))))))))
+
+(defun send-view-picker ()
+  (when (gui-p)
+    (tk "viewcube_set {~{~A~^ ~}}"
+        (loop for (kw name) in *view-keywords*
+              collect (format nil "{~A ~A {~{~A~^ ~}}}" (tq kw) (tq name)
+                              (mapcar (lambda (poly) (format nil "{~{~A~^ ~}}" poly)) (view-cube-picture name)))))))

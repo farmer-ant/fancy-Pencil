@@ -207,6 +207,19 @@ base point (or type X and Y), **Select objects**, and choose whether the objects
 converted to the block, or deleted. Objects selected before you start are used automatically.
 `-BLOCK` does the same at the command line. Insert copies with INSERT.
 
+### Colors
+
+Color choices (Properties panel → Select Color..., the Properties palette, the Layer Properties
+Manager's Color button or Color cell, and COLOR) open the **Select Color** dialog: all 255
+AutoCAD index colors as swatches, the standard colors and grays, ByLayer and ByBlock; click a
+swatch (double-click to choose it at once) or type a number or name.
+
+### Settings that stay put
+
+A drawing opens on the layer that was current when it was saved. Object Snap settings belong to
+you rather than to a drawing: the same snaps are on in every drawing, and they're remembered the
+next time Fancy Pencil starts (with the cursor settings, in `~/.config/fancypencil/settings.lisp`).
+
 ### Layer controls
 
 The Layers panel has **Make Current** (click an object: its layer becomes the current layer —
@@ -215,7 +228,11 @@ to, or type N to pick the layer by name — LAYMCH). Both use objects you select
 also in the Format menu and the right-click menu. Format → Change to Current Layer moves objects
 to the current layer (LAYCUR).
 
-### Views (View → 3D Views)
+### Views (View → 3D Views, or the view picker)
+
+The **view picker** at the top right of the drawing shows a small cube for each standard view:
+click one to switch (Top in the middle, the elevations around it, the isometric views in the
+corners, Bottom underneath). Click "Views" to fold it up; View → Show View Picker hides it.
 
 Top, Bottom, Left, Right, Front, Back and the SW, SE, NE and NW Isometric views, as in AutoCAD
 (`-VIEW`, `PLAN` for Top). Objects can have a height: **THICKNESS** (or the Properties panel)

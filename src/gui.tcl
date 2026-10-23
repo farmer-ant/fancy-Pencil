@@ -140,6 +140,7 @@ foreach {label kw} {Top Top Bottom Bottom Left Left Right Right Front Front Back
 }
 set ::viewname Top
 .mb.view add command -label "Plan View (Top)" -command {menucmd PLAN}
+.mb.view add checkbutton -label "Show View Picker" -variable ::vc_shown -command {viewcube_show $::vc_shown}
 .mb.view add separator
 menu .mb.view.iso -tearoff 0
 .mb.view add cascade -label "Isometric Drafting" -menu .mb.view.iso
@@ -516,8 +517,66 @@ proc settoggles {grid snap ortho osnap {lwt 0} {iso 0} {isolabel ISO}} {
     }
     .st.iso configure -text $isolabel
 }
+# ---- the view picker: cube pictures for the ten standard views, top right of the drawing ----
+set ::vc_layout {Top {1 1} Bottom {3 1} Left {1 0} Right {1 2} Front {2 1} Back {0 1}
+                 "SW Isometric" {2 0} "SE Isometric" {2 2} "NE Isometric" {0 2} "NW Isometric" {0 0}}
+set ::vc_shown 1
+frame .c.vc -background "#1b1f24" -highlightthickness 1 -highlightbackground "#3a4049"
+label .c.vc.h -text "Views   hide" -background "#1b1f24" -foreground "#9aa3ad" -font {Helvetica 8 bold} -cursor hand2
+canvas .c.vc.c -width 102 -height 136 -background "#1b1f24" -highlightthickness 0 -cursor hand2
+label .c.vc.t -text "" -background "#1b1f24" -foreground "#c9ced6" -font {Helvetica 8} -width 13
+pack .c.vc.h -side top -fill x
+pack .c.vc.c -side top
+pack .c.vc.t -side top -fill x
+place .c.vc -relx 1.0 -x -8 -y 30 -anchor ne
+bind .c.vc.h <Button-1> viewcube_toggle
+proc viewcube_toggle {} {
+    if {[winfo ismapped .c.vc.c]} {
+        pack forget .c.vc.c .c.vc.t
+        .c.vc.h configure -text "Views   show"
+    } else {
+        pack .c.vc.c -side top; pack .c.vc.t -side top -fill x
+        .c.vc.h configure -text "Views   hide"
+    }
+}
+proc viewcube_show {on} {
+    if {$on} { place .c.vc -relx 1.0 -x -8 -y 30 -anchor ne } else { place forget .c.vc }
+}
+proc viewcube_set {cells} {
+    set c .c.vc.c
+    $c delete all
+    foreach cell $cells {
+        lassign $cell kw name polys
+        lassign [dict get $::vc_layout $name] row col
+        set cx [expr {17 + $col * 34}]; set cy [expr {17 + $row * 34}]
+        set tag "v[string map {" " _} $name]"
+        $c create rectangle [expr {$cx - 16}] [expr {$cy - 16}] [expr {$cx + 16}] [expr {$cy + 16}] \
+            -fill "#1b1f24" -outline "" -tags [list $tag bg bg$tag]
+        foreach p $polys {
+            set col [lindex $p 0]; set pts {}
+            foreach {x y} [lrange $p 1 end] { lappend pts [expr {$cx + $x}] [expr {$cy + $y}] }
+            $c create polygon {*}$pts -fill $col -outline "#2a3038" -tags $tag
+        }
+        $c bind $tag <Enter> [list viewcube_hover $tag $name 1]
+        $c bind $tag <Leave> [list viewcube_hover $tag $name 0]
+        $c bind $tag <Button-1> [list menucmd "-VIEW $kw"]
+    }
+    viewcube_highlight
+}
+proc viewcube_hover {tag name on} {
+    .c.vc.c itemconfigure bg$tag -fill [expr {$on ? "#34507a" : ($name eq $::viewname ? "#2b4a73" : "#1b1f24")}]
+    .c.vc.t configure -text [expr {$on ? $name : $::viewname}]
+}
+proc viewcube_highlight {} {
+    if {![winfo exists .c.vc.c]} return
+    foreach id [.c.vc.c find withtag bg] { .c.vc.c itemconfigure $id -fill "#1b1f24" }
+    .c.vc.c itemconfigure "bgv[string map {" " _} $::viewname]" -fill "#2b4a73"
+    .c.vc.t configure -text $::viewname
+}
+
 proc setviewname {name} {
     set ::viewname $name
+    viewcube_highlight
     .st.model configure -text [expr {$name eq "Top" ? "MODEL" : "MODEL - [string toupper $name]"}]
 }
 proc setlayers {names current color} {
@@ -1813,6 +1872,126 @@ proc cud_done {ok} {
     destroy .cud
 }
 
+# ---------------------------------------------------------------- Select Color (AutoCAD Color Index)
+# hex: the 256 colors (index 0..255). Returns "CANCEL" or "OK n" / "OK BYLAYER" / "OK BYBLOCK".
+proc colordlg {current by hex} {
+    set w .cold
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Select Color"
+    wm transient $w .
+    wm resizable $w 0 0
+    set ::cold(hex) $hex
+    set ::cold(result) CANCEL
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    ttk::label $f.h -text "AutoCAD Color Index (ACI)" -style Dim.TLabel
+    pack $f.h -anchor w
+    set s 15
+    set c [canvas $f.c -width [expr {24 * $s + 2}] -height [expr {10 * $s + 2 + 2 * ($s + 8) + 10}] \
+               -background $::panel -highlightthickness 0]
+    pack $c -pady {4 6}
+    # the big grid: 24 hues across; lighter shades (even) on top, darker (odd) below, as in AutoCAD
+    set rows {0 2 4 6 8 9 7 5 3 1}
+    for {set col 0} {$col < 24} {incr col} {
+        for {set r 0} {$r < 10} {incr r} {
+            set i [expr {10 + $col * 10 + [lindex $rows $r]}]
+            set x [expr {1 + $col * $s}]; set y [expr {1 + $r * $s}]
+            $c create rectangle $x $y [expr {$x + $s - 1}] [expr {$y + $s - 1}] \
+                -fill [lindex $hex $i] -outline "#1b1f24" -tags [list sw c$i]
+            $c bind c$i <Enter> [list cold_hover $i]
+            $c bind c$i <Button-1> [list cold_pick $i]
+            $c bind c$i <Double-Button-1> [list cold_pick $i 1]
+        }
+    }
+    # the standard colors 1-9 and the grays 250-255
+    set y0 [expr {10 * $s + 10}]
+    set k 0
+    foreach i {1 2 3 4 5 6 7 8 9} {
+        set x [expr {1 + $k * ($s + 6)}]
+        $c create rectangle $x $y0 [expr {$x + $s + 4}] [expr {$y0 + $s + 4}] -fill [lindex $hex $i] -outline "#1b1f24" -tags [list sw c$i]
+        $c bind c$i <Enter> [list cold_hover $i]; $c bind c$i <Button-1> [list cold_pick $i]
+        $c bind c$i <Double-Button-1> [list cold_pick $i 1]
+        incr k
+    }
+    set k 0
+    foreach i {250 251 252 253 254 255} {
+        set x [expr {24 * $s - (6 - $k) * ($s + 2)}]
+        $c create rectangle $x $y0 [expr {$x + $s}] [expr {$y0 + $s + 4}] -fill [lindex $hex $i] -outline "#1b1f24" -tags [list sw c$i]
+        $c bind c$i <Enter> [list cold_hover $i]; $c bind c$i <Button-1> [list cold_pick $i]
+        $c bind c$i <Double-Button-1> [list cold_pick $i 1]
+        incr k
+    }
+    $c create rectangle 0 0 0 0 -outline white -width 2 -tags selbox
+    set g [ttk::frame $f.g]
+    ttk::label $g.hl -text "Index color:" -style Dim.TLabel
+    ttk::label $g.hv -textvariable ::cold(hover) -width 6
+    pack $g.hl $g.hv -side left
+    if {$by} {
+        ttk::button $g.bl -text "ByLayer" -command {cold_pick BYLAYER 1}
+        ttk::button $g.bb -text "ByBlock" -command {cold_pick BYBLOCK 1}
+        pack $g.bb $g.bl -side right -padx 2
+    }
+    pack $g -fill x
+    set b [ttk::frame $f.b]
+    ttk::label $b.cl -text "Color:"
+    ttk::entry $b.e -width 10 -textvariable ::cold(value)
+    canvas $b.pv -width 44 -height 22 -highlightthickness 1 -highlightbackground "#5a626e" -background $::panel
+    ttk::button $b.ok -text OK -command {cold_done 1}
+    ttk::button $b.no -text Cancel -command {cold_done 0}
+    pack $b.cl $b.e $b.pv -side left -padx 3
+    pack $b.no $b.ok -side right -padx 3
+    pack $b -fill x -pady {10 0}
+    bind $b.e <KeyRelease> cold_typed
+    bind $w <Escape> {cold_done 0}
+    bind $w <Return> {cold_done 1}
+    cold_pick [expr {$current == 256 ? "BYLAYER" : ($current == 0 ? "BYBLOCK" : $current)}]
+    wm geometry $w +[expr {[winfo rootx .] + 220}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    tkwait window $w
+    return $::cold(result)
+}
+proc cold_name {i} {
+    set names {1 Red 2 Yellow 3 Green 4 Cyan 5 Blue 6 Magenta 7 White}
+    if {[dict exists $names $i]} { return [dict get $names $i] }
+    return $i
+}
+proc cold_hover {i} { set ::cold(hover) $i }
+proc cold_pick {i {done 0}} {
+    set c .cold.f.c
+    set pv .cold.f.b.pv
+    $pv delete all
+    if {$i eq "BYLAYER" || $i eq "BYBLOCK"} {
+        set ::cold(value) [expr {$i eq "BYLAYER" ? "ByLayer" : "ByBlock"}]
+        $c coords selbox 0 0 0 0
+        $pv create text 22 11 -text [string range $::cold(value) 2 end] -fill "#c9ced6" -font {Helvetica 8}
+    } else {
+        set ::cold(value) [cold_name $i]
+        set bb [$c bbox c$i]
+        if {$bb ne ""} { $c coords selbox {*}$bb; $c raise selbox }
+        $pv create rectangle 0 0 46 24 -fill [lindex $::cold(hex) $i] -outline ""
+    }
+    set ::cold(pick) $i
+    if {$done} { cold_done 1 }
+}
+proc cold_typed {} {
+    set v [string trim $::cold(value)]
+    set names {red 1 yellow 2 green 3 cyan 4 blue 5 magenta 6 white 7}
+    if {[dict exists $names [string tolower $v]]} { set v [dict get $names [string tolower $v]] }
+    if {[string is integer -strict $v] && $v >= 1 && $v <= 255} {
+        set ::cold(pick) $v
+        set bb [.cold.f.c bbox c$v]
+        if {$bb ne ""} { .cold.f.c coords selbox {*}$bb; .cold.f.c raise selbox }
+        .cold.f.b.pv delete all
+        .cold.f.b.pv create rectangle 0 0 46 24 -fill [lindex $::cold(hex) $v] -outline ""
+    } elseif {[string equal -nocase $v bylayer]} { set ::cold(pick) BYLAYER
+    } elseif {[string equal -nocase $v byblock]} { set ::cold(pick) BYBLOCK }
+}
+proc cold_done {ok} {
+    if {$ok} { set ::cold(result) "OK $::cold(pick)" }
+    destroy .cold
+}
+
 # ---------------------------------------------------------------- right-click menus on the drawing
 # items: list of  {label command}  |  -  |  {> label {items}}
 proc ctxmenu_build {m items} {
@@ -2167,10 +2346,8 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
             ttk::button $w.tb.[string map {" " ""} [string tolower $lbl]] -text $lbl -command [list layeract $act]
             pack $w.tb.[string map {" " ""} [string tolower $lbl]] -side left -padx 2
         }
-        ttk::label $w.tb.cl -text "  Color (1-255):"
-        ttk::entry $w.tb.ce -width 5
-        ttk::button $w.tb.cs -text "Set Color" -command {layeract color [.ld.tb.ce get]}
-        pack $w.tb.cl $w.tb.ce $w.tb.cs -side left -padx 2
+        ttk::button $w.tb.cs -text "Color..." -command {layeract pickcolor}
+        pack $w.tb.cs -side left -padx 2
         pack $w.tb -side top -fill x
         ttk::frame $w.tb2 -padding {6 0 6 6}
         ttk::label $w.tb2.ll -text "Linetype:"
@@ -2188,7 +2365,7 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         }
         pack $w.t -side top -fill both -expand 1 -padx 6
         ttk::label $w.hint -style Dim.TLabel -padding 6 \
-            -text "Click On / Freeze / Lock / Plot cells to toggle (a No Plot layer shows on screen but is left out of plots). Double-click a layer to make it current."
+            -text "Click On / Freeze / Lock / Plot cells to toggle, the Color cell to choose a color (a No Plot layer shows on screen but is left out of plots). Double-click a layer to make it current."
         pack $w.hint -side top -fill x
         ttk::button $w.close -text Close -command {destroy .ld; focus .cmd.e}
         pack $w.close -side bottom -anchor e -padx 6 -pady 6
@@ -2229,6 +2406,7 @@ proc layerclick {x y} {
         "#4" { emit LAYERACT freeze $name }
         "#5" { emit LAYERACT lock $name }
         "#6" { emit LAYERACT plot $name }
+        "#7" { emit LAYERACT pickcolor $name }
     }
 }
 proc layeract {act {arg ""}} {

@@ -117,6 +117,7 @@
         (when m
           ;; keep bits the panel doesn't show (e.g. 4096 extension)
           (setf (sysvar "OSMODE") (logior m (logand (sysvar "OSMODE") 4096)))
+          (save-prefs)                    ; object snaps are kept for every drawing and next time
           (gui-sync))))))
 
 ;;; ---------- Dimension Style Manager ----------

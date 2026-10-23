@@ -789,7 +789,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
            (let ((m (sysvar "OSMODE")))
              (setf (sysvar "OSMODE") (if (logtest m 16384) (logand m 16383) (logior m 16384)))
              (when (zerop (logand (sysvar "OSMODE") 16383)) (setf (sysvar "OSMODE") 4133))
-             (out (format nil "<Osnap ~A>~%" (if (logtest (sysvar "OSMODE") 16384) "off" "on")))))
+             (out (format nil "<Osnap ~A>~%" (if (logtest (sysvar "OSMODE") 16384) "off" "on")))
+             (ignore-errors (save-prefs))))
           ((string= k "F7") (flip "GRIDMODE" "Grid") (gui-regen))
           ((string= k "F8") (flip "ORTHOMODE" "Ortho"))
           ((string= k "F9") (flip "SNAPMODE" "Snap"))
@@ -1066,6 +1067,10 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
       (let ((sp2 (position #\Space arg)))
         (setf color (ignore-errors (parse-integer arg :end sp2))
               arg (if sp2 (subseq arg (1+ sp2)) ""))))
+    (when (string= act "pickcolor")             ; the Color button / Color cell: the swatch dialog
+      (let ((l (find-layer arg)))
+        (setf act "color"
+              color (and l (color-dialog (abs (layer-color l)) nil)))))
     (let ((l (find-layer arg)))
       (cond
         ((string= act "new") (ensure-layer (unique-layer-name)))
@@ -1155,10 +1160,20 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
              (case n (1 "Red") (2 "Yellow") (3 "Green") (4 "Cyan") (5 "Blue") (6 "Magenta") (7 "White")
                (t (princ-to-string n)))))))
 
-(defun parse-color-label (s)
-  (cond ((string-equal s "Select Color...")
-         (let ((r (gui-form "Select Color" (list (list "C" "AutoCAD Color Index (1-255)" "7" :entry)) "OK")))
-           (and r (parse-color (cdr (first r))))))
+(defun color-dialog (&optional (current 7) (by t))
+  "AutoCAD's Select Color dialog: the 255 index colors as swatches (plus ByLayer and ByBlock when BY).
+Returns 1-255, 256 (ByLayer), 0 (ByBlock), or NIL if cancelled."
+  (let* ((cur (cond ((null current) 256) ((equalp current "BYLAYER") 256) ((equalp current "BYBLOCK") 0)
+                    ((stringp current) (or (ignore-errors (parse-integer current)) 7)) (t current)))
+         (r (tk-ask (format nil "colordlg ~D ~D {~{~A~^ ~}}" cur (if by 1 0)
+                            (loop for i from 0 to 255 collect (aci->hex i))))))
+    (when (and (> (length r) 3) (string= (subseq r 0 3) "OK "))
+      (let ((v (string-trim " " (subseq r 3))))
+        (cond ((string-equal v "BYLAYER") 256) ((string-equal v "BYBLOCK") 0)
+              (t (let ((n (ignore-errors (parse-integer v)))) (and n (<= 1 n 255) n))))))))
+
+(defun parse-color-label (s &optional current)
+  (cond ((string-equal s "Select Color...") (color-dialog current))
         (t (parse-color s))))
 
 (defun ltype-choices ()
