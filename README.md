@@ -272,7 +272,7 @@ command line: `-LAYER` → `Plot` → `No` → layer names.
 ### Align (AL)
 
 Modify → Align. Select objects, then pick a source point and where it goes, and a second
-source point and where it goes; the objects follow the mouse while you pick. Answer **Yes** to
+source point and where it goes (guide lines show the pairs; the objects stay put until the end). Answer **Yes** to
 "Scale objects based on alignment points?" to stretch them so the two source points land
 exactly on the two destination points (the scale factor is shown); **No** only moves and turns
 them. Your last answer is the default next time.
