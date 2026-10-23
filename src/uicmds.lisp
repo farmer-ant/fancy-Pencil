@@ -15,26 +15,17 @@
       (when scale (setf xf (xf-compose xf (xf-scaler d1 (/ (dist2d d1 d2) (dist2d s1 s2)))))))
     xf))
 
-(defun align-preview (ents fn)
-  "A drag function showing ENTS transformed by (FN cursor)."
-  (let ((datas (mapcar #'ent-data ents)))
-    (lambda (cur)
-      (let ((xf (funcall fn cur)))
-        (and xf (mapcar (lambda (dd) (list :data (xform-data dd xf))) datas))))))
-
 (defcmd "ALIGN" ("AL") "Moves, rotates and optionally scales objects so two points line up with two others."
   (let ((ents (get-selection)))
     (when ents
       (let* ((s1 (gpoint "Specify first source point: "))
-             (d1 (and (pointp s1)
-                      (gpoint "Specify first destination point: " :base s1
-                              :drag (align-preview ents (lambda (c) (xf-move (v- c s1))))))))
+             (d1 (and (pointp s1) (gpoint "Specify first destination point: " :base s1))))
         (when (pointp d1)
-          (let* ((s2 (gpoint "Specify second source point or <continue>: "
-                             :drag (align-preview ents (lambda (c) (declare (ignore c)) (xf-move (v- d1 s1))))))
-                 (d2 (and (pointp s2)
-                          (gpoint "Specify second destination point: " :base d1
-                                  :drag (align-preview ents (lambda (c) (align-xf s1 d1 s2 c (string-equal *align-scale* "Yes"))))))))
+          ;; like AutoCAD, nothing moves until the last question is answered: only rubber-band lines
+          ;; from each source point to the cursor
+          (let* ((pair1 (lambda (c) (declare (ignore c)) (list (list :data (line-data s1 d1)))))
+                 (s2 (gpoint "Specify second source point or <continue>: " :drag pair1))
+                 (d2 (and (pointp s2) (gpoint "Specify second destination point: " :base s2 :drag pair1))))
             (if (not (and (pointp s2) (pointp d2)))
                 ;; one pair: a plain move
                 (transform-entities ents (xf-move (v- d1 s1)))
