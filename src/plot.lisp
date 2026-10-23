@@ -86,6 +86,7 @@
 (defvar *plot-prims* nil)
 (defvar *plot-mono* nil)
 (defvar *plot-lw* t)
+(defvar *plot-ppu* nil "PDF points per drawing unit for the plot being made (NIL outside a plot).")
 
 (defun plot-color (aci)
   "RGB (0-1) for ACI on white paper: white/black print black, everything black when monochrome."
@@ -104,11 +105,26 @@
 
 (defun emit-prim (p) (push p *plot-prims*))
 
+(defun pattern-too-fine-p (pattern scale pc)
+  "True when a linetype's dashes would be too small to see on paper (or absurdly many):
+AutoCAD prints such lines solid, and generating them can take all the memory."
+  (let ((period (* (abs scale) (reduce #'+ (mapcar #'abs pattern)))))
+    (or (< period 1d-9)
+        (and *plot-ppu* (< (* period *plot-ppu*) 2d0))          ; under ~0.7 mm per repeat
+        (let ((len (ignore-errors (polyline-length (piece-polyline pc)))))
+          (and len (> (/ len period) 5000))))))
+
+(defun polyline-length (pts)
+  (loop for (a b) on pts while b sum (dist2d a b)))
+
 (defun plot-pieces (pieces color lw pattern scale)
   (dolist (pc pieces)
+    (when (and pattern (not (member (first pc) '(:gseg :pt))) (pattern-too-fine-p pattern scale pc))
+      (setf pc (cons :solid pc)))
     (case (first pc)
       (:gseg nil)
       (:pt (emit-prim (list :fill (list (arc-points (second pc) 0.02d0 0 +2pi+ 8)) color)))
+      (:solid (plot-pieces (list (rest pc)) color lw nil 1d0))
       (t
        (if pattern
            (dolist (run (dash-runs (piece-polyline pc) pattern scale))
@@ -407,7 +423,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
          (offset (if (plot-settings-center s)
                      (list (/ (- pw (* cw ppu)) 2) (/ (- ph (* ch ppu)) 2))
                      (list margin margin)))
-         (prims (let ((*plot-mono* (plot-settings-mono s)) (*plot-lw* (plot-settings-lineweights s)))
+         (prims (let ((*plot-mono* (plot-settings-mono s)) (*plot-lw* (plot-settings-lineweights s)) (*plot-ppu* ppu))
                   (apply #'collect-plot-prims clip))))
     (write-plot-pdf path prims :paper-w pw :paper-h ph :window clip :scale-ppu ppu :offset offset
                                :title (drawing-display-name))
