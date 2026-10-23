@@ -177,6 +177,13 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+### Recent files
+
+File → Recent Files lists the last 12 drawings you opened or saved (newest first, with the
+folder they're in); click one to open it. A file that has been moved or deleted is taken off the
+list when you click it. Clear Recent Files empties the list. It's kept in
+`~/.config/fancypencil/recent.lisp`.
+
 ### Units (UNITS, Format → Units)
 
 Choose how lengths are shown — Architectural (`12'-6 1/2"`), Decimal, Engineering (`12'-6.50"`),

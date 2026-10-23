@@ -425,6 +425,7 @@
           (save-as-dwg f)
           (let ((f (ensure-ext f "dxf")))
             (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
+            (note-recent f)
             (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000"))))))))
 
 (defun save-as-dwg (f)
@@ -439,6 +440,7 @@ a DXF next to it instead and leave the DWG untouched."
           (if ok
               (progn (setf (drawing-filename *dwg*) (namestring f)
                            (drawing-saved-modcount *dwg*) (drawing-modcount *dwg*))
+                     (note-recent f)
                      (out (format nil "Saved ~A (AutoCAD 2018 DWG)~%" f)))
               (progn (setf (drawing-saved-modcount *dwg*) -1)
                      (tell-user msg)))))
@@ -506,6 +508,7 @@ a DXF next to it instead and leave the DWG untouched."
                   (sort (copy-list skipped) #'> :key #'cdr))))
 
 (defun after-open (f n)
+  (note-recent f)
   (setf *pickfirst* nil *view-history* nil)
   (clrhash *hl*) (clear-geom-cache)
   (setf (drawing-skipped *dwg*) *import-skipped*)
