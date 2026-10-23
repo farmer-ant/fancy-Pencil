@@ -131,6 +131,25 @@ mcmd .mb.edit "Create Block from Selection..." BLOCK
 mcmd .mb.edit "Erase" ERASE Del
 mcmd .mb.edit "Select All" SELECTALL Ctrl+A
 
+menu .mb.view.v3 -tearoff 0
+.mb.view add cascade -label "3D Views" -menu .mb.view.v3
+foreach {label kw} {Top Top Bottom Bottom Left Left Right Right Front Front Back BAck - - \
+                    "SW Isometric" SWiso "SE Isometric" SEiso "NE Isometric" NEiso "NW Isometric" NWiso} {
+    if {$label eq "-"} { .mb.view.v3 add separator; continue }
+    .mb.view.v3 add radiobutton -label $label -variable ::viewname -value $label -command [list menucmd "-VIEW $kw"]
+}
+set ::viewname Top
+.mb.view add command -label "Plan View (Top)" -command {menucmd PLAN}
+.mb.view add separator
+menu .mb.view.iso -tearoff 0
+.mb.view add cascade -label "Isometric Drafting" -menu .mb.view.iso
+mcmd .mb.view.iso "Off (Orthographic)" "ISODRAFT Orthographic"
+mcmd .mb.view.iso "Isoplane Left" "ISODRAFT isoplaneLeft"
+mcmd .mb.view.iso "Isoplane Top" "ISODRAFT isoplaneTop"
+mcmd .mb.view.iso "Isoplane Right" "ISODRAFT isoplaneRight"
+.mb.view.iso add separator
+mcmd .mb.view.iso "Next Isoplane" ISOPLANE F5
+.mb.view add separator
 mcmd .mb.view "Zoom Extents" "ZOOM E"
 mcmd .mb.view "Zoom Window" "ZOOM W"
 mcmd .mb.view "Zoom Previous" "ZOOM P"
@@ -169,6 +188,9 @@ mcmd .mb.modify "Align" ALIGN
 mcmd .mb.modify "Match Properties" MATCHPROP
 mcmd .mb.modify "Properties" PROPERTIES
 mcmd .mb.format "Layer..." LAYER
+mcmd .mb.format "Make Object's Layer Current" LAYMCUR
+mcmd .mb.format "Match Layer" LAYMCH
+mcmd .mb.format "Change to Current Layer" LAYCUR
 mcmd .mb.format "Linetype..." LINETYPE
 mcmd .mb.format "Lineweight..." LWEIGHT
 mcmd .mb.format "Text Style..." STYLE
@@ -237,9 +259,14 @@ ttk::combobox $lr.cb -width 16 -state readonly -takefocus 0
 bind $lr.cb <<ComboboxSelected>> { emit LAYERSET [.tb.layers.r.cb get]; focus .cmd.e }
 pack $lr.sw $lr.cb -side left -padx 2
 ttk::button $lf.lp -text "Layer Properties" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYER}
+set lb [ttk::frame $lf.b]
+ttk::button $lb.mc -text "Make Current" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCUR}
+ttk::button $lb.mh -text "Match Layer" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
+pack $lb.mc $lb.mh -side left -expand 1 -fill x
 ttk::label $lf.t -text Layers -style Group.TLabel
 pack $lr -side top -pady 1
 pack $lf.lp -side top -fill x
+pack $lb -side top -fill x
 pack $lf.t -side top
 pack $lf -side left -anchor n
 ttk::separator .tb.slayers -orient vertical
@@ -388,7 +415,7 @@ label .st.xy -text "0.0000, 0.0000, 0.0000" -background $panel -foreground $fg -
 pack .st.xy -side left
 ttk::label .st.model -text "MODEL" -style Dim.TLabel
 pack .st.model -side right -padx 6
-foreach {t k} {LWT LWT OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
+foreach {t k} {LWT LWT ISO ISO OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
     ttk::button .st.[string tolower $t] -text $t -style Toggle.TButton -takefocus 0 -command [list togglekey $k]
     pack .st.[string tolower $t] -side right -padx 1
 }
@@ -430,6 +457,8 @@ bind all <F2> {emit K F2; break}
 bind all <F3> {emit K F3; break}
 bind all <F7> {emit K F7; break}
 bind all <F8> {emit K F8; break}
+bind all <F5> {emit K F5; break}
+bind all <Control-e> {emit K F5; break}
 bind all <F9> {emit K F9; break}
 bind all <Control-z> {emit MENU U; break}
 bind all <Control-y> {emit MENU REDO; break}
@@ -481,10 +510,15 @@ proc setprompt {s spaces} {
     focus .cmd.e
 }
 proc setxy {s} { .st.xy configure -text $s }
-proc settoggles {grid snap ortho osnap {lwt 0}} {
-    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt] {
+proc settoggles {grid snap ortho osnap {lwt 0} {iso 0} {isolabel ISO}} {
+    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt iso $iso] {
         .st.$w configure -style [expr {$v ? "On.Toggle.TButton" : "Toggle.TButton"}]
     }
+    .st.iso configure -text $isolabel
+}
+proc setviewname {name} {
+    set ::viewname $name
+    .st.model configure -text [expr {$name eq "Top" ? "MODEL" : "MODEL - [string toupper $name]"}]
 }
 proc setlayers {names current color} {
     .tb.layers.r.cb configure -values $names

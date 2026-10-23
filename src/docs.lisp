@@ -10,7 +10,8 @@
   (vx 6d0) (vy 4.5d0) (vscale 60d0) view-history
   pickfirst previous-selection grdraw-items last-dim dim-p2 last-erased layiso-saved
   untitled
-  block-edit)        ; Block Editor tabs: (parent-doc block-name)
+  block-edit
+  view)              ; the 3D view direction (*VIEW*)        ; Block Editor tabs: (parent-doc block-name)
 
 (defvar *docs* nil "Open documents, in tab order.")
 (defvar *current-doc* nil)
@@ -48,7 +49,8 @@
         (doc-vx d) *vx* (doc-vy d) *vy* (doc-vscale d) *vscale* (doc-view-history d) *view-history*
         (doc-pickfirst d) *pickfirst* (doc-previous-selection d) *previous-selection*
         (doc-grdraw-items d) *grdraw-items* (doc-last-dim d) *last-dim* (doc-dim-p2 d) *dim-p2*
-        (doc-last-erased d) *last-erased* (doc-layiso-saved d) *layiso-saved*))
+        (doc-last-erased d) *last-erased* (doc-layiso-saved d) *layiso-saved*
+        (doc-view d) *view*))
 
 (defun load-doc-state (d)
   (let ((app (loop for k in *app-sysvars*
@@ -58,7 +60,8 @@
           *vx* (doc-vx d) *vy* (doc-vy d) *vscale* (doc-vscale d) *view-history* (doc-view-history d)
           *pickfirst* (remove-if-not #'ent-live-p (doc-pickfirst d)) *previous-selection* (doc-previous-selection d)
           *grdraw-items* (doc-grdraw-items d) *last-dim* (doc-last-dim d) *dim-p2* (doc-dim-p2 d)
-          *last-erased* (doc-last-erased d) *layiso-saved* (doc-layiso-saved d))
+          *last-erased* (doc-last-erased d) *layiso-saved* (doc-layiso-saved d)
+          *view* (doc-view d))
     ;; program-wide settings follow you into the other drawing
     (loop for (k . v) in app do (setf (gethash k *sysvars*) v)))
   (setf *current-doc* d *drawn-modcount* -1 *command-highlight* nil)

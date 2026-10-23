@@ -88,6 +88,8 @@
                (list "Scale" "SCALE") (list "Rotate" "ROTATE") (list "Mirror" "MIRROR")
                (list "Align" "ALIGN") (list "Array" "ARRAY")
                (list "Match Properties" "MATCHPROP")
+               (list "Match Layer" "LAYMCH")
+               (when (= (length sel) 1) (list "Make Object's Layer Current" "LAYMCUR"))
                :sep
                (list "Cut" "CUTCLIP") (list "Copy to Clipboard" "COPYCLIP")
                (list "Copy with Base Point" "COPYBASE")

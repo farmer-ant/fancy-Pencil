@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.21")
+(defparameter *version* "0.3.22")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -27,4 +27,7 @@
 then snaps onto the dimension line of an existing parallel dimension, so they line up.")
 (defvar *dimline-exclude* nil "The dimension being edited (not a snap target).")
 (defvar *dimline-match* nil "(from to) of the dimension line last snapped to, for drawing the guide.")
+(defvar *view* nil
+  "NIL for the plan (Top) view, else (name right up dir): the 3D view direction, with RIGHT and
+UP the world directions that point right and up on the screen and DIR pointing at the viewer.")
 (defvar *undo-ran* 0 "How many times U/UNDO/REDO have run (never rebound, so every thread sees it).")

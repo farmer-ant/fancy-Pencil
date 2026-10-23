@@ -61,7 +61,9 @@
               (fmt-decimal (/ a 144d0) 4))
       (fmt-decimal a (or (sysvar "LUPREC") 4))))
 
-(defun add (data) (add-entity data))
+(defun add (data)
+  "Add an object made by a drawing command (new objects take THICKNESS and ELEVATION)."
+  (add-entity (if (fboundp 'apply-new-object-height) (funcall 'apply-new-object-height data) data)))
 (defun line-data (a b) (list (cons 0 "LINE") (cons 10 (pt3 a)) (cons 11 (pt3 b))))
 (defun circle-data (c r) (list (cons 0 "CIRCLE") (cons 10 (pt3 c)) (cons 40 (d r))))
 (defun arc-data (c r a1 a2) (list (cons 0 "ARC") (cons 10 (pt3 c)) (cons 40 (d r)) (cons 50 (norm-ang a1)) (cons 51 (norm-ang a2))))
@@ -289,8 +291,29 @@
 
 ;;; ---------- ELLIPSE ----------
 
-(defcmd "ELLIPSE" ("EL") "Creates an ellipse."
-  (let ((a (gpoint "Specify axis endpoint of ellipse or [Center]: " :keywords '("Center"))))
+(defun isocircle-data (c r &optional (plane (isoplane)))
+  "The ellipse a circle of radius R makes on isoplane PLANE in an isometric drawing:
+semi-major axis R*sqrt(3/2), ratio 1/sqrt(3), turned 0 (Top), 120 (Left) or 60 (Right) degrees."
+  (let ((rot (* (case plane (0 120) (2 60) (t 0)) (/ pi 180))) (a (* r (sqrt 1.5d0))))
+    (list (cons 0 "ELLIPSE") (cons 10 (pt3 c)) (cons 11 (pt (* a (cos rot)) (* a (sin rot)) 0))
+          (cons 40 (/ 1 (sqrt 3d0))) (cons 41 0d0) (cons 42 +2pi+))))
+
+(defun isocircle-command ()
+  (let ((c (gpoint "Specify center of isocircle: ")))
+    (when (pointp c)
+      (let ((r (gdist "Specify radius of isocircle or [Diameter]: " :base c :keywords '("Diameter")
+                      :drag (lambda (cur) (ellipse-pieces (isocircle-data c (max 1d-9 (dist2d c cur))))))))
+        (when (equal r "Diameter")
+          (let ((dd (gdist "Specify diameter of isocircle: " :base c)))
+            (setf r (and (realp dd) (/ dd 2)))))
+        (when (and (realp r) (plusp r))
+          (add (isocircle-data c r)))))))
+
+(defcmd "ELLIPSE" ("EL") "Creates an ellipse (and isocircles in isometric drafting)."
+  (let ((a (gpoint (if (iso-mode-p) "Specify axis endpoint of ellipse or [Center/Isocircle]: "
+                       "Specify axis endpoint of ellipse or [Center]: ")
+                   :keywords (if (iso-mode-p) '("Center" "Isocircle") '("Center")))))
+    (when (equal a "Isocircle") (isocircle-command) (return-from-cmd))
     (multiple-value-bind (c major)
         (if (equal a "Center")
             (let* ((c (gpoint "Specify center of ellipse: "))

@@ -314,17 +314,50 @@
         (*osnap-override* *osnap-override*)
         (t (let ((m (or (sysvar "OSMODE") 0))) (if (logtest m 16384) 0 (logand m 16383))))))
 
+;;; ---------- isometric drafting (SNAPSTYL = 1) ----------
+;;; The three isoplanes and the two drawing directions (degrees) of each:
+;;;   Left 90/150, Top 30/150, Right 30/90. SNAPISOPAIR: 0 Left, 1 Top, 2 Right.
+
+(defun iso-mode-p () (eql (sysvar "SNAPSTYL") 1))
+(defun isoplane () (or (sysvar "SNAPISOPAIR") 1))
+(defun isoplane-name (&optional (n (isoplane))) (case n (0 "Left") (2 "Right") (t "Top")))
+(defun isoplane-axes (&optional (n (isoplane)))
+  "The two axis directions (radians) of isoplane N."
+  (mapcar (lambda (a) (* a (/ pi 180)))
+          (case n (0 '(90 150)) (2 '(30 90)) (t '(30 150)))))
+
 (defun apply-ortho (p base)
-  (if (and base (eql (sysvar "ORTHOMODE") 1))
-      (if (> (abs (- (px p) (px base))) (abs (- (py p) (py base))))
-          (pt (px p) (py base) (pz base))
-          (pt (px base) (py p) (pz base)))
-      p))
+  (cond
+    ((not (and base (eql (sysvar "ORTHOMODE") 1))) p)
+    ((iso-mode-p)
+     ;; along whichever isoplane axis is closest to the cursor direction
+     (let* ((v (v- p base)) (best nil) (bd nil))
+       (dolist (a (isoplane-axes) (pt (+ (px base) (* (cos best) bd)) (+ (py base) (* (sin best) bd)) (pz base)))
+         (let ((proj (+ (* (px v) (cos a)) (* (py v) (sin a)))))
+           (when (or (null bd) (> (abs proj) (abs bd))) (setf best a bd proj))))))
+    ((> (abs (- (px p) (px base))) (abs (- (py p) (py base))))
+     (pt (px p) (py base) (pz base)))
+    (t (pt (px base) (py p) (pz base)))))
+
+(defun iso-lattice-point (p s)
+  "The nearest point of the isometric snap lattice with spacing S (steps along 30 and 150 degrees)."
+  (let* ((c (cos (/ pi 6))) (sn 0.5d0)
+         ;; p = a*(c, sn)*s + b*(-c, sn)*s  ->  solve for a, b
+         (a (/ (+ (/ (px p) c) (/ (py p) sn)) (* 2 s)))
+         (b (/ (- (/ (py p) sn) (/ (px p) c)) (* 2 s)))
+         (best nil) (bd nil))
+    (loop for ia in (list (floor a) (ceiling a)) do
+      (loop for ib in (list (floor b) (ceiling b)) do
+        (let* ((q (pt (* s c (- ia ib)) (* s sn (+ ia ib)) (pz p))) (dd (dist2d p q)))
+          (when (or (null bd) (< dd bd)) (setf best q bd dd)))))
+    best))
 
 (defun apply-grid-snap (p)
   (if (eql (sysvar "SNAPMODE") 1)
       (let* ((u (sysvar "SNAPUNIT")) (ux (d (first u))) (uy (d (second u))))
-        (pt (* ux (fround (/ (px p) ux))) (* uy (fround (/ (py p) uy))) (pz p)))
+        (if (iso-mode-p)
+            (iso-lattice-point p (max 1d-9 uy))
+            (pt (* ux (fround (/ (px p) ux))) (* uy (fround (/ (py p) uy))) (pz p))))
       p))
 
 (defun resolve-cursor-point (raw base &key (ortho t))

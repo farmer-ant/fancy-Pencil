@@ -127,12 +127,35 @@
 
 ;;; ---------- view transform ----------
 
+(defun vdot3 (a b) (+ (* (px a) (px b)) (* (py a) (py b)) (* (pz a) (pz b))))
+
+(defun view-project (p)
+  "View coordinates (u v) of world point P: X,Y in plan view, else along the view's right/up."
+  (if *view*
+      (values (vdot3 p (second *view*)) (vdot3 p (third *view*)))
+      (values (px p) (py p))))
+
+(defun view-unproject (u v)
+  "The world point under view coordinates U,V: on the ground (XY) plane, or, when that plane is
+seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the origin."
+  (let* ((r (second *view*)) (up (third *view*)) (dir (fourth *view*))
+         (b (v+ (v* r u) (v* up v))))
+    (if (> (abs (pz dir)) 1d-9)
+        (v+ b (v* dir (- (/ (pz b) (pz dir)))))
+        b)))
+
 (defun w->s (p)
-  (values (+ (/ *cw* 2d0) (* (- (px p) *vx*) *vscale*))
-          (- (/ *ch* 2d0) (* (- (py p) *vy*) *vscale*))))
-(defun s->w (sx sy)
+  (multiple-value-bind (u v) (view-project p)
+    (values (+ (/ *cw* 2d0) (* (- u *vx*) *vscale*))
+            (- (/ *ch* 2d0) (* (- v *vy*) *vscale*)))))
+(defun s->uv (sx sy)
+  "Screen pixel -> view coordinates (the same as world X,Y in plan view)."
   (pt (+ *vx* (/ (- sx (/ *cw* 2d0)) *vscale*))
       (- *vy* (/ (- sy (/ *ch* 2d0)) *vscale*))))
+(defun s->w (sx sy)
+  (let ((q (s->uv sx sy)))
+    (if *view* (view-unproject (px q) (py q)) q)))
+(defun w->uv (p) (multiple-value-bind (u v) (view-project p) (pt u v)))
 (defun gui-pixels->world (n) (/ n *vscale*))
 (defun view-rect (&optional (margin 40))
   (let ((hw (/ (+ (/ *cw* 2d0) margin) *vscale*)) (hh (/ (+ (/ *ch* 2d0) margin) *vscale*)))
@@ -146,8 +169,32 @@
     (setf *vx* (/ (+ x0 x1) 2) *vy* (/ (+ y0 y1) 2)
           *vscale* (max 1d-9 (* fill (min (/ *cw* w) (/ *ch* h)))))
     (gui-regen)))
+(defun view-extents ()
+  "Extents of the drawing in view coordinates (projected, with heights and thickness)."
+  (if (null *view*)
+      (drawing-extents)
+      (let ((u0 nil) (v0 nil) (u1 nil) (v1 nil))
+        (dolist (e (live-entities))
+          (when (entity-visible-p e)
+            (let ((b (ignore-errors (entity-bbox e))) (data (ent-data e)))
+              (when b
+                (let* ((z0 (entity-elevation data)) (z1 (+ z0 (d (or (dxf 39 data) 0)))))
+                  (dolist (x (list (first b) (third b)))
+                    (dolist (y (list (second b) (fourth b)))
+                      (dolist (z (list z0 z1))
+                        (multiple-value-bind (u v) (view-project (pt x y z))
+                          (setf u0 (if u0 (min u0 u) u) u1 (if u1 (max u1 u) u)
+                                v0 (if v0 (min v0 v) v) v1 (if v1 (max v1 v) v)))))))))))
+        (and u0 (list u0 v0 u1 v1)))))
+
+(defun entity-elevation (data)
+  "Height of a flat object: LWPOLYLINE's elevation, else the Z of its first point."
+  (if (equal (dxf 0 data) "LWPOLYLINE")
+      (d (or (dxf 38 data) 0))
+      (let ((p (dxf 10 data))) (if (consp p) (pz p) 0d0))))
+
 (defun zoom-extents ()
-  (let ((b (drawing-extents)))
+  (let ((b (view-extents)))
     (if b
         (destructuring-bind (x0 y0 x1 y1) b
           (let ((pad (* 0.02 (max 1d-6 (- x1 x0) (- y1 y0)))))
@@ -155,7 +202,7 @@
         (zoom-to-box 0 0 12 9))))
 (defvar *regen-pending* nil)
 (defun zoom-at (sx sy factor &optional quick)
-  (let ((w (s->w sx sy)))
+  (let ((w (s->uv sx sy)))
     (setf *vscale* (min 1d9 (max 1d-9 (* *vscale* factor))))
     (setf *vx* (- (px w) (/ (- sx (/ *cw* 2d0)) *vscale*))
           *vy* (+ (py w) (/ (- sy (/ *ch* 2d0)) *vscale*)))
@@ -192,6 +239,7 @@
 ;;; ---------- rendering ----------
 
 (defun fmtn (x) (format nil "~,1F" x))
+(defun arc-sweep* (a1 a2 kind) (if (eq kind :circle) +2pi+ (arc-sweep a1 a2)))
 
 (defun clip-seg (x1 y1 x2 y2 xmin ymin xmax ymax)
   "Liang-Barsky. Returns clipped coordinates as 4 values or NIL."
@@ -221,11 +269,22 @@
     (nreverse out)))
 
 (defun piece-visible-p (pc)
+  (when *view* (return-from piece-visible-p t))
   (multiple-value-bind (x0 y0 x1 y1) (view-rect 50)
     (let ((b (pieces-bbox (list pc))))
       (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0)))))))
 
+(defun arc-points-3d (c r a1 a2 n)
+  "ARC-POINTS at the height of the centre C."
+  (let ((z (pz c))) (mapcar (lambda (p) (pt (px p) (py p) z)) (arc-points c r a1 a2 n))))
+
 (defun render-piece (pc color tags &key dash (width 1))
+  (when (and *view* (member (first pc) '(:circle :arc)))
+    ;; seen at an angle a circle is an ellipse: draw it as a fine polyline
+    (return-from render-piece
+      (destructuring-bind (c r &optional (a1 0d0) (a2 +2pi+)) (rest pc)
+        (screen-line (arc-points-3d c r a1 a2 (max 24 (min 360 (ceiling (* r *vscale* (arc-sweep* a1 a2 (first pc)) 0.15)))))
+                     color tags :dash dash :width width))))
   (when (piece-visible-p pc)
     (ecase (first pc)
       (:seg (screen-line (list (second pc) (third pc)) color tags :dash dash :width width))
@@ -282,6 +341,15 @@
                   "left")))))
 
 (defun render-text (data color tags hl)
+  (when *view*
+    ;; text lies flat on its plane; at an angle it is shown by its outline and baseline
+    (return-from render-text
+      (let ((c (ignore-errors (text-box data))))
+        (when (and c (= (length c) 4))
+          (let* ((z (let ((p (dxf 10 data))) (if (consp p) (pz p) 0d0)))
+                 (c (mapcar (lambda (p) (pt (px p) (py p) z)) c)))
+            (append (screen-line (append c (list (first c))) (if hl "#8fc4ff" color) tags :dash t)
+                    (screen-line (list (first c) (second c)) (if hl "#8fc4ff" color) tags)))))))
   (let* ((h (text-effective-height data))
          (px-size (round (/ (* h *vscale*) 0.72d0)))
          (p (text-insertion data))
@@ -367,6 +435,8 @@
            (list (format nil ".c create polygon ~{~A~^ ~} -fill ~A -outline ~A -tags {~A}"
                          (mapcar #'fmtn coords) color color tags)))))
       ((equal type "HATCH") (render-hatch data color tags hl xf))
+      ((and *view* (member type '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal))
+       (render-3d-object data color tags hl xf (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))))
       (t
        (let* ((pw (if (and (equal type "LWPOLYLINE") (dxf 43 data) (plusp (dxf 43 data)))
                       (max 1 (round (* (dxf 43 data) *vscale* (if xf (xf-scale xf) 1))))
@@ -387,6 +457,34 @@
                                 append (if pattern
                                            (render-linetyped tp pattern scale color tags hl width)
                                            (render-piece tp color tags :dash hl :width width))))))))))
+
+(defun render-3d-object (data color tags hl xf width)
+  "A line, arc, circle or polyline in a 3D view, at its elevation and extruded by its thickness
+(as AutoCAD draws walls made with THICKNESS)."
+  (let* ((elev (if (equal (dxf 0 data) "LWPOLYLINE") (d (or (dxf 38 data) 0)) 0d0))
+         (th (d (or (dxf 39 data) 0)))
+         (pieces (loop for pc in (data-pieces data) append (if xf (transform-piece pc xf) (list pc))))
+         (polys (loop for pc in pieces
+                      unless (member (first pc) '(:gseg :pt))
+                        collect (mapcar (lambda (p) (pt (px p) (py p) (+ (pz p) elev)))
+                                        (case (first pc)
+                                          (:seg (list (second pc) (third pc)))
+                                          (:circle (arc-points-3d (second pc) (third pc) 0d0 +2pi+ 72))
+                                          (:arc (destructuring-bind (c r a1 a2) (rest pc) (arc-points-3d c r a1 a2 36)))))))
+         (out nil))
+    (dolist (pc pieces)
+      (when (eq (first pc) :pt) (setf out (nconc out (render-piece pc color tags)))))
+    (dolist (poly polys)
+      (setf out (nconc out (screen-line poly color tags :dash hl :width width)))
+      (unless (zerop th)
+        (let ((top (mapcar (lambda (p) (v+ p (pt 0 0 th))) poly)))
+          (setf out (nconc out (screen-line top color tags :dash hl :width width)))
+          ;; vertical edges: at the ends, and around curves every eighth of a turn
+          (let ((n (length poly)))
+            (loop for p in poly for i from 0
+                  when (or (= i 0) (= i (1- n)) (and (> n 3) (zerop (mod i (max 1 (floor n 8))))))
+                    do (setf out (nconc out (screen-line (list p (v+ p (pt 0 0 th))) color tags :dash hl :width width))))))))
+    out))
 
 (defun render-chained (pieces color tags hl width)
   "Draw connected straight pieces as multi-point canvas lines, dropping points under a pixel apart;
@@ -432,7 +530,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
   (let* ((data (ename-data e))
          (tags (format nil "ent h~A" (ename-handle e)))
          (b (ignore-errors (entity-bbox e))))
-    (if (and b (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)))
+    (if (and b (not *view*) (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)))
         (multiple-value-bind (vx0 vy0 vx1 vy1) (view-rect 50)
           (destructuring-bind (x0 y0 x1 y1) b
             (cond
@@ -445,8 +543,26 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
               (t (render-data data (entity-aci data) tags (gethash e *hl*))))))
         (render-data data (entity-aci data) tags (gethash e *hl*)))))
 
+(defun iso-grid-cmds ()
+  "The isometric grid: lines at 30 and 150 degrees and verticals through the snap lattice."
+  (multiple-value-bind (x0 y0 x1 y1) (view-rect 0)
+    (let* ((g (max 1d-9 (d (second (sysvar "GRIDUNIT"))))) (out nil) (tn (tan (/ pi 6))) (c (cos (/ pi 6))))
+      (loop while (< (* g *vscale*) 12) do (setf g (* g 5)))
+      (loop while (> (* g *vscale*) 240) do (setf g (/ g 5)))
+      (flet ((seg (a b col) (setf out (nconc out (screen-line (list a b) col "grid")))))
+        ;; y = slope*x + k*g, for slope +tan30 and -tan30
+        (dolist (slope (list tn (- tn)))
+          (let* ((ks (mapcar (lambda (x y) (/ (- y (* slope x)) g)) (list x0 x0 x1 x1) (list y0 y1 y0 y1))))
+            (loop for k from (floor (reduce #'min ks)) to (ceiling (reduce #'max ks))
+                  do (seg (pt x0 (+ (* slope x0) (* k g))) (pt x1 (+ (* slope x1) (* k g)))
+                          (if (zerop (mod k 5)) "#323a46" "#282f39")))))
+        (loop for k from (floor x0 (* g c)) to (ceiling x1 (* g c))
+              do (seg (pt (* k g c) y0) (pt (* k g c) y1) (if (zerop (mod k 5)) "#323a46" "#282f39"))))
+      out)))
+
 (defun grid-cmds ()
-  (when (eql (sysvar "GRIDMODE") 1)
+  (when (and (eql (sysvar "GRIDMODE") 1) (not *view*))
+    (when (iso-mode-p) (return-from grid-cmds (iso-grid-cmds)))
     (multiple-value-bind (x0 y0 x1 y1) (view-rect 0)
       (let* ((g (max 1d-9 (d (first (sysvar "GRIDUNIT"))))) (major 5) (out nil))
         (loop while (< (* g *vscale*) 8) do (setf g (* g 5)))
@@ -462,6 +578,20 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
         out))))
 
 (defun ucs-icon-cmds ()
+  (when *view*
+    ;; the world axes as they point in this view, with the view's name
+    (return-from ucs-icon-cmds
+      (let ((x 44) (y (- *ch* 44)) (out nil))
+        (loop for (axis col label) in '(((1 0 0) "#d24b4b" "X") ((0 1 0) "#4bbf5a" "Y") ((0 0 1) "#4b8fd2" "Z"))
+              do (multiple-value-bind (u v) (view-project axis)
+                   (let ((ex (+ x (* 34 u))) (ey (- y (* 34 v))))
+                     (when (> (+ (* u u) (* v v)) 1d-6)
+                       (push (format nil ".c create line ~D ~D ~,1F ~,1F -fill ~A -width 2 -arrow last -tags ucs" x y ex ey col) out)
+                       (push (format nil ".c create text ~,1F ~,1F -text ~A -fill ~A -font {Helvetica 9 bold} -tags ucs"
+                                     (+ ex (* 9 u)) (- ey (* 9 v)) label col) out)))))
+        (push (format nil ".c create text 10 ~D -anchor sw -text ~A -fill #c9ced6 -font {Helvetica 10 bold} -tags ucs"
+                      (- *ch* 6) (tq (string-upcase (first *view*)))) out)
+        (nreverse out))))
   (let ((x 34) (y (- *ch* 30)))
     (list (format nil ".c create line ~D ~D ~D ~D -fill #d24b4b -width 2 -arrow last -tags ucs" x y (+ x 44) y)
           (format nil ".c create line ~D ~D ~D ~D -fill #4bbf5a -width 2 -arrow last -tags ucs" x y x (- y 44))
@@ -470,6 +600,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
           (format nil ".c create rectangle ~D ~D ~D ~D -outline #8a94a3 -tags ucs" (- x 3) (- y 3) (+ x 3) (+ y 3)))))
 
 (defun entity-in-view-p (e)
+  (when *view* (return-from entity-in-view-p t))
   (let ((b (entity-bbox e)))
     (multiple-value-bind (x0 y0 x1 y1) (view-rect 50)
       (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0)))))))
@@ -551,6 +682,16 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                                 (round (- x s)) (round (- y s)) (round (+ x s)) (round (+ y s)))))))
     (t (render-piece item "#d8dde4" "tmp"))))
 
+(defun crosshair-screen-angles ()
+  "Screen directions (radians, counterclockwise from right) of the two crosshair lines."
+  (cond
+    ((and (iso-mode-p) (not *view*)) (isoplane-axes))
+    (*view*
+     (loop for axis in '((1 0 0) (0 1 0))
+           collect (multiple-value-bind (u v) (view-project axis)
+                     (if (< (+ (* u u) (* v v)) 1d-9) (/ pi 2) (atan v u)))))
+    (t (list 0d0 (/ pi 2)))))
+
 (defun cursor-cmds ()
   (when *mouse-in*
     (let* ((x *mouse-sx*) (y *mouse-sy*) (kind (and *req* (inreq-kind *req*)))
@@ -560,10 +701,14 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
       (when cross
         (let ((len (let ((cs (or (sysvar "CURSORSIZE") 100)))
                      (if (>= cs 100) 10000 (round (* (/ cs 200) (max *cw* *ch*)))))))
-          (push (format nil ".c create line ~D ~D ~D ~D -fill ~A -tags tmp" (- x len) y (- x pb) y col) out)
-          (push (format nil ".c create line ~D ~D ~D ~D -fill ~A -tags tmp" (+ x pb) y (+ x len) y col) out)
-          (push (format nil ".c create line ~D ~D ~D ~D -fill ~A -tags tmp" x (- y len) x (- y pb) col) out)
-          (push (format nil ".c create line ~D ~D ~D ~D -fill ~A -tags tmp" x (+ y pb) x (+ y len) col) out)))
+          ;; the crosshairs follow the drawing axes: the isoplane's in isometric drafting,
+          ;; the world X and Y in a 3D view, else plain horizontal and vertical
+          (dolist (a (crosshair-screen-angles))
+            (let ((cx (cos a)) (cy (- (sin a))))
+              (push (format nil ".c create line ~,1F ~,1F ~,1F ~,1F -fill ~A -tags tmp"
+                            (- x (* len cx)) (- y (* len cy)) (- x (* pb cx)) (- y (* pb cy)) col) out)
+              (push (format nil ".c create line ~,1F ~,1F ~,1F ~,1F -fill ~A -tags tmp"
+                            (+ x (* pb cx)) (+ y (* pb cy)) (+ x (* len cx)) (+ y (* len cy)) col) out)))))
       (when (or pick (not cross))
         (push (format nil ".c create rectangle ~D ~D ~D ~D -outline ~A -tags tmp" (- x pb) (- y pb) (+ x pb) (+ y pb) col) out))
       (nreverse out))))
@@ -604,9 +749,11 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
          (cur (sysvar "CLAYER"))
          (l (find-layer cur)))
     (tk "setlayers {~{~A~^ ~}} ~A ~A" (mapcar #'tq names) (tq cur) (aci->hex (if l (abs (layer-color l)) 7)))
-    (tk "settoggles ~D ~D ~D ~D ~D" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
+    (tk "settoggles ~D ~D ~D ~D ~D ~D ~A" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
         (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0))
-        (sysvar "LWDISPLAY"))
+        (sysvar "LWDISPLAY") (if (iso-mode-p) 1 0)
+        (tq (cond ((iso-mode-p) (format nil "ISO ~A" (string-upcase (isoplane-name)))) (t "ISO"))))
+    (tk "setviewname ~A" (tq (if *view* (first *view*) "Top")))
     (sync-current-props)
     (tk "settitle ~A" (tq (format nil "Fancy Pencil — ~A~A" (drawing-display-name)
                                   (if (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)) " *" ""))))))
@@ -646,6 +793,9 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
           ((string= k "F7") (flip "GRIDMODE" "Grid") (gui-regen))
           ((string= k "F8") (flip "ORTHOMODE" "Ortho"))
           ((string= k "F9") (flip "SNAPMODE" "Snap"))
+          ((string= k "F5") (cycle-isoplane))
+          ((string= k "ISO") (set-iso (not (iso-mode-p)))
+           (out (format nil "<Isometric drafting ~:[off~;on, isoplane ~A~]>~%" (iso-mode-p) (isoplane-name))))
           ((string= k "LWT") (setf (sysvar "LWDISPLAY") (if (eql (sysvar "LWDISPLAY") 1) 0 1)) (gui-regen)))
     (gui-sync)))
 
