@@ -71,14 +71,18 @@
 
 (defun command-context-items ()
   (let* ((sel (remove-if-not #'ent-live-p *pickfirst*))
+         (ins (find-if (lambda (e) (equal (ent-type e) "INSERT")) sel))
          (last *last-command*)
          (head (append
                 (when last (list (list (format nil "Repeat ~A" (string-upcase last)) last)))
                 (when *recent-commands*
                   (list (list :sub "Recent Input" (mapcar (lambda (c) (list c c)) *recent-commands*))))
-                (list :sep))))
+                (when (block-editor-p)
+                  (list (list "Save Block (BSAVE)" "BSAVE") (list "Close Block Editor (BCLOSE)" "BCLOSE")))
+                (when (or last *recent-commands* (block-editor-p)) (list :sep)))))
     (append
      head
+     (remove nil
      (if sel
          (list (list "Erase" "ERASE") (list "Move" "MOVE") (list "Copy Selection" "COPY")
                (list "Scale" "SCALE") (list "Rotate" "ROTATE") (list "Mirror" "MIRROR")
@@ -86,13 +90,22 @@
                (list "Match Properties" "MATCHPROP")
                :sep
                (list "Cut" "CUTCLIP") (list "Copy to Clipboard" "COPYCLIP")
+               (list "Copy with Base Point" "COPYBASE")
+               :sep
+               (list "Create Block from Selection..." "BLOCK")
+               (when ins (list "Edit Block..." "BEDIT"))
+               (when ins (list "Rename Block..." "RENAME"))
                :sep
                (list "Deselect All" "DESELECT") (list "Properties" "PROPERTIES"))
          (list (list "Undo" "U") (list "Redo" "REDO")
                :sep
                (list "Zoom Extents" "ZOOM E") (list "Zoom Window" "ZOOM W")
                :sep
-               (list "Paste" "PASTECLIP") (list "Select All" "SELECTALL")))
+               (list "Paste" "PASTECLIP") (list "Paste as Block" "PASTEBLOCK")
+               :sep
+               (list "Create Block..." "BLOCK") (list "Edit Block..." "BEDIT")
+               :sep
+               (list "Select All" "SELECTALL"))))
      (list :sep (list "Object Snap Settings..." "'OSNAP")))))
 
 (defun show-command-context-menu (rx ry)

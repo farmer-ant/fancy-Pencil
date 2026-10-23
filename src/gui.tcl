@@ -126,6 +126,7 @@ mcmd .mb.edit "Copy with Base Point" COPYBASE Ctrl+Shift+C
 mcmd .mb.edit "Paste" PASTECLIP Ctrl+V
 mcmd .mb.edit "Paste as Block" PASTEBLOCK Ctrl+Shift+V
 mcmd .mb.edit "Paste to Original Coordinates" PASTEORIG
+mcmd .mb.edit "Create Block from Selection..." BLOCK
 .mb.edit add separator
 mcmd .mb.edit "Erase" ERASE Del
 mcmd .mb.edit "Select All" SELECTALL Ctrl+A
@@ -153,7 +154,9 @@ mcmd .mb.draw "Hatch..." HATCH
 mcmd .mb.draw "Revision Cloud" REVCLOUD
 mcmd .mb.draw "Point" POINT
 mcmd .mb.draw "Single Line Text" TEXT
-mcmd .mb.draw "Block: Make" BLOCK
+mcmd .mb.draw "Block: Make..." BLOCK
+mcmd .mb.draw "Block: Edit..." BEDIT
+mcmd .mb.draw "Block: Rename..." RENAME
 mcmd .mb.draw "Block: Insert" INSERT
 
 foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offset OFFSET Stretch STRETCH "Edit Polyline" PEDIT "Edit Hatch" HATCHEDIT \

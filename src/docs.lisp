@@ -9,7 +9,8 @@
   id dwg sysvars
   (vx 6d0) (vy 4.5d0) (vscale 60d0) view-history
   pickfirst previous-selection grdraw-items last-dim dim-p2 last-erased layiso-saved
-  untitled)
+  untitled
+  block-edit)        ; Block Editor tabs: (parent-doc block-name)
 
 (defvar *docs* nil "Open documents, in tab order.")
 (defvar *current-doc* nil)
@@ -162,7 +163,7 @@
   (when (ask-save-changes)
     (let ((d (current-doc)))
       (out (format nil "Closed ~A.~%" (doc-name d)))
-      (remove-doc d))
+      (remove-doc d (and (doc-block-edit d) (first (doc-block-edit d)))))
     t))
 
 (defun refresh-tabs (&optional force)

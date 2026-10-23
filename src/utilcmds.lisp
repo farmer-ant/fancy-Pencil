@@ -389,6 +389,14 @@
 
 (defun ask-save-changes ()
   "Returns NIL if the user cancelled."
+  (when (block-editor-p)                ; the Block Editor saves into the block, not to a file
+    (return-from ask-save-changes
+      (if (drawing-modified-p)
+          (let ((r (if (and (gui-p) (not (from-lisp-p)))
+                       (gui-confirm (format nil "Save the changes to block ~A?" (block-editor-name)) "yesnocancel")
+                       "no")))
+            (cond ((string= r "yes") (block-editor-save) t) ((string= r "no") t) (t nil)))
+          t)))
   (if (and (drawing-modified-p) (gui-p) (not (from-lisp-p)))
       (let ((r (gui-confirm (format nil "Save changes to ~A?" (drawing-display-name)) "yesnocancel")))
         (cond ((string= r "yes") (save-drawing nil) t) ((string= r "no") t) (t nil)))
@@ -405,6 +413,8 @@
 
 (defun save-drawing (as &key (format nil))
   "Save as DXF (FORMAT :R2000, the default, or :R12), or as DWG when the name ends in .dwg."
+  (when (and (block-editor-p) (not as))   ; Save in the Block Editor saves the block
+    (return-from save-drawing (block-editor-save)))
   (let* ((f (if (or as (null (drawing-filename *dwg*)))
                 (ask-file t "Save Drawing As" (or (drawing-filename *dwg*) "Drawing1.dxf") "dxf dwg")
                 (drawing-filename *dwg*)))

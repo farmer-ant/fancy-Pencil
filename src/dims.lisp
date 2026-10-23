@@ -345,6 +345,8 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
              (theta-fn (lambda (loc) (if aligned (ang p1 p2) (auto-linear-theta p1 p2 loc))))
              (text nil) (loc nil) (vars (current-dimvars)))
         (when (pointp p2)
+          (setf *dimline-snap* (lambda (c) (funcall theta-fn c)) *dimline-exclude* nil)
+          (unwind-protect
           (loop
             (let ((r (gpoint (if aligned "Specify dimension line location or [Text/Angle]: "
                                  "Specify dimension line location or [Text/Horizontal/Vertical/Rotated]: ")
@@ -358,6 +360,7 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
                                            (setf theta-fn (constantly a))))
                     ((pointp r) (setf loc r) (return))
                     (t (return)))))
+            (setf *dimline-snap* nil *dimline-match* nil))
           (when loc
             (let ((theta (funcall theta-fn loc)))
               (multiple-value-bind (ents meas d2 tp) (linear-dim-geometry p1 p2 loc theta text vars)
@@ -520,3 +523,65 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
            (set-entity-data e (set-dxf 3 (sysvar "DIMSTYLE") (set-dxf :dimvars (current-dimvars) (ent-data e)))))))
       ((equal k "?") (dolist (ds (all-dimstyles)) (out (format nil "  ~A~%" (dimstyle-name ds))))))))
 
+
+;;; ---------- dimension lines: line up with other dimensions; grips at the arrow ends ----------
+
+(defun linear-dim-p (data)
+  (and (equal (dxf 0 data) "DIMENSION") (member (logand (or (dxf 70 data) 0) 7) '(0 1))
+       (dxf 10 data) (dxf 13 data) (dxf 14 data)))
+
+(defun dim-line-theta (data)
+  (if (= (logand (or (dxf 70 data) 0) 7) 1)
+      (ang (pt3 (dxf 13 data)) (pt3 (dxf 14 data)))
+      (or (dxf 50 data) 0d0)))
+
+(defun foot-on-angle-line (p base theta)
+  "Foot of the perpendicular from P to the line through BASE at angle THETA."
+  (let* ((u (pt (cos theta) (sin theta)))
+         (tt (+ (* (- (px p) (px base)) (px u)) (* (- (py p) (py base)) (py u)))))
+    (pt (+ (px base) (* tt (px u))) (+ (py base) (* tt (py u))))))
+
+(defun dim-line-ends (data)
+  "The two ends of a linear dimension's dimension line (where the arrows are)."
+  (let ((th (dim-line-theta data)) (b (pt3 (dxf 10 data))))
+    (list (foot-on-angle-line (pt3 (dxf 13 data)) b th) (foot-on-angle-line (pt3 (dxf 14 data)) b th))))
+
+(defun parallel-angle-p (a b)
+  (let ((d (mod (- a b) pi))) (or (< d 1d-6) (> d (- pi 1d-6)))))
+
+(defun dimline-snap-point (p theta tol)
+  "When P is within TOL of the dimension line of another dimension parallel to THETA, the point
+on that line (keeping P's position along it). Returns (values point (from to)) or NIL."
+  (let ((best nil) (bd nil) (guide nil))
+    (dolist (e (live-entities))
+      (let ((data (ent-data e)))
+        (when (and (not (eq e *dimline-exclude*)) (linear-dim-p data)
+                   (layer-visible-p (find-layer (ent-layer e)))
+                   (parallel-angle-p (dim-line-theta data) theta))
+          (let* ((q (foot-on-angle-line p (pt3 (dxf 10 data)) (dim-line-theta data)))
+                 (dd (dist2d p q)))
+            (when (and (< dd tol) (or (null bd) (< dd bd)))
+              (let* ((ends (dim-line-ends data))
+                     (far (if (> (dist2d q (first ends)) (dist2d q (second ends))) (first ends) (second ends))))
+                (setf best q bd dd guide (list far q))))))))
+    (when best (values best guide))))
+
+(defun apply-dimline-snap (p)
+  "Used by the cursor: P moved onto a lined-up dimension line, or NIL."
+  (when *dimline-snap*
+    (let ((theta (ignore-errors (funcall *dimline-snap* p))))
+      (when theta
+        (multiple-value-bind (q guide) (dimline-snap-point p theta (aperture-world))
+          (setf *dimline-match* guide)
+          q)))))
+
+(defun dimline-grip-stretch (data id to)
+  "Drag a dimension line end grip: the whole dimension line moves to pass through TO (the
+measurement stays the same); the text moves with it."
+  (let* ((th (dim-line-theta data))
+         (old (pt3 (dxf 10 data)))
+         (new (foot-on-angle-line (pt3 (dxf 14 data)) to th))
+         (dv (v- new old)))
+    (declare (ignore id))
+    (let ((d1 (set-dxf 10 new data)))
+      (if (dxf 11 d1) (set-dxf 11 (v+ (pt3 (dxf 11 d1)) dv) d1) d1))))
