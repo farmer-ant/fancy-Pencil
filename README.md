@@ -207,6 +207,28 @@ base point (or type X and Y), **Select objects**, and choose whether the objects
 converted to the block, or deleted. Objects selected before you start are used automatically.
 `-BLOCK` does the same at the command line. Insert copies with INSERT.
 
+### Editing blocks (BEDIT, RENAME)
+
+Select a block and right-click → **Edit Block...** (or Draw → Block: Edit..., or `BE`). The block
+opens in its own **Block Editor** tab, with its base point at 0,0 (the red cross). Change it with
+any commands; **BSAVE** (or Save, Ctrl+S) writes it back and every copy in the drawing updates;
+**BCLOSE** or closing the tab finishes (it asks whether to keep unsaved changes). Moving the
+objects relative to the red cross moves the block's base point. One U in the drawing undoes the
+edit. **RENAME** (Draw → Block: Rename..., or right-click a block) renames a block, layer, text
+style or dimension style everywhere it is used.
+
+The right-click menu on a selection also has **Create Block from Selection...**, and without a
+selection **Create Block...**, **Edit Block...** and **Paste as Block**.
+
+### Dimensions that line up
+
+While placing a linear or aligned dimension, bring the dimension line near the line of an
+existing parallel dimension: it snaps onto the same line (a dashed guide and "Lined up with
+dimension" show it), so dimensions in a row sit at the same level. A selected linear dimension
+has grips at both ends of its dimension line (where the arrows are): drag either one to move the
+dimension line closer or further away — it snaps to the level of other dimensions the same way.
+The extension line origins and the text have grips as before.
+
 ### Cursor & Selection (OPTIONS, OP)
 
 Tools → Cursor & Selection: crosshair size (percent of the screen; 100 = full screen) and color,

@@ -485,6 +485,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
         (destructuring-bind (a b aci) g
           (setf cmds (nconc cmds (screen-line (list a b) (aci->hex aci) "grd")))))
       (setf cmds (nconc cmds (ucs-icon-cmds)))
+      (when (fboundp 'block-editor-banner-cmds) (setf cmds (nconc cmds (funcall 'block-editor-banner-cmds))))
       (tk-send-string (format nil "~{~A~%~}" cmds))
       (refresh-grips)
       (setf *drawn-modcount* (drawing-modcount *dwg*))
@@ -511,7 +512,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
 
 (defparameter *snap-names*
   '((1 . "Endpoint") (2 . "Midpoint") (4 . "Center") (8 . "Node") (16 . "Quadrant") (32 . "Intersection")
-    (64 . "Insertion") (128 . "Perpendicular") (256 . "Tangent") (512 . "Nearest")))
+    (64 . "Insertion") (128 . "Perpendicular") (256 . "Tangent") (512 . "Nearest")
+    (:dimline . "Lined up with dimension")))
 
 (defun snap-glyph (x y bit)
   (let ((s (max 2 (min 20 (or (sysvar "AUTOSNAPSIZE") 6)))) (c "#3fd25f") (tags "tmp") (x (round x)) (y (round y)))
@@ -581,6 +583,9 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
              (setf cmds (nconc cmds (drag-item-cmds (list :rect base cur :plain)))))
             ((and base (member kind '(:point :distance :angle)))
              (setf cmds (nconc cmds (screen-line (list base cur) "#d8dde4" "tmp")))))
+          (when (and (eq *snap-bit* :dimline) *dimline-match*)
+            ;; a dashed guide along the dimension line it lines up with
+            (setf cmds (nconc cmds (screen-line (list (first *dimline-match*) cur) "#3fd25f" "tmp" :dash t))))
           (when (and *snap-bit* (member kind '(:point :corner :distance :angle)))
             (multiple-value-bind (x y) (w->s cur)
               (setf cmds (nconc cmds (snap-glyph x y *snap-bit*)
@@ -619,7 +624,11 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
           ((member kind '(:point :corner :distance :angle))
            ;; ortho constrains lines, never the opposite corner of a rectangle or window
            (multiple-value-bind (q bit) (resolve-cursor-point raw (inreq-base *req*) :ortho (not (eq kind :corner)))
-             (setf *cursor-world* q *snap-bit* bit)))
+             (setf *cursor-world* q *snap-bit* bit)
+             ;; no object snap here: line up with another dimension's line if close to one
+             (unless bit
+               (let ((dq (and *dimline-snap* (member kind '(:point)) (apply-dimline-snap q))))
+                 (when dq (setf *cursor-world* dq *snap-bit* :dimline))))))
           (t (setf *cursor-world* raw *snap-bit* nil)))))
 
 (defun echo-input (text)

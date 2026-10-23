@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.20")
+(defparameter *version* "0.3.21")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -22,4 +22,9 @@
 (defvar *last-command* nil "Command repeated by Enter at an empty prompt.")
 (defvar *lisp-buffer* "" "Unfinished AutoLISP typed at the command line.")
 (defvar *plotting* nil "True while generating a plot (turns off screen-only simplifications).")
+(defvar *dimline-snap* nil
+  "While placing or dragging a dimension line: a function (cursor) -> the line's angle. The cursor
+then snaps onto the dimension line of an existing parallel dimension, so they line up.")
+(defvar *dimline-exclude* nil "The dimension being edited (not a snap target).")
+(defvar *dimline-match* nil "(from to) of the dimension line last snapped to, for drawing the guide.")
 (defvar *undo-ran* 0 "How many times U/UNDO/REDO have run (never rebound, so every thread sees it).")

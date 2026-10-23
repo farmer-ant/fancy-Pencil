@@ -43,6 +43,10 @@
                         (minor (pt (* k (- (py m))) (* k (px m)))))
                    (list (cons c :center) (cons (v+ c m) :major+) (cons (v- c m) :major-)
                          (cons (v+ c minor) :minor+) (cons (v- c minor) :minor-))))
+                ((and (equal type "DIMENSION") (linear-dim-p data))
+                 ;; extension line origins, the two ends of the dimension line (arrows), the text
+                 (destructuring-bind (e1 e2) (dim-line-ends data)
+                   (list (g 13 :d13) (g 14 :d14) (cons (pt3 e1) :dl1) (cons (pt3 e2) :dl2) (g 11 :d11))))
                 ((equal type "DIMENSION")
                  (list (g 13 :d13) (g 14 :d14) (g 10 :d10) (g 11 :d11) (g 15 :d15) (g 16 :d16)))
                 ((equal type "SOLID") (list (g 10 :d10) (g 11 :d11) (g 12 :d12) (g 13 :d13)))
@@ -95,6 +99,7 @@
             (let* ((nm (if (eq id :major+) (v- to c) (v- c to))) (nl (max 1d-9 (dist2d (pt 0 0) nm))))
               (set-dxf 40 (min 1d0 (/ minor-len nl)) (set-dxf 11 nm data))))
            ((:minor+ :minor-) (set-dxf 40 (max 1d-6 (min 1d0 (/ (dist2d c to) mlen))) data)))))
+      ((member id '(:dl1 :dl2)) (dimline-grip-stretch data id to))
       ((member id '(:d10 :d11 :d12 :d13 :d14 :d15 :d16))
        (let ((code (parse-integer (subseq (symbol-name id) 1))))
          (if (and (equal type "DIMENSION") (eq id :d11) (member (logand (or (dxf 70 data) 0) 7) '(0 1)))
@@ -161,6 +166,12 @@
                (:rotate (xf-rotate base (ang base to)))
                (:scale (let ((k (dist2d base to))) (and (> k 1d-9) (xf-scaler base k))))
                (:mirror (and (> (dist2d base to) 1d-9) (xf-reflect base to))))))
+      ;; dragging a dimension line by its end: line it up with other dimensions
+      (let ((dl (loop for (e . ids) in (affected)
+                      when (intersection ids '(:dl1 :dl2)) return e)))
+        (setf *dimline-snap* (and dl (let ((th (dim-line-theta (ent-data dl)))) (lambda (c) (declare (ignore c)) th)))
+              *dimline-exclude* dl))
+      (unwind-protect
       (with-undo-group
           (lambda ()
             (loop until done do
@@ -174,8 +185,8 @@
                              (cons (hot-grip-item gp)
                                    (if (eq mode :stretch)
                                        (loop for (e . ids) in (affected)
-                                             collect (list :data (reduce (lambda (dd id) (grip-stretch dd id gp cur)) ids
-                                                                         :initial-value (ent-data e))))
+                                             append (preview-items (reduce (lambda (dd id) (grip-stretch dd id gp cur)) ids
+                                                                           :initial-value (ent-data e))))
                                        (let ((xf (xf-for cur)))
                                          (and xf (loop for e in sel collect (list :data (xform-data (ent-data e) xf)))))))))
                      (r (get-user-input (if (member mode '(:rotate)) :angle :point)
@@ -195,5 +206,18 @@
                                do (if copy (add-entity (rem-dxf 5 nd)) (set-entity-data e nd)))
                          (let ((xf (if (and (eq mode :rotate) (realp r)) (xf-rotate base r) (xf-for to))))
                            (when xf (transform-entities sel xf :copy copy))))
-                     (unless copy (setf done t))))))))))
+                     (unless copy (setf done t)))))))))
+        (setf *dimline-snap* nil *dimline-exclude* nil *dimline-match* nil)))
     (refresh-grips)))
+
+(defun preview-items (data)
+  "Drag preview of DATA. A linear dimension is drawn from its new geometry (its saved picture
+would still show the old position)."
+  (if (linear-dim-p data)
+      (or (ignore-errors
+           (mapcar (lambda (e) (list :data e))
+                   (linear-dim-geometry (pt3 (dxf 13 data)) (pt3 (dxf 14 data)) (pt3 (dxf 10 data))
+                                        (dim-line-theta data) (let ((tx (dxf 1 data))) (and tx (plusp (length tx)) tx))
+                                        (dimension-vars data))))
+          (list (list :data data)))
+      (list (list :data data))))
