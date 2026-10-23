@@ -264,6 +264,8 @@
           (setf (drawing-dimstyles *dwg*)
                 (append (remove (dxf 2 g) (drawing-dimstyles *dwg*) :key #'dimstyle-name :test #'string-equal)
                         (list (make-dimstyle :name (dxf 2 g) :vars vars)))))))
+    ;; drawing settings kept in the header (units, linetype scale ...)
+    (import-header-vars (section-pairs pairs "HEADER"))
     ;; the current dimension style
     (let* ((hdr (section-pairs pairs "HEADER"))
            (pos (position "$DIMSTYLE" hdr :key #'cdr :test #'equal))
@@ -411,6 +413,9 @@
       (wr out 9 "$EXTMAX") (wr-pt out 10 (pt (third ext) (fourth ext)))
       (wr out 9 "$CLAYER") (wr out 8 (sysvar "CLAYER"))
       (wr out 9 "$TEXTSIZE") (wr out 40 (d (sysvar "TEXTSIZE")))
+      (dolist (h (header-var-pairs))     ; R12 knows all of these except the insertion units
+        (unless (member (first h) '("$TEXTSIZE" "$INSUNITS" "$MEASUREMENT" "$CELTSCALE") :test #'string-equal)
+          (wr out 9 (first h)) (wr out (second h) (third h))))
       (wr out 0 "ENDSEC")
       ;; tables
       (wr out 0 "SECTION") (wr out 2 "TABLES")
@@ -477,3 +482,37 @@
   (setf (drawing-filename *dwg*) (namestring path)
         (drawing-saved-modcount *dwg*) (drawing-modcount *dwg*))
   path)
+
+;;; ---------- header variables ----------
+
+(defparameter *header-vars*
+  '(("LUNITS" :int) ("LUPREC" :int) ("AUNITS" :int) ("AUPREC" :int) ("INSUNITS" :int)
+    ("MEASUREMENT" :int) ("LTSCALE" :real) ("CELTSCALE" :real) ("TEXTSIZE" :real)
+    ("PDMODE" :int) ("PDSIZE" :real) ("FILLETRAD" :real) ("ANGBASE" :angle) ("ANGDIR" :int)
+    ("PLINEWID" :real))
+  "Drawing settings read from and written to the DXF HEADER section.")
+
+(defun import-header-vars (hdr)
+  "Set the sysvars in *HEADER-VARS* from the HEADER pairs ((9 . \"$NAME\") (code . value) ...)."
+  (loop for (p . rest) on hdr
+        when (and (eql (car p) 9) (stringp (cdr p)) rest)
+          do (let* ((name (string-left-trim "$" (cdr p)))
+                    (spec (assoc name *header-vars* :test #'string-equal))
+                    (v (cdr (first rest))))
+               (when spec
+                 (ignore-errors
+                  (let ((val (ecase (second spec)
+                               (:int (if (realp v) (round v) (parse-integer (string-trim " " v))))
+                               (:real (d (if (realp v) v (parse-number-text v))))
+                               (:angle (* (d (if (realp v) v (parse-number-text v))) (/ pi 180))))))
+                    (when (and (eq (second spec) :real) (string-equal name "LTSCALE") (<= val 0)) (setf val 1d0))
+                    (setf (sysvar (string-upcase name)) val)))))))
+
+(defun header-var-pairs ()
+  "(name code value) for writing the header."
+  (loop for (name kind) in *header-vars*
+        for v = (sysvar name)
+        when (realp v)
+          collect (list (concatenate 'string "$" name)
+                        (if (eq kind :int) 70 (if (string-equal name "LWDISPLAY") 290 40))
+                        (case kind (:int (round v)) (:angle (* (d v) (/ 180 pi))) (t (d v))))))

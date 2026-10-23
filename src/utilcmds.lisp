@@ -86,14 +86,14 @@
           (when (consp sel)
             (let ((e (sel-entity sel)))
               (multiple-value-bind (a p) (and e (entity-area-perimeter e))
-                (if a (out (format nil "Area = ~A, ~A = ~A~%" (fmt-len a) (if (equal (ent-type e) "CIRCLE") "Circumference" "Perimeter") (fmt-len p)))
+                (if a (out (format nil "Area = ~A, ~A = ~A~%" (fmt-area a) (if (equal (ent-type e) "CIRCLE") "Circumference" "Perimeter") (fmt-len p)))
                     (out (format nil "Selected object does not have an area.~%")))))))
         (let ((pts (list r)))
           (loop for p = (gpoint "Specify next point or press ENTER for total: " :base (first pts)
                                 :drag (lambda (cur) (lwpoly-pieces (make-lwpoly-data (reverse (cons cur pts)) t))))
                 while (pointp p) do (push p pts))
           (setf pts (nreverse pts))
-          (out (format nil "Area = ~A, Perimeter = ~A~%" (fmt-len (polygon-area pts))
+          (out (format nil "Area = ~A, Perimeter = ~A~%" (fmt-area (polygon-area pts))
                        (fmt-len (loop for (a b) on (append pts (list (first pts))) while b sum (dist2d a b)))))))))
 
 (defun describe-entity (e)
@@ -237,26 +237,87 @@
 
 ;;; ---------- blocks ----------
 
-(defcmd "BLOCK" ("B" "-BLOCK" "BMAKE") "Creates a block definition from selected objects."
+;;; ---------- BLOCK ----------
+
+(defun valid-block-name-p (name)
+  (and (plusp (length name)) (<= (length name) 255)
+       (not (find-if (lambda (c) (find c "<>/\\\":;?*|,=`")) name))
+       (char/= (char name 0) #\*)))
+
+(defun make-block (name base ents mode)
+  "Define block NAME from ENTS around BASE. MODE: :convert (replace them by the block),
+:delete (remove them) or :retain (leave them as they are)."
+  (setf (drawing-blocks *dwg*)
+        (cons (make-block-def :name name :base (pt3 base) :entities (mapcar (lambda (e) (rem-dxf 5 (ent-data e))) ents))
+              (remove name (drawing-blocks *dwg*) :key #'block-def-name :test #'string-equal)))
+  (clear-geom-cache)
+  (unless (eq mode :retain) (dolist (e ents) (delete-entity e)))
+  (when (eq mode :convert)
+    (add (list (cons 0 "INSERT") (cons 2 name) (cons 10 (pt3 base)) (cons 41 1d0) (cons 42 1d0) (cons 50 0d0))))
+  (touch)
+  (when (gui-p) (gui-regen))
+  (out (format nil "Block ~A defined with ~D object~:P.~%" name (length ents))))
+
+(defun block-dialog ()
+  "AutoCAD's Block Definition dialog: name, base point, objects, and what happens to them."
+  (let ((name "") (base (pt 0 0)) (ents (take-pickfirst)) (mode "Convert"))
+    (loop
+      (let* ((names (sort (loop for b in (drawing-blocks *dwg*)
+                                unless (char= (char (block-def-name b) 0) #\*) collect (block-def-name b))
+                          #'string-lessp))
+             (r (tk-ask (format nil "blockdlg ~A ~A ~A ~A ~D ~A"
+                                (tcl-list names) (tq name) (tq (fmt-len (px base))) (tq (fmt-len (py base)))
+                                (length (remove-if-not #'ent-live-p ents)) (tq mode))))
+             (f (split-string r (code-char 31)))
+             (action (first f)))
+        (when (or (null action) (string= action "CANCEL") (string= action "")) (return))
+        (destructuring-bind (&optional n x y m) (rest f)
+          (setf name (string-trim " " (or n "")) mode (or m mode))
+          (let ((bx (and x (parse-number-text (string-trim " " x)))) (by (and y (parse-number-text (string-trim " " y)))))
+            (when (and bx by) (setf base (pt bx by)))))
+        (cond
+          ((string= action "PICK")
+           (let ((p (gpoint "Specify insertion base point: ")))
+             (when (pointp p) (setf base p))))
+          ((string= action "SELECT")
+           (let ((sel (get-selection)))
+             (when sel (setf ents sel))))
+          ((string= action "OK")
+           (setf ents (remove-if-not #'ent-live-p ents))
+           (cond ((not (valid-block-name-p name))
+                  (gui-confirm (if (string= name "") "Enter a name for the block."
+                                   (format nil "\"~A\" can't be used as a block name (it may not contain < > / \\ \" : ; ? * | , = `)." name))
+                               "ok"))
+                 ((null ents) (gui-confirm "Select the objects for the block first (Select objects)." "ok"))
+                 ((and (find-block name)
+                       (not (string= "yes" (gui-confirm (format nil "A block named \"~A\" already exists. Redefine it?~%Its copies in the drawing will change too." name))))))
+                 (t (make-block name base ents (cond ((string-equal mode "Retain") :retain)
+                                                     ((string-equal mode "Delete") :delete)
+                                                     (t :convert)))
+                    (return)))))))))
+
+(defcmd "BLOCK" ("B" "BMAKE") "Creates a block definition from selected objects (Block Definition dialog)."
+  (if (and (gui-p) (not (from-lisp-p)))
+      (block-dialog)
+      (block-command-line)))
+
+(defcmd "-BLOCK" () "Creates a block definition at the command line."
+  (block-command-line))
+
+(defun block-command-line ()
   (let ((name (gstring "Enter block name or [?]: " t)))
     (cond
       ((string= name "") nil)
       ((string= name "?") (dolist (b (drawing-blocks *dwg*))
                             (unless (char= (char (block-def-name b) 0) #\*) (out (format nil "  ~A~%" (block-def-name b))))))
+      ((not (valid-block-name-p name)) (out (format nil "Invalid block name.~%")))
       (t
        (when (and (find-block name)
                   (not (equal "Yes" (gkw (format nil "Block \"~A\" already exists. Redefine it? [Yes/No] <N>: " name) '("Yes" "No") "No"))))
-         (return-from-cmd))
+         (return-from block-command-line))
        (let* ((base (gpoint "Specify insertion base point: "))
               (ents (and base (get-selection))))
-         (when ents
-           (setf (drawing-blocks *dwg*)
-                 (cons (make-block-def :name name :base base :entities (mapcar (lambda (e) (rem-dxf 5 (ent-data e))) ents))
-                       (remove name (drawing-blocks *dwg*) :key #'block-def-name :test #'string-equal)))
-           (clear-geom-cache)
-           (dolist (e ents) (delete-entity e))
-           (add (list (cons 0 "INSERT") (cons 2 name) (cons 10 base) (cons 41 1d0) (cons 42 1d0) (cons 50 0d0)))
-           (out (format nil "Block ~A defined with ~D object~:P.~%" name (length ents)))))))))
+         (when ents (make-block name base ents :convert)))))))
 
 (defun load-block-from-dxf (name)
   "Make a block NAME from a DXF file on the support path."
@@ -555,11 +616,80 @@ a DXF next to it instead and leave the DWG untouched."
     (cond ((equal r "ON") (setf (sysvar "SNAPMODE") 1)) ((equal r "OFF") (setf (sysvar "SNAPMODE") 0))
           ((realp r) (setf (sysvar "SNAPUNIT") (list r r) (sysvar "SNAPMODE") 1)))
     (when (gui-p) (gui-sync))))
-(defcmd "UNITS" ("UN" "-UNITS") "Sets linear unit format and precision."
-  (let ((lu (get-user-input :int :prompt (format nil "Enter linear units: 1 Scientific, 2 Decimal, 3 Engineering, 4 Architectural, 5 Fractional <~D>: " (sysvar "LUNITS")))))
-    (when (and lu (<= 1 lu 5)) (setf (sysvar "LUNITS") lu)))
-  (let ((pr (get-user-input :int :prompt (format nil "Enter number of digits to right of decimal point (0 to 8) <~D>: " (sysvar "LUPREC")))))
-    (when (and pr (<= 0 pr 8)) (setf (sysvar "LUPREC") pr))))
+;;; ---------- UNITS ----------
+
+(defparameter *length-unit-types* '((4 "Architectural") (2 "Decimal") (3 "Engineering") (5 "Fractional") (1 "Scientific")))
+(defparameter *angle-unit-types* '((0 "Decimal Degrees") (1 "Deg/Min/Sec") (2 "Grads") (3 "Radians") (4 "Surveyor's Units")))
+(defparameter *insunits-types* '((0 "Unitless") (1 "Inches") (2 "Feet") (4 "Millimeters") (5 "Centimeters") (6 "Meters")))
+
+(defun length-precision-label (lu p)
+  "How precision P looks for length type LU (the choices in the Units dialog)."
+  (let ((dec (if (zerop p) "0" (format nil "0.~V,,,'0A" p ""))))
+    (case lu
+      (4 (if (zerop p) "0'-0\"" (format nil "0'-0 1/~D\"" (expt 2 p))))
+      (5 (if (zerop p) "0" (format nil "0 1/~D" (expt 2 p))))
+      (3 (format nil "0'-~A\"" dec))
+      (1 (format nil "~AE+01" dec))
+      (t dec))))
+
+(defun angle-precision-label (au p)
+  (let ((dec (if (zerop p) "0" (format nil "0.~V,,,'0A" p ""))))
+    (case au
+      (1 (cond ((zerop p) "0d") ((<= p 2) "0d00'") ((<= p 4) "0d00'00\"")
+               (t (format nil "0d00'00.~V,,,'0A\"" (- p 4) ""))))
+      (2 (format nil "~Ag" dec))
+      (3 (format nil "~Ar" dec))
+      (4 (cond ((zerop p) "N 0d E") ((<= p 2) "N 0d00' E") (t "N 0d00'00\" E")))
+      (t dec))))
+
+(defun units-dialog ()
+  (let* ((lprec (format nil "{~{~A~^ ~}}"
+                        (loop for (code nil) in *length-unit-types*
+                              collect (format nil "~D {~{~A~^ ~}}" code
+                                              (loop for p from 0 to 8 collect (tq (length-precision-label code p)))))))
+         (aprec (format nil "{~{~A~^ ~}}"
+                        (loop for (code nil) in *angle-unit-types*
+                              collect (format nil "~D {~{~A~^ ~}}" code
+                                              (loop for p from 0 to 8 collect (tq (angle-precision-label code p)))))))
+         (samples (format nil "{~{~A~^ ~}}"
+                          (loop for (code nil) in *length-unit-types*
+                                append (loop for p from 0 to 8
+                                             collect (format nil "~D,~D ~A" code p
+                                                             (tq (format nil "~A, ~A" (rtos 1.5d0 code p) (rtos 22.75d0 code p))))))))
+         (asamples (format nil "{~{~A~^ ~}}"
+                           (loop for (code nil) in *angle-unit-types*
+                                 append (loop for p from 0 to 8
+                                              collect (format nil "~D,~D ~A" code p (tq (angtos (/ pi 4) code p)))))))
+         (r (tk-ask (format nil "unitsdlg ~A ~A ~A ~A ~A ~A ~A ~D ~D ~D ~D ~D"
+                            (tcl-list (mapcar (lambda (x) (format nil "~D ~A" (first x) (second x))) *length-unit-types*))
+                            (tcl-list (mapcar (lambda (x) (format nil "~D ~A" (first x) (second x))) *angle-unit-types*))
+                            (tcl-list (mapcar (lambda (x) (format nil "~D ~A" (first x) (second x))) *insunits-types*))
+                            lprec aprec samples asamples
+                            (sysvar "LUNITS") (sysvar "LUPREC") (sysvar "AUNITS") (sysvar "AUPREC") (sysvar "INSUNITS")))))
+    (when (and (> (length r) 3) (string= (subseq r 0 3) "OK "))
+      (destructuring-bind (lu lp au ap ins) (mapcar #'parse-integer (split-string (subseq r 3) #\Space))
+        (setf (sysvar "LUNITS") lu (sysvar "LUPREC") lp (sysvar "AUNITS") au (sysvar "AUPREC") ap
+              (sysvar "INSUNITS") ins)
+        (touch)
+        (update-coords) (refresh-palette)
+        (out (format nil "Units: ~A, ~A; angles ~A, ~A; insertion units ~A.~%"
+                     (second (assoc lu *length-unit-types*)) (length-precision-label lu lp)
+                     (second (assoc au *angle-unit-types*)) (angle-precision-label au ap)
+                     (second (assoc ins *insunits-types*))))))))
+
+(defcmd "UNITS" ("UN" "-UNITS" "DDUNITS") "Sets the drawing's length and angle units, precision and insertion units."
+  (if (and (gui-p) (not (from-lisp-p)))
+      (units-dialog)
+      (progn
+        (let ((lu (get-user-input :int :prompt (format nil "Enter linear units: 1 Scientific, 2 Decimal, 3 Engineering, 4 Architectural, 5 Fractional <~D>: " (sysvar "LUNITS")))))
+          (when (and lu (<= 1 lu 5)) (setf (sysvar "LUNITS") lu)))
+        (let ((pr (get-user-input :int :prompt (format nil "Enter precision, 0 to 8 (digits after the point, or 1/2^n for fractions) <~D>: " (sysvar "LUPREC")))))
+          (when (and pr (<= 0 pr 8)) (setf (sysvar "LUPREC") pr)))
+        (let ((au (get-user-input :int :prompt (format nil "Enter angle units: 0 Decimal degrees, 1 Deg/min/sec, 2 Grads, 3 Radians, 4 Surveyor's <~D>: " (sysvar "AUNITS")))))
+          (when (and au (<= 0 au 4)) (setf (sysvar "AUNITS") au)))
+        (let ((ap (get-user-input :int :prompt (format nil "Enter angle precision (0 to 8) <~D>: " (sysvar "AUPREC")))))
+          (when (and ap (<= 0 ap 8)) (setf (sysvar "AUPREC") ap)))
+        (touch))))
 
 (defcmd "HELP" ("?" "F1") "Lists commands."
   (let (names) (maphash (lambda (k v) (declare (ignore v)) (push k names)) *commands*)
@@ -761,7 +891,7 @@ a DXF next to it instead and leave the DWG untouched."
          (setf (sysvar "CLAYER") (layer-name l))))
       ((member n '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "CMDECHO" "LUPREC" "AUPREC" "LUNITS" "AUNITS"
                    "PICKBOX" "APERTURE" "PDMODE" "HIGHLIGHT" "BLIPMODE" "PICKFIRST" "MIRRTEXT" "FILEDIA"
-                   "EXPERT" "ANGDIR" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
+                   "EXPERT" "ANGDIR" "ROLLOVERTIPS" "AUTOSNAPSIZE" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
                    "GRIPSIZE" "DIMDEC" "DIMTAD" "DIMCLRD" "DIMCLRE" "DIMCLRT" "DIMTIH" "DIMADEC" "PLINEGEN")
                :test #'string=)
        (unless (integerp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))

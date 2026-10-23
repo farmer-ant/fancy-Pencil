@@ -223,6 +223,9 @@
           (w out 9 (first v)) (w out (second v) (if (= (second v) 70) (round val) (d val)))))
       (w out 9 "$INSUNITS") (w out 70 (sysvar "INSUNITS"))
       (w out 9 "$MEASUREMENT") (w out 70 (sysvar "MEASUREMENT"))
+      (dolist (h (header-var-pairs))
+        (unless (member (first h) '("$LTSCALE" "$TEXTSIZE" "$CELTSCALE" "$INSUNITS" "$MEASUREMENT") :test #'string-equal)
+          (w out 9 (first h)) (w out (second h) (third h))))
       (w out 9 "$HANDSEED") (w out 5 "FFFFF")   ; patched below
       (w out 0 "ENDSEC")
       (w out 0 "SECTION") (w out 2 "CLASSES") (w out 0 "ENDSEC")

@@ -169,6 +169,7 @@ mcmd .mb.format "Lineweight..." LWEIGHT
 mcmd .mb.format "Text Style..." STYLE
 mcmd .mb.format "Dimension Style..." DIMSTYLE
 mcmd .mb.format "Hatch Settings..." HPSET
+mcmd .mb.format "Units..." UNITS
 mcmd .mb.format "Text Size" TEXTSIZE
 mcmd .mb.format "Point Style" PDMODE
 mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
@@ -180,6 +181,7 @@ mcmd .mb.tools.alias "Open Alias File (fancypencil.pgp)" ALIASFILE
 mcmd .mb.tools.alias "Open Alias Folder" ALIASFOLDER
 mcmd .mb.tools.alias "Reload Aliases" REINIT
 mcmd .mb.tools "Object Snap Settings..." OSNAP
+mcmd .mb.tools "Cursor & Selection..." OPTIONS
 mcmd .mb.tools "Spelling..." SPELL
 mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
@@ -317,11 +319,40 @@ proc palette_set {what rows} {
 proc palemit {key w} { emit PROP $key [$w get]; focus .cmd.e }
 bind all <Control-Key-1> {palette_toggle; break}
 
-bind .c <Motion> {emit M %x %y}
-bind .c <ButtonPress-1> {if {$::mted ne ""} {mted_done ok; break}; emit B %x %y [expr {%s & 1}]; focus .cmd.e}
+bind .c <Motion> {emit M %x %y; rollover_arm %x %y}
+bind .c <Leave> {rollover_hide}
+bind .c <ButtonPress-1> {rollover_hide; if {$::mted ne ""} {mted_done ok; break}; emit B %x %y [expr {%s & 1}]; focus .cmd.e}
 bind .c <Double-Button-1> {if {$::mted eq ""} {emit DBL %x %y}}
 bind .c <ButtonRelease-1> {emit U %x %y}
-bind .c <ButtonPress-3> {emit R %x %y %X %Y [expr {%s & 1}]}
+bind .c <ButtonPress-3> {rollover_hide; emit R %x %y %X %Y [expr {%s & 1}]}
+
+# rollover tooltips: rest the mouse on an object for a moment to see its sizes
+set ::rollid ""
+set ::rollpos {}
+label .c.tip -background "#fffbe6" -foreground "#202020" -justify left -font {Helvetica 9} \
+    -borderwidth 1 -relief solid -padx 6 -pady 3
+proc rollover_arm {x y} {
+    if {[winfo ismapped .c.tip]} { place forget .c.tip }
+    if {$::rollid ne ""} { after cancel $::rollid }
+    set ::rollpos [list $x $y]
+    set ::rollid [after 450 [list emit H $x $y]]
+}
+proc rollover_hide {} {
+    if {$::rollid ne ""} { after cancel $::rollid; set ::rollid "" }
+    place forget .c.tip
+}
+proc rolltip {x y text} {
+    # only if the mouse is still where it was when the tip was asked for
+    if {$::rollpos ne [list $x $y]} return
+    .c.tip configure -text $text
+    update idletasks
+    set w [winfo reqwidth .c.tip]; set h [winfo reqheight .c.tip]
+    set tx [expr {$x + 18}]; set ty [expr {$y + 20}]
+    if {$tx + $w > [winfo width .c]} { set tx [expr {$x - $w - 10}] }
+    if {$ty + $h > [winfo height .c]} { set ty [expr {$y - $h - 10}] }
+    place .c.tip -x $tx -y $ty
+}
+proc rolltip_hide {} { place forget .c.tip }
 bind .c <ButtonPress-2> {emit P %x %y}
 bind .c <B2-Motion> {emit D %x %y}
 bind .c <ButtonRelease-2> {emit Q %x %y}
@@ -1471,6 +1502,255 @@ proc matchpropdlg_done {ok} {
         set ::mpd(result) [concat OK $on]
     }
     destroy .mpd
+}
+
+# ---------------------------------------------------------------- Drawing Units
+# ltypes/atypes/instypes: lists of "code Label"; lprec/aprec: dict code -> 9 precision labels;
+# lsamp/asamp: dict "code,prec" -> sample text. Returns "CANCEL" or "OK lu lp au ap ins".
+proc unitsdlg {ltypes atypes instypes lprec aprec lsamp asamp lu lp au ap ins} {
+    set w .ud
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Drawing Units"
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    array unset ::ud
+    foreach {k v} [list ltypes $ltypes atypes $atypes instypes $instypes lprec $lprec aprec $aprec lsamp $lsamp asamp $asamp] { set ::ud($k) $v }
+    proc ud_label {list code} { foreach it $list { if {[lindex $it 0] == $code} { return [lrange $it 1 end] } }; return "" }
+    proc ud_code {list label} { foreach it $list { if {[lrange $it 1 end] eq $label} { return [lindex $it 0] } }; return 0 }
+    set lab {}; foreach it $ltypes { lappend lab [lrange $it 1 end] }
+    set aab {}; foreach it $atypes { lappend aab [lrange $it 1 end] }
+    set iab {}; foreach it $instypes { lappend iab [lrange $it 1 end] }
+    ttk::labelframe $f.len -text " Length " -padding 8
+    ttk::label $f.len.tl -text "Type:"
+    ttk::combobox $f.len.t -state readonly -width 18 -values $lab
+    ttk::label $f.len.pl -text "Precision:"
+    ttk::combobox $f.len.p -state readonly -width 18
+    grid $f.len.tl -row 0 -column 0 -sticky w; grid $f.len.t -row 1 -column 0 -sticky ew -pady {0 6}
+    grid $f.len.pl -row 2 -column 0 -sticky w; grid $f.len.p -row 3 -column 0 -sticky ew
+    ttk::labelframe $f.ang -text " Angle " -padding 8
+    ttk::label $f.ang.tl -text "Type:"
+    ttk::combobox $f.ang.t -state readonly -width 18 -values $aab
+    ttk::label $f.ang.pl -text "Precision:"
+    ttk::combobox $f.ang.p -state readonly -width 18
+    ttk::label $f.ang.cw -style Dim.TLabel -text "Angles measured counterclockwise from East (0)."
+    grid $f.ang.tl -row 0 -column 0 -sticky w; grid $f.ang.t -row 1 -column 0 -sticky ew -pady {0 6}
+    grid $f.ang.pl -row 2 -column 0 -sticky w; grid $f.ang.p -row 3 -column 0 -sticky ew
+    grid $f.ang.cw -row 4 -column 0 -sticky w -pady {6 0}
+    grid $f.len -row 0 -column 0 -sticky nsew -padx {0 8}
+    grid $f.ang -row 0 -column 1 -sticky nsew
+    ttk::labelframe $f.ins -text " Insertion scale " -padding 8
+    ttk::label $f.ins.l -text "Units to scale inserted content:"
+    ttk::combobox $f.ins.c -state readonly -width 18 -values $iab
+    grid $f.ins.l -row 0 -column 0 -sticky w; grid $f.ins.c -row 1 -column 0 -sticky w
+    grid $f.ins -row 1 -column 0 -columnspan 2 -sticky ew -pady {10 0}
+    ttk::labelframe $f.smp -text " Sample output " -padding 8
+    ttk::label $f.smp.l -textvariable ::ud(sample) -font {Courier 11}
+    ttk::label $f.smp.a -textvariable ::ud(asample) -font {Courier 11}
+    pack $f.smp.l $f.smp.a -anchor w
+    grid $f.smp -row 2 -column 0 -columnspan 2 -sticky ew -pady {10 0}
+    set b [ttk::frame $f.b]
+    ttk::button $b.ok -text OK -command {ud_done 1}
+    ttk::button $b.no -text Cancel -command {ud_done 0}
+    pack $b.no $b.ok -side right -padx 3
+    grid $b -row 3 -column 0 -columnspan 2 -sticky e -pady {12 0}
+    $f.len.t set [ud_label $ltypes $lu]
+    $f.ang.t set [ud_label $atypes $au]
+    $f.ins.c set [ud_label $instypes $ins]
+    set ::ud(lp) $lp; set ::ud(ap) $ap
+    ud_refresh
+    bind $f.len.t <<ComboboxSelected>> ud_refresh
+    bind $f.ang.t <<ComboboxSelected>> ud_refresh
+    bind $f.len.p <<ComboboxSelected>> {set ::ud(lp) [.ud.f.len.p current]; ud_refresh}
+    bind $f.ang.p <<ComboboxSelected>> {set ::ud(ap) [.ud.f.ang.p current]; ud_refresh}
+    bind $w <Escape> {ud_done 0}
+    bind $w <Return> {ud_done 1}
+    set ::ud(result) CANCEL
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    tkwait window $w
+    return $::ud(result)
+}
+proc ud_refresh {} {
+    set f .ud.f
+    set lu [ud_code $::ud(ltypes) [$f.len.t get]]
+    set au [ud_code $::ud(atypes) [$f.ang.t get]]
+    $f.len.p configure -values [dict get $::ud(lprec) $lu]
+    $f.ang.p configure -values [dict get $::ud(aprec) $au]
+    $f.len.p current $::ud(lp)
+    $f.ang.p current $::ud(ap)
+    set ::ud(sample) [dict get $::ud(lsamp) "$lu,$::ud(lp)"]
+    set ::ud(asample) [dict get $::ud(asamp) "$au,$::ud(ap)"]
+}
+proc ud_done {ok} {
+    if {$ok} {
+        set f .ud.f
+        set ::ud(result) [list OK [ud_code $::ud(ltypes) [$f.len.t get]] $::ud(lp) \
+                              [ud_code $::ud(atypes) [$f.ang.t get]] $::ud(ap) [ud_code $::ud(instypes) [$f.ins.c get]]]
+        set ::ud(result) [join $::ud(result) " "]
+    }
+    destroy .ud
+}
+
+# ---------------------------------------------------------------- Block Definition (BLOCK)
+# Returns ACTION \x1f name \x1f x \x1f y \x1f mode, ACTION = OK / PICK / SELECT / CANCEL.
+proc blockdlg {names name x y count mode} {
+    set w .bd
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Block Definition"
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    set ::bd(mode) $mode
+    set ::bd(result) CANCEL
+    ttk::label $f.nl -text "Name:"
+    ttk::combobox $f.n -values $names -width 32
+    $f.n set $name
+    grid $f.nl -row 0 -column 0 -sticky w
+    grid $f.n -row 1 -column 0 -columnspan 2 -sticky ew -pady {0 10}
+    ttk::labelframe $f.bp -text " Base point " -padding 8
+    ttk::button $f.bp.pick -text "Pick point" -command {bd_done PICK}
+    ttk::label $f.bp.xl -text "X:"; ttk::entry $f.bp.x -width 14; $f.bp.x insert 0 $x
+    ttk::label $f.bp.yl -text "Y:"; ttk::entry $f.bp.y -width 14; $f.bp.y insert 0 $y
+    grid $f.bp.pick -row 0 -column 0 -columnspan 2 -sticky ew -pady {0 8}
+    grid $f.bp.xl -row 1 -column 0 -sticky w; grid $f.bp.x -row 1 -column 1 -sticky ew -pady 2
+    grid $f.bp.yl -row 2 -column 0 -sticky w; grid $f.bp.y -row 2 -column 1 -sticky ew -pady 2
+    ttk::labelframe $f.ob -text " Objects " -padding 8
+    ttk::button $f.ob.sel -text "Select objects" -command {bd_done SELECT}
+    ttk::radiobutton $f.ob.r -text "Retain" -value Retain -variable ::bd(mode)
+    ttk::radiobutton $f.ob.c -text "Convert to block" -value Convert -variable ::bd(mode)
+    ttk::radiobutton $f.ob.d -text "Delete" -value Delete -variable ::bd(mode)
+    ttk::label $f.ob.n -text [expr {$count ? "$count object[expr {$count == 1 ? {} : {s}}] selected" : "No objects selected"}] \
+        -foreground [expr {$count ? "#9fd39f" : "#ffb070"}]
+    grid $f.ob.sel -row 0 -column 0 -sticky ew -pady {0 8}
+    grid $f.ob.r -row 1 -column 0 -sticky w
+    grid $f.ob.c -row 2 -column 0 -sticky w
+    grid $f.ob.d -row 3 -column 0 -sticky w
+    grid $f.ob.n -row 4 -column 0 -sticky w -pady {8 0}
+    grid $f.bp -row 2 -column 0 -sticky nsew -padx {0 8}
+    grid $f.ob -row 2 -column 1 -sticky nsew
+    ttk::label $f.tip -style Dim.TLabel -wraplength 420 -justify left \
+        -text "Convert replaces the objects with one copy of the block at the base point. Insert more copies with INSERT."
+    grid $f.tip -row 3 -column 0 -columnspan 2 -sticky w -pady {10 0}
+    set b [ttk::frame $f.b]
+    ttk::button $b.ok -text OK -command {bd_done OK}
+    ttk::button $b.no -text Cancel -command {bd_done CANCEL}
+    pack $b.no $b.ok -side right -padx 3
+    grid $b -row 4 -column 0 -columnspan 2 -sticky e -pady {12 0}
+    bind $w <Escape> {bd_done CANCEL}
+    bind $w <Return> {bd_done OK}
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    focus $f.n
+    tkwait window $w
+    return $::bd(result)
+}
+proc bd_done {act} {
+    set f .bd.f
+    set ::bd(result) [join [list $act [$f.n get] [$f.bp.x get] [$f.bp.y get] $::bd(mode)] "\x1f"]
+    destroy .bd
+}
+
+# ---------------------------------------------------------------- Cursor & Selection settings (OPTIONS)
+# colors: list of {name #rrggbb}. Returns "CANCEL" or "OK size color pickbox aperture snapsize gripsize rollover".
+proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors} {
+    set w .cud
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Options - Cursor & Selection"
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    array unset ::cud
+    set ::cud(size) $size; set ::cud(pick) $pickbox; set ::cud(ap) $aperture
+    set ::cud(snap) $snapsize; set ::cud(grip) $gripsize; set ::cud(roll) $rollover
+    set ::cud(color) $color; set ::cud(colors) $colors
+    ttk::labelframe $f.ch -text " Crosshairs " -padding 8
+    ttk::label $f.ch.sl -text "Size (% of the screen):"
+    ttk::scale $f.ch.s -from 1 -to 100 -orient horizontal -length 200 -variable ::cud(size) \
+        -command {apply {{v} {set ::cud(size) [expr {round($v)}]; cud_preview}}}
+    ttk::spinbox $f.ch.e -from 1 -to 100 -width 5 -textvariable ::cud(size) -command cud_preview
+    ttk::label $f.ch.cl -text "Color:"
+    set names {}; set cur ""
+    foreach c $colors { lappend names [lindex $c 0]; if {[string equal -nocase [lindex $c 1] $color]} { set cur [lindex $c 0] } }
+    ttk::combobox $f.ch.c -state readonly -width 14 -values $names
+    if {$cur ne ""} { $f.ch.c set $cur } else { $f.ch.c set [lindex $names 0] }
+    bind $f.ch.c <<ComboboxSelected>> cud_preview
+    grid $f.ch.sl -row 0 -column 0 -columnspan 2 -sticky w
+    grid $f.ch.s -row 1 -column 0 -sticky ew -padx {0 8}; grid $f.ch.e -row 1 -column 1 -sticky w
+    grid $f.ch.cl -row 2 -column 0 -columnspan 2 -sticky w -pady {8 0}
+    grid $f.ch.c -row 3 -column 0 -sticky w
+    ttk::labelframe $f.sz -text " Box sizes (pixels) " -padding 8
+    set r 0
+    foreach {key label lo hi} {pick "Pickbox (selecting objects)" 0 50 ap "Snap target (aperture)" 1 50 \
+                               snap "Snap marker" 1 20 grip "Grips" 1 20} {
+        ttk::label $f.sz.l$key -text $label
+        ttk::spinbox $f.sz.e$key -from $lo -to $hi -width 5 -textvariable ::cud($key) -command cud_preview
+        grid $f.sz.l$key -row $r -column 0 -sticky w -pady 2 -padx {0 10}
+        grid $f.sz.e$key -row $r -column 1 -sticky w -pady 2
+        incr r
+    }
+    canvas $f.pv -width 150 -height 150 -background "#1f2329" -highlightthickness 1 -highlightbackground "#3a4049"
+    ttk::checkbutton $f.roll -text "Show object sizes when the cursor rests on an object (rollover tips)" -variable ::cud(roll)
+    grid $f.ch -row 0 -column 0 -sticky nsew -padx {0 8}
+    grid $f.pv -row 0 -column 1 -rowspan 2 -sticky n
+    grid $f.sz -row 1 -column 0 -sticky nsew -pady {8 0} -padx {0 8}
+    grid $f.roll -row 2 -column 0 -columnspan 2 -sticky w -pady {10 0}
+    set b [ttk::frame $f.b]
+    ttk::button $b.def -text "Defaults" -command {
+        set ::cud(size) 100; set ::cud(pick) 5; set ::cud(ap) 10; set ::cud(snap) 6; set ::cud(grip) 5; set ::cud(roll) 1
+        .cud.f.ch.c set [lindex [lindex $::cud(colors) 0] 0]; cud_preview }
+    ttk::button $b.ok -text OK -command {cud_done 1}
+    ttk::button $b.no -text Cancel -command {cud_done 0}
+    pack $b.def -side left
+    pack $b.no $b.ok -side right -padx 3
+    grid $b -row 3 -column 0 -columnspan 2 -sticky ew -pady {12 0}
+    foreach key {size pick ap snap grip} { trace add variable ::cud($key) write {apply {args cud_preview}} }
+    cud_preview
+    bind $w <Escape> {cud_done 0}
+    set ::cud(result) CANCEL
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    tkwait window $w
+    foreach key {size pick ap snap grip} { catch {trace remove variable ::cud($key) write {apply {args cud_preview}}} }
+    return $::cud(result)
+}
+proc cud_color {} {
+    set n [.cud.f.ch.c get]
+    foreach c $::cud(colors) { if {[lindex $c 0] eq $n} { return [lindex $c 1] } }
+    return "#c9ced6"
+}
+proc cud_int {key lo hi} {
+    if {![string is integer -strict $::cud($key)]} { return $lo }
+    return [expr {max($lo, min($hi, $::cud($key)))}]
+}
+proc cud_preview {} {
+    set c .cud.f.pv
+    if {![winfo exists $c]} return
+    $c delete all
+    set col [cud_color]
+    set s [cud_int size 1 100]; set pb [cud_int pick 0 50]; set sn [cud_int snap 1 20]; set gp [cud_int grip 1 20]
+    # the preview box stands for the screen: 100% reaches its edges
+    set len [expr {$s >= 100 ? 100 : max($pb + 3, round($s / 100.0 * 75))}]
+    set x 75; set y 75
+    $c create line [expr {$x - $len}] $y [expr {$x - $pb}] $y -fill $col
+    $c create line [expr {$x + $pb}] $y [expr {$x + $len}] $y -fill $col
+    $c create line $x [expr {$y - $len}] $x [expr {$y - $pb}] -fill $col
+    $c create line $x [expr {$y + $pb}] $x [expr {$y + $len}] -fill $col
+    if {$pb > 0} { $c create rectangle [expr {$x - $pb}] [expr {$y - $pb}] [expr {$x + $pb}] [expr {$y + $pb}] -outline $col }
+    $c create rectangle [expr {22 - $sn}] [expr {128 - $sn}] [expr {22 + $sn}] [expr {128 + $sn}] -outline "#3fd25f" -width 2
+    $c create rectangle [expr {128 - $gp}] [expr {128 - $gp}] [expr {128 + $gp}] [expr {128 + $gp}] -fill "#3b7dd8" -outline "#3b7dd8"
+    $c create text 22 [expr {110 - $sn}] -text "snap" -fill "#8a929c" -font {Helvetica 8}
+    $c create text 128 [expr {110 - $gp}] -text "grip" -fill "#8a929c" -font {Helvetica 8}
+}
+proc cud_done {ok} {
+    if {$ok} {
+        set ::cud(result) [join [list OK [cud_int size 1 100] [cud_color] [cud_int pick 0 50] [cud_int ap 1 50] \
+                                     [cud_int snap 1 20] [cud_int grip 1 20] [expr {$::cud(roll) ? 1 : 0}]] " "]
+    }
+    destroy .cud
 }
 
 # ---------------------------------------------------------------- right-click menus on the drawing

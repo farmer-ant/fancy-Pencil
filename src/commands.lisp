@@ -45,8 +45,21 @@
 (defun gint (prompt &rest keys) (apply #'get-user-input :int :prompt prompt keys))
 (defun gstring (prompt &optional spaces) (or (get-user-input :string :prompt prompt :spaces spaces) ""))
 
-(defun fmt-len (x) (rtos x 2 (or (sysvar "LUPREC") 4)))
-(defun fmt-ang (a) (angtos a 0 (max 0 (or (sysvar "AUPREC") 0))))
+(defun fmt-len (x)
+  "A length in the drawing's units (UNITS: decimal, architectural 1'-6 1/2\", engineering ...)."
+  (rtos x (or (sysvar "LUNITS") 2) (or (sysvar "LUPREC") 4)))
+(defun fmt-ang (a)
+  "An angle in the drawing's angle units (UNITS: degrees, deg/min/sec, grads, radians, surveyor's)."
+  (angtos a (or (sysvar "AUNITS") 0) (max 0 (or (sysvar "AUPREC") 0))))
+(defun fmt-plain (x)
+  "A plain number (scale factors and the like), never shown as feet and inches."
+  (fmt-decimal x (or (sysvar "LUPREC") 4)))
+(defun fmt-area (a)
+  "An area: square inches and square feet for architectural/engineering units, as AutoCAD reports it."
+  (if (member (sysvar "LUNITS") '(3 4))
+      (format nil "~A sq in (~A sq ft)" (fmt-decimal a (max 2 (min 4 (or (sysvar "LUPREC") 4))))
+              (fmt-decimal (/ a 144d0) 4))
+      (fmt-decimal a (or (sysvar "LUPREC") 4))))
 
 (defun add (data) (add-entity data))
 (defun line-data (a b) (list (cons 0 "LINE") (cons 10 (pt3 a)) (cons 11 (pt3 b))))

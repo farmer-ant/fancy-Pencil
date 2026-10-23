@@ -141,6 +141,7 @@
     (when (or (ufunc-p s) (consp s)) (call-with-alisp-errors (lambda () (apply-a s nil))))))
 
 (defun quit-program ()
+  (when (eq *ui* :gui) (ignore-errors (save-prefs)))     ; settings changed with SETVAR are kept too
   (ignore-errors (when *wish-in* (tk "exit")))
   #+sbcl (sb-ext:exit :code 0 :abort t)
   #+ecl (ext:quit 0)
@@ -162,6 +163,7 @@
           (quit-program)))
       (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
   (load-aliases)
+  (when gui (load-prefs))
   (out (banner))
   (current-doc)
   (when (and gui (not (or file files))) (zoom-to-box 0 0 12 9))
