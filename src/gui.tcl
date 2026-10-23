@@ -104,6 +104,8 @@ foreach {name label} {file File edit Edit view View draw Draw dim Dimension modi
 }
 mcmd .mb.file "New" NEW Ctrl+N
 mcmd .mb.file "Open..." OPEN Ctrl+O
+menu .mb.file.recent -tearoff 0
+.mb.file add cascade -label "Recent Files" -menu .mb.file.recent
 mcmd .mb.file "Close" CLOSE Ctrl+F4
 mcmd .mb.file "Close All" CLOSEALL
 mcmd .mb.file "Save" QSAVE Ctrl+S
@@ -516,6 +518,27 @@ proc setgrread {v} { set ::grread $v }
 
 # ---------------------------------------------------------------- document tabs
 # items: list of {id label modified}; current: id of the active drawing
+# File > Recent Files. items: list of {name folder}, most recent first
+proc setrecent {items} {
+    set m .mb.file.recent
+    $m delete 0 end
+    if {[llength $items] == 0} {
+        $m add command -label "(no recent files)" -state disabled
+        return
+    }
+    set i 0
+    foreach it $items {
+        incr i
+        lassign $it name dir
+        set label [expr {$i < 10 ? "$i  $name" : "   $name"}]
+        $m add command -label $label -accelerator [file tail [string trimright $dir /]] \
+            -underline [expr {$i < 10 ? 0 : -1}] -command [list menucmd "OPENRECENT $i"]
+    }
+    $m add separator
+    $m add command -label "Clear Recent Files" -command [list menucmd CLEARRECENT]
+}
+setrecent {}
+
 proc settabs {items current} {
     foreach w [winfo children .tabs] { destroy $w }
     foreach it $items {
