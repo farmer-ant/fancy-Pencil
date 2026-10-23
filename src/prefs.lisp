@@ -5,7 +5,8 @@
 (in-package :fancy-pencil)
 
 (defparameter *pref-sysvars*
-  '("CURSORSIZE" "CURSORCOLOR" "PICKBOX" "APERTURE" "AUTOSNAPSIZE" "GRIPSIZE" "ROLLOVERTIPS")
+  '("CURSORSIZE" "CURSORCOLOR" "PICKBOX" "APERTURE" "AUTOSNAPSIZE" "GRIPSIZE" "ROLLOVERTIPS"
+    "OSMODE")
   "Settings kept in the preferences file.")
 
 ;; they belong to the program, not to one drawing: carry them between tabs

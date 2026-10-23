@@ -588,9 +588,12 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
 
 ;;; MATCHPROP: see matchprop.lisp
 
-(defcmd "COLOR" ("COL" "-COLOR") "Sets the color for new objects."
-  (let ((c (parse-color (gstring (format nil "Enter default object color [Truecolor/COlorbook] <~A>: " (sysvar "CECOLOR"))))))
-    (when c (setf (sysvar "CECOLOR") (case c (256 "BYLAYER") (0 "BYBLOCK") (t (princ-to-string c)))))))
+(defcmd "COLOR" ("COL" "-COLOR" "DDCOLOR") "Sets the color for new objects (the Select Color dialog in the window)."
+  (let ((c (if (and (gui-p) (not (from-lisp-p)))
+               (color-dialog (sysvar "CECOLOR"))
+               (parse-color (gstring (format nil "Enter default object color [Truecolor/COlorbook] <~A>: " (sysvar "CECOLOR")))))))
+    (when c (setf (sysvar "CECOLOR") (case c (256 "BYLAYER") (0 "BYBLOCK") (t (princ-to-string c)))))
+    (when (and c (gui-p)) (gui-sync))))
 
 (defcmd "DIVIDE" ("DIV") "Places evenly spaced point objects along a line, arc or circle."
   (let ((sel (get-user-input :entity :prompt "Select object to divide: ")))

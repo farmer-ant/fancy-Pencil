@@ -624,6 +624,7 @@ a DXF next to it instead and leave the DWG untouched."
     (let ((s (gstring "Enter list of object snap modes (END,MID,CEN,NOD,QUA,INT,INS,PER,TAN,NEA or NONE): ")))
       (when (plusp (length s))
         (setf (sysvar "OSMODE") (if (string-equal s "none") 0 (osnap-bits-from-string s)))
+        (when (gui-p) (ignore-errors (save-prefs)))
         (when (gui-p) (gui-sync))))))
 
 (defcmd "ORTHO" () "Turns ortho mode on or off."

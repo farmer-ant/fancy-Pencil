@@ -292,6 +292,11 @@
                     (layer-ltype l) (or (dxf 6 g) "CONTINUOUS")
                     (layer-lineweight l) (or (dxf 370 g) -3)
                     (layer-plot l) (not (eql (dxf 290 g) 0))))))))
+    ;; the layer that was current when the drawing was saved
+    (let* ((hdr (section-pairs pairs "HEADER"))
+           (pos (position "$CLAYER" hdr :key #'cdr :test #'equal))
+           (l (and pos (stringp (cdr (nth (1+ pos) hdr))) (find-layer (cdr (nth (1+ pos) hdr))))))
+      (when (and l (not (layer-frozen l))) (setf (sysvar "CLAYER") (layer-name l))))
     ;; blocks
     (let ((cur nil) (body nil))
       (dolist (g blocks)
