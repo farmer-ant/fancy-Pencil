@@ -305,6 +305,13 @@ About 250 functions plus the special forms are built in, including:
 - `examples/tools.lsp` — TLEN (total length), BCIRC (bolt circle with `initget`/`getkword` and `*error*`),
   NUM (auto-numbering), LAYOFF, CL (center marks).
 
+### DWG files
+
+Fancy Pencil opens .dwg files out of the box on 64-bit Linux: it ships LibreDWG's `dwg2dxf`
+converter (open source, GPL; see `support/libredwg/README.txt`). If ODA File Converter is
+installed it is used instead, and it is needed to **save** as .dwg (LibreDWG's DWG writing is not
+reliable enough yet). Without it, Save As .dwg writes a .dxf next to it, which AutoCAD opens directly.
+
 ## DXF
 
 SAVE writes AutoCAD 2000 DXF (AC1015), which keeps lineweights, linetypes and scales, hatches,
