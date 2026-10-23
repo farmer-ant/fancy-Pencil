@@ -15,20 +15,25 @@
       (cond ((null r) nil)
             ((member r '("Extents" "E") :test #'string-equal) (zoom-extents))
             ((member r '("All" "A") :test #'string-equal)
-             (let ((b (or (drawing-extents) (list 0 0 12 9))))
-               (zoom-to-box (min 0 (first b)) (min 0 (second b)) (max 12 (third b)) (max 9 (fourth b)))))
+             (if *view* (zoom-extents)
+                 (let ((b (or (drawing-extents) (list 0 0 12 9))))
+                   (zoom-to-box (min 0 (first b)) (min 0 (second b)) (max 12 (third b)) (max 9 (fourth b))))))
             ((member r '("Previous" "P") :test #'string-equal) (zoom-previous))
             ((member r '("Window" "W") :test #'string-equal)
              (let* ((a (gpoint "Specify first corner: "))
                     (b (get-user-input :corner :base a :prompt "Specify opposite corner: ")))
-               (when (pointp b) (zoom-to-box (min (px a) (px b)) (min (py a) (py b)) (max (px a) (px b)) (max (py a) (py b)) 1d0))))
+               (when (pointp b)
+                 (let ((a (w->uv a)) (b (w->uv b)))
+                   (zoom-to-box (min (px a) (px b)) (min (py a) (py b)) (max (px a) (px b)) (max (py a) (py b)) 1d0)))))
             ((equal r "Center")
              (let ((c (gpoint "Specify center point: ")))
                (when c (let ((h (or (gdist (format nil "Enter magnification or height <~A>: " (fmt-len (/ *ch* *vscale*)))) (/ *ch* *vscale*))))
-                         (push-view) (setf *vx* (px c) *vy* (py c) *vscale* (/ *ch* h)) (gui-regen)))))
+                         (let ((c (w->uv c))) (push-view) (setf *vx* (px c) *vy* (py c) *vscale* (/ *ch* h))) (gui-regen)))))
             ((pointp r)
              (let ((b (get-user-input :corner :base r :prompt "Specify opposite corner: ")))
-               (when (pointp b) (zoom-to-box (min (px r) (px b)) (min (py r) (py b)) (max (px r) (px b)) (max (py r) (py b)) 1d0))))))))
+               (when (pointp b)
+                 (let ((r (w->uv r)) (b (w->uv b)))
+                   (zoom-to-box (min (px r) (px b)) (min (py r) (py b)) (max (px r) (px b)) (max (py r) (py b)) 1d0)))))))))
 
 ;; scale factors such as 2x are typed at the ZOOM prompt; handled in the dispatcher hook below
 (defun zoom-scale-text-p (s)
@@ -40,7 +45,7 @@
   (let* ((a (gpoint "Specify base point or displacement: "))
          (b (and a (gpoint "Specify second point: " :base a))))
     (when (and (gui-p) (pointp a))
-      (let ((dv (if (pointp b) (v- b a) a)))
+      (let ((dv (if (pointp b) (v- (w->uv b) (w->uv a)) (w->uv a))))
         (push-view) (setf *vx* (- *vx* (px dv)) *vy* (- *vy* (py dv))) (gui-regen)))))
 
 (defcmd "REGEN" ("RE" "REDRAW" "R" "REGENALL" "REDRAWALL") "Regenerates the display."
@@ -228,12 +233,19 @@
                  (out (format nil "Invalid color.~%"))))))
         (touch)))))
 
-(defcmd "LAYMCUR" () "Makes the layer of a selected object current."
-  (let ((sel (get-user-input :entity :prompt "Select object whose layer will become current: ")))
-    (when (consp sel)
-      (let ((e (sel-entity sel)))
-        (when e (setf (sysvar "CLAYER") (ent-layer e))
-              (out (format nil "~A is now the current layer.~%" (ent-layer e))))))))
+(defcmd "LAYMCUR" ("LMC" "LAYERMAKECURRENT") "Makes the layer of a selected object current."
+  (let* ((pre (remove-if-not #'ent-live-p *pickfirst*))
+         (e (if (= (length pre) 1)
+                (progn (take-pickfirst) (first pre))
+                (let ((sel (get-user-input :entity :prompt "Select object whose layer will become current: ")))
+                  (and (consp sel) (sel-entity sel))))))
+    (when e
+      (let ((l (find-layer (ent-layer e))))
+        (cond ((null l) nil)
+              ((layer-frozen l) (out (format nil "Layer ~A is frozen and can't be made current.~%" (layer-name l))))
+              (t (setf (sysvar "CLAYER") (layer-name l))
+                 (out (format nil "~A is now the current layer.~%" (layer-name l)))
+                 (when (gui-p) (sweep-highlights) (refresh-grips) (gui-sync))))))))
 
 ;;; ---------- blocks ----------
 
@@ -875,8 +887,8 @@ a DXF next to it instead and leave the DWG untouched."
       ((string= n "UCSXDIR") (pt 1 0))
       ((string= n "UCSYDIR") (pt 0 1))
       ((string= n "CVPORT") 2)
-      ((string= n "ELEVATION") 0d0)
-      ((string= n "THICKNESS") 0d0)
+      ((string= n "ELEVATION") (or (sysvar n) 0d0))
+      ((string= n "THICKNESS") (or (sysvar n) 0d0))
       ((string= n "DIMSCALE") (or (sysvar n) 1d0))
       ((string= n "CURSORSIZE") (or (sysvar n) 100))
       ((string= n "CIRCLERAD") (or (sysvar n) 0d0))
@@ -904,11 +916,14 @@ a DXF next to it instead and leave the DWG untouched."
          (setf (sysvar "CLAYER") (layer-name l))))
       ((member n '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "CMDECHO" "LUPREC" "AUPREC" "LUNITS" "AUNITS"
                    "PICKBOX" "APERTURE" "PDMODE" "HIGHLIGHT" "BLIPMODE" "PICKFIRST" "MIRRTEXT" "FILEDIA"
-                   "EXPERT" "ANGDIR" "ROLLOVERTIPS" "AUTOSNAPSIZE" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
+                   "EXPERT" "ANGDIR" "SNAPSTYL" "SNAPISOPAIR" "ROLLOVERTIPS" "AUTOSNAPSIZE" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
                    "GRIPSIZE" "DIMDEC" "DIMTAD" "DIMCLRD" "DIMCLRE" "DIMCLRT" "DIMTIH" "DIMADEC" "PLINEGEN")
                :test #'string=)
        (unless (integerp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
        (setf (sysvar n) val))
+      ((member n '("THICKNESS" "ELEVATION") :test #'string=)
+       (unless (realp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
+       (setf (sysvar n) (d val)))
       ((member n '("TEXTSIZE" "PDSIZE" "FILLETRAD" "OFFSETDIST" "ANGBASE" "DIMSCALE" "DIMTXT" "DIMASZ"
                    "DIMEXO" "DIMEXE" "DIMGAP" "PLINEWID" "CHAMFERA" "CHAMFERB" "CIRCLERAD" "LASTROTATION"
                    "LTSCALE" "CELTSCALE" "HPSCALE" "HPANG" "DIMCEN" "DIMLFAC" "DIMDLI" "DIMTSZ" "PEDITFUZZ"
@@ -921,8 +936,8 @@ a DXF next to it instead and leave the DWG untouched."
        (setf (sysvar n) (if (string= n "LASTPOINT") (pt3 val) (list (d (first val)) (d (second val))))))
       (t (setf (sysvar n) val)))
     (when (gui-p)
-      (when (member n '("CLAYER" "OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE") :test #'string=) (gui-sync))
-      (when (member n '("GRIDMODE" "GRIDUNIT" "PDMODE" "PDSIZE" "LTSCALE" "LWDISPLAY") :test #'string=) (gui-regen)))
+      (when (member n '("CLAYER" "OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "SNAPSTYL" "SNAPISOPAIR") :test #'string=) (gui-sync))
+      (when (member n '("GRIDMODE" "GRIDUNIT" "PDMODE" "PDSIZE" "LTSCALE" "LWDISPLAY" "SNAPSTYL") :test #'string=) (gui-regen)))
     val))
 
 (defsubr "getvar" (name) (getvar (astr name)))

@@ -278,7 +278,8 @@
     (let ((b (entity-bbox e)))
       (when b
         (multiple-value-bind (x0 y0 x1 y1) (view-rect 0)
-          (let ((cx (/ (+ (first b) (third b)) 2)) (cy (/ (+ (second b) (fourth b)) 2)))
+          (let* ((c (w->uv (pt (/ (+ (first b) (third b)) 2) (/ (+ (second b) (fourth b)) 2))))
+                 (cx (px c)) (cy (py c)))
             (when (or (< cx x0) (> cx x1) (< cy y0) (> cy y1))
               (setf *vx* cx *vy* cy))))
         (sweep-highlights)

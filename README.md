@@ -207,6 +207,32 @@ base point (or type X and Y), **Select objects**, and choose whether the objects
 converted to the block, or deleted. Objects selected before you start are used automatically.
 `-BLOCK` does the same at the command line. Insert copies with INSERT.
 
+### Layer controls
+
+The Layers panel has **Make Current** (click an object: its layer becomes the current layer —
+LAYMCUR) and **Match Layer** (select objects, then click an object on the layer they should move
+to, or type N to pick the layer by name — LAYMCH). Both use objects you selected first, and are
+also in the Format menu and the right-click menu. Format → Change to Current Layer moves objects
+to the current layer (LAYCUR).
+
+### Views (View → 3D Views)
+
+Top, Bottom, Left, Right, Front, Back and the SW, SE, NE and NW Isometric views, as in AutoCAD
+(`-VIEW`, `PLAN` for Top). Objects can have a height: **THICKNESS** (or the Properties panel)
+extrudes lines, arcs, circles and polylines into walls, and **Elevation** lifts objects off the
+ground plane (`ELEV` sets both for new objects). In the isometric views you can draw and edit —
+points land on the ground plane — and text shows as its outline. Front, Back, Left and Right see
+the ground plane edge-on and are for looking. The axes icon (bottom left) shows X, Y and Z in the
+current view; each drawing tab keeps its own view. Thickness and elevation are saved in DXF.
+
+### Isometric drafting (View → Isometric Drafting, ISODRAFT)
+
+AutoCAD's 2D isometric mode for drawing isometric pictures: the grid becomes an isometric grid,
+the crosshairs and Ortho follow the current isoplane, and snap uses the isometric lattice.
+**F5** (or Ctrl+E) switches between the Left, Top and Right isoplanes; the **ISO** button in the
+status bar turns the mode on and off and shows the current plane. **ELLIPSE → Isocircle** draws a
+circle as it looks on the current isoplane.
+
 ### Editing blocks (BEDIT, RENAME)
 
 Select a block and right-click → **Edit Block...** (or Draw → Block: Edit..., or `BE`). The block

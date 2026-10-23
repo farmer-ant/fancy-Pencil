@@ -231,15 +231,27 @@
     (dolist (e ents) (set-entity-data e (set-dxf 8 (sysvar "CLAYER") (ent-data e))))
     (out (format nil "~D object~:P changed to layer \"~A\" (the current layer).~%" (length ents) (sysvar "CLAYER")))))
 
-(defcmd "LAYMCH" () "Express: changes selected objects to the layer of a destination object."
-  (let ((ents (get-selection "Select objects to be changed: ")))
+(defcmd "LAYMCH" ("LMH" "MATCHLAYER") "Changes selected objects to the layer of a destination object (Match Layer)."
+  (let ((ents (let ((pre (remove-if-not #'ent-live-p *pickfirst*)))
+                (if pre (take-pickfirst) (get-selection "Select objects to be changed: ")))))
     (when ents
-      (let ((r (get-user-input :entity :prompt "Select object on destination layer or [Name]: " :keywords '("Name"))))
-        (let ((l (cond ((equal r "Name") (find-layer (gstring "Enter layer name: " t)))
-                       ((consp r) (let ((e (sel-entity r))) (and e (find-layer (ent-layer e))))))))
-          (when l
-            (dolist (e ents) (set-entity-data e (set-dxf 8 (layer-name l) (ent-data e))))
-            (out (format nil "~D object~:P changed to layer \"~A\".~%" (length ents) (layer-name l)))))))))
+      (ui-highlight ents t)
+      (unwind-protect
+           (let ((r (get-user-input :entity :prompt "Select object on destination layer or [Name]: " :keywords '("Name"))))
+             (let ((l (cond ((equal r "Name")
+                             (find-layer (if (and (gui-p) (not (from-lisp-p)))
+                                             (let ((f (gui-form "Match Layer"
+                                                                (list (list "L" "Change to layer:" (sysvar "CLAYER") :combo
+                                                                            (mapcar #'layer-name (drawing-layers *dwg*))))
+                                                                "OK")))
+                                               (or (and f (cdr (assoc "L" f :test #'string=))) ""))
+                                             (gstring "Enter layer name: " t))))
+                            ((consp r) (let ((e (sel-entity r))) (and e (find-layer (ent-layer e))))))))
+               (when l
+                 (dolist (e (filter-editable ents)) (set-entity-data e (set-dxf 8 (layer-name l) (ent-data e))))
+                 (out (format nil "~D object~:P changed to layer \"~A\".~%" (length ents) (layer-name l))))))
+        (ui-highlight ents nil)
+        (when (gui-p) (gui-regen))))))
 
 (defcmd "LAYMRG" ("-LAYMRG") "Express: merges layers into a target layer."
   (let* ((from (remove-duplicates (mapcar #'ent-layer (select-objects :prompt "Select object on layer to merge: " :editable nil))
