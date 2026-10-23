@@ -71,6 +71,9 @@
     (if path
         (multiple-value-bind (pairs ext) (parse-pgp path)
           (clrhash *aliases*) (clrhash *pgp-external*)
+          ;; built-in shortcuts first (so new ones, e.g. AL for ALIGN, work with an older file),
+          ;; then the file's own, which win where they differ
+          (dolist (p *builtin-aliases*) (setf (gethash (car p) *aliases*) (cdr p)))
           (dolist (p pairs) (setf (gethash (car p) *aliases*) (cdr p)))
           (dolist (x ext) (setf (gethash (first x) *pgp-external*) (rest x)))
           (values (length pairs) (namestring path)))
