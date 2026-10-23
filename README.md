@@ -256,7 +256,8 @@ suggestions, Add to Dictionary or Ignore.
 
 ### Command aliases
 
-Tools → Command Aliases → **Open Alias File** opens your alias file (`fancypencil.pgp`) in your
+Fancy Pencil's built-in shortcuts are always available; your file adds to them and overrides
+any it redefines. Tools → Command Aliases → **Open Alias File** opens your alias file (`fancypencil.pgp`) in your
 text editor; save it there and the changes are used straight away (no REINIT needed).
 **Open Alias Folder** shows where it lives, and **Edit Aliases...** is the built-in editor.
 

@@ -291,5 +291,17 @@
 (check "align without scaling" (g (entlast) 11) '(10.0 12.0 0.0))
 (command "close")
 
+;; ---------- scaling MTEXT keeps its box; AL alias ----------
+(command "new")
+(command "mtext" '(0 2) '(3 1) "Kitchen note" "")
+(setq mt (entlast))
+(command "scale" mt "" '(0 0) 10)
+(check "mtext height scales" (g mt 40) (* 10 (getvar "TEXTSIZE")))
+(check "mtext box width scales" (g mt 41) 30.0)
+(command "line" '(0 0) '(2 0) "")
+(command "al" (entlast) "" '(0 0) '(10 10) '(2 0) '(10 16) "" "y")
+(check "AL runs ALIGN" (g (entlast) 11) '(10.0 16.0 0.0))
+(command "close")
+
 (princ (strcat "\nv0.3 tests: " (itoa *pass*) " passed, " (itoa *fail*) " failed.\n"))
 (princ)
