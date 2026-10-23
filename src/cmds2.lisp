@@ -23,8 +23,8 @@
              (r (gui-form "Linetype Manager"
                           (list (list "LOAD" "Load linetype (or * for all)" "" :combo (cons "*" (mapcar #'first *standard-linetypes*)))
                                 (list "CURRENT" "Current linetype" (ltype-label (sysvar "CELTYPE")) :combo (append '("ByLayer" "ByBlock" "Continuous") loaded))
-                                (list "LTSCALE" "Global scale factor (LTSCALE)" (fmt-len (sysvar "LTSCALE")) :entry)
-                                (list "CELTSCALE" "Current object scale (CELTSCALE)" (fmt-len (sysvar "CELTSCALE")) :entry))
+                                (list "LTSCALE" "Global scale factor (LTSCALE)" (fmt-plain (sysvar "LTSCALE")) :entry)
+                                (list "CELTSCALE" "Current object scale (CELTSCALE)" (fmt-plain (sysvar "CELTSCALE")) :entry))
                           "OK")))
         (when r
           (let ((ld (cdr (assoc "LOAD" r :test #'string=))) (cur (cdr (assoc "CURRENT" r :test #'string=)))
@@ -67,7 +67,7 @@
                  (out (format nil "Linetype ~A created.~%" (string-upcase n)))))))))))
 
 (defcmd "LTSCALE" ("LTS") "Sets the global linetype scale factor."
-  (let ((v (greal (format nil "Enter new linetype scale factor <~A>: " (fmt-len (sysvar "LTSCALE"))) :flags 6)))
+  (let ((v (greal (format nil "Enter new linetype scale factor <~A>: " (fmt-plain (sysvar "LTSCALE"))) :flags 6)))
     (when v (setf (sysvar "LTSCALE") (d v)) (out (format nil "Regenerating model.~%")) (when (gui-p) (gui-regen)))))
 
 (defcmd "LWEIGHT" ("LW" "LINEWEIGHT" "-LWEIGHT") "Sets the current lineweight and lineweight display."
@@ -96,7 +96,7 @@
   (if (and (gui-p) (not (from-lisp-p)))
       (let ((r (gui-form "Hatch Pattern"
                          (list (list "P" "Pattern" (sysvar "HPNAME") :combo (mapcar #'first *hatch-patterns*))
-                               (list "S" "Scale" (fmt-len (sysvar "HPSCALE")) :entry)
+                               (list "S" "Scale" (fmt-plain (sysvar "HPSCALE")) :entry)
                                (list "A" "Angle" (fmt-ang (sysvar "HPANG")) :entry))
                          "OK")))
         (when r
@@ -112,7 +112,7 @@
               ((plusp (length p))
                (if (hatch-pattern-def p) (setf (sysvar "HPNAME") (string-upcase p)) (out (format nil "Unknown pattern ~A.~%" p)))))
         (unless (solid-pattern-p (sysvar "HPNAME"))
-          (let ((s (greal (format nil "Specify a scale for the pattern <~A>: " (fmt-len (sysvar "HPSCALE"))) :flags 6))
+          (let ((s (greal (format nil "Specify a scale for the pattern <~A>: " (fmt-plain (sysvar "HPSCALE"))) :flags 6))
                 (a (gangle (format nil "Specify an angle for the pattern <~A>: " (fmt-ang (sysvar "HPANG"))))))
             (when s (setf (sysvar "HPSCALE") (d s)))
             (when a (setf (sysvar "HPANG") a)))))))
@@ -127,7 +127,7 @@
                                                    (rest (make-hatch-data loops)) (common-props (ent-data e)))))
                      (loops (setf e (add (make-hatch-data loops)))))))
       (loop
-        (out (format nil "Pattern: ~A   Scale: ~A   Angle: ~A~%" (sysvar "HPNAME") (fmt-len (sysvar "HPSCALE")) (fmt-ang (sysvar "HPANG"))))
+        (out (format nil "Pattern: ~A   Scale: ~A   Angle: ~A~%" (sysvar "HPNAME") (fmt-plain (sysvar "HPSCALE")) (fmt-ang (sysvar "HPANG"))))
         (let ((r (gpoint "Pick internal point or [Select objects/Properties/Undo]: "
                          :keywords '("Select" "Properties" "Undo"))))
           (cond

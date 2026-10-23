@@ -514,7 +514,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
     (64 . "Insertion") (128 . "Perpendicular") (256 . "Tangent") (512 . "Nearest")))
 
 (defun snap-glyph (x y bit)
-  (let ((s 6) (c "#3fd25f") (tags "tmp") (x (round x)) (y (round y)))
+  (let ((s (max 2 (min 20 (or (sysvar "AUTOSNAPSIZE") 6)))) (c "#3fd25f") (tags "tmp") (x (round x)) (y (round y)))
      (case bit
        (1 (list (format nil ".c create rectangle ~A ~A ~A ~A -outline ~A -width 2 -tags ~A" (- x s) (- y s) (+ x s) (+ y s) c tags)))
        (2 (list (format nil ".c create polygon ~A ~A ~A ~A ~A ~A -outline ~A -fill {} -width 2 -tags ~A" (- x s) (+ y s) (+ x s) (+ y s) x (- y s) c tags)))
@@ -554,7 +554,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
     (let* ((x *mouse-sx*) (y *mouse-sy*) (kind (and *req* (inreq-kind *req*)))
            (pick (member kind '(:command :entity :select-point)))
            (cross (not (member kind '(:entity :select-point))))
-           (pb (or (sysvar "PICKBOX") 5)) (out nil) (col "#c9ced6"))
+           (pb (or (sysvar "PICKBOX") 5)) (out nil) (col (cursor-color)))
       (when cross
         (let ((len (let ((cs (or (sysvar "CURSORSIZE") 100)))
                      (if (>= cs 100) 10000 (round (* (/ cs 200) (max *cw* *ch*)))))))
@@ -590,8 +590,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
       (tk-send-string (format nil "~{~A~%~}" cmds)))))
 
 (defun update-coords ()
-  (let ((p *cursor-world*) (prec (or (sysvar "LUPREC") 4)))
-    (tk "setxy ~A" (tq (format nil "~A, ~A, ~A" (rtos (px p) 2 prec) (rtos (py p) 2 prec) (rtos (pz p) 2 prec))))))
+  (let ((p *cursor-world*))
+    (tk "setxy ~A" (tq (format nil "~A, ~A, ~A" (fmt-len (px p)) (fmt-len (py p)) (fmt-len (pz p)))))))
 
 (defun gui-sync ()
   "Refresh layer combo, toggles and title."
@@ -670,6 +670,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                                  (gui-sync) t))
       ((string= ty "LAYERACT") (layer-dialog-action (event-rest ev)) t)
       ((string= ty "A") t)
+      ((string= ty "H") (destructuring-bind (x y) (event-ints ev) (handle-rollover x y)) t)
       ((string= ty "TCLERR") (out (format nil "; window error: ~A~%" (event-rest ev))) t)
       ((string= ty "PALETTE") (setf *palette-shown* (string= (event-rest ev) "1")) (refresh-palette) t)
       ((string= ty "CURPROP") (apply-current-prop (event-rest ev)) t)

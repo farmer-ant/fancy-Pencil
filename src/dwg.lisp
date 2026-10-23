@@ -2,7 +2,6 @@
 ;;;; DWG is a closed binary format; Fancy Pencil converts it to DXF (and back) with
 ;;;;   ODA File Converter  (free from the Open Design Alliance; reads and writes every DWG version), or
 ;;;;   LibreDWG dwg2dxf    (open source; reads well, writing DWG is experimental so it is not used for saving).
-;;;;                       A static 64-bit Linux build ships in support/libredwg, so opening DWG works out of the box.
 ;;;; FANCYPENCIL_DWG_CONVERTER may name either program explicitly.
 
 (in-package :fancy-pencil)
@@ -52,19 +51,7 @@
                      (and g (namestring (first g)))))))
       (cond (oda (values :oda oda))
             ((which "dwg2dxf") (values :libredwg (which "dwg2dxf")))
-            ((bundled-dwg2dxf) (values :libredwg (bundled-dwg2dxf)))
             (t nil)))))
-
-(defun bundled-dwg2dxf ()
-  "The copy of LibreDWG's dwg2dxf shipped in support/libredwg (64-bit Linux only)."
-  (let ((p (merge-pathnames "../support/libredwg/linux-x86_64/dwg2dxf" (or *gui-dir* (script-directory) ""))))
-    (and (search "64" (machine-type))
-         (not (search "ARM" (string-upcase (machine-type))))
-         (probe-file p)
-         (progn
-           ;; unpacking can lose the "may run" permission; put it back
-           (run-shell (format nil "test -x ~A || chmod +x ~A" (shell-quote p) (shell-quote p)))
-           (namestring (probe-file p))))))
 
 (defun temp-dir (tag)
   (let ((d (format nil "~A/fancypencil-~A-~D-~D/" (or (getenv "TMPDIR") "/tmp") tag (get-universal-time) (random 100000))))
@@ -76,8 +63,7 @@
 Recommended: ODA File Converter (reads and writes every AutoCAD version).~%~
 Download the Ubuntu .deb from opendesign.com (search \"ODA File Converter\"), then install it with~%~
     sudo apt install ./ODAFileConverter_*.deb~%~%~
-Or: LibreDWG's dwg2dxf (open source; opening only). A copy ships with Fancy Pencil for~%~
-64-bit Linux in support/libredwg; it seems to be missing or unusable here.~%~%~
+Or: LibreDWG's dwg2dxf (open source; opening only).~%~%~
 Meanwhile you can save the drawing from AutoCAD (or another CAD program) as DXF and open that."))
 
 (defun dwg->dxf (dwg)
@@ -107,7 +93,7 @@ Meanwhile you can save the drawing from AutoCAD (or another CAD program) as DXF 
   (multiple-value-bind (kind exe) (find-dwg-converter)
     (if (not (eq kind :oda))
         (values nil (if kind
-                        (format nil "Saving as .dwg needs ODA File Converter (the built-in LibreDWG converter can only open DWG files reliably).~%~
+                        (format nil "Saving as .dwg needs ODA File Converter (LibreDWG can only open DWG files reliably).~%~
 Save as .dxf instead: AutoCAD and every other CAD program open DXF directly.~%~
 To save .dwg, install ODA File Converter (free from opendesign.com):~%    sudo apt install ./ODAFileConverter_*.deb")
                         (dwg-install-help)))

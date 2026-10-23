@@ -114,9 +114,6 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
         (let ((len (ignore-errors (polyline-length (piece-polyline pc)))))
           (and len (> (/ len period) 5000))))))
 
-(defun polyline-length (pts)
-  (loop for (a b) on pts while b sum (dist2d a b)))
-
 (defun plot-pieces (pieces color lw pattern scale)
   (dolist (pc pieces)
     (when (and pattern (not (member (first pc) '(:gseg :pt))) (pattern-too-fine-p pattern scale pc))

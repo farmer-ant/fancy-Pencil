@@ -177,6 +177,36 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+### Units (UNITS, Format → Units)
+
+Choose how lengths are shown — Architectural (`12'-6 1/2"`), Decimal, Engineering (`12'-6.50"`),
+Fractional or Scientific — and their precision; angles in decimal degrees, deg/min/sec, grads,
+radians or surveyor's units; and the insertion units. The Sample output shows the result as you
+choose. Coordinates in the status bar, distances, LIST, AREA (square inches and square feet),
+the Properties palette and the rollover tips all follow it. The units are saved in the drawing
+(and read from AutoCAD drawings), together with LTSCALE and the other drawing settings.
+
+### Rollover tips
+
+Rest the cursor on an object for half a second and a small box shows what it is and its sizes:
+a line's length and angle, a rectangle's width × height and area, a circle's radius, diameter,
+circumference and area, an arc's length, text style and height, a block's scale and size, a
+hatch's pattern and area. Turn them off in Tools → Cursor & Selection (or `ROLLOVERTIPS` 0).
+
+### Blocks (BLOCK, B)
+
+Draw → Block: Make (or `B`) opens the Block Definition dialog: type a name, **Pick point** for the
+base point (or type X and Y), **Select objects**, and choose whether the objects are retained,
+converted to the block, or deleted. Objects selected before you start are used automatically.
+`-BLOCK` does the same at the command line. Insert copies with INSERT.
+
+### Cursor & Selection (OPTIONS, OP)
+
+Tools → Cursor & Selection: crosshair size (percent of the screen; 100 = full screen) and color,
+pickbox size, snap target (aperture) size, snap marker size, grip size, and rollover tips, with a
+preview. These are your settings rather than the drawing's: they apply in every tab and are kept
+in `~/.config/fancypencil/settings.lisp` for next time.
+
 ### Layers: No Plot
 
 The Layer Properties Manager has a **Plot** column: click it to switch a layer between Plot and
@@ -304,13 +334,6 @@ About 250 functions plus the special forms are built in, including:
 - `examples/demo-plate.lsp` — draws a dimensioned plate entirely through `command`. Load it and type `PLATE`.
 - `examples/tools.lsp` — TLEN (total length), BCIRC (bolt circle with `initget`/`getkword` and `*error*`),
   NUM (auto-numbering), LAYOFF, CL (center marks).
-
-### DWG files
-
-Fancy Pencil opens .dwg files out of the box on 64-bit Linux: it ships LibreDWG's `dwg2dxf`
-converter (open source, GPL; see `support/libredwg/README.txt`). If ODA File Converter is
-installed it is used instead, and it is needed to **save** as .dwg (LibreDWG's DWG writing is not
-reliable enough yet). Without it, Save As .dwg writes a .dxf next to it, which AutoCAD opens directly.
 
 ## DXF
 
