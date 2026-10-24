@@ -219,7 +219,7 @@ mcmd .mb.tools "ID Point" ID
 mcmd .mb.tools "List" LIST
 mcmd .mb.tools "Area" AREA
 foreach {l c} {Linear DIMLINEAR Aligned DIMALIGNED Radius DIMRADIUS Diameter DIMDIAMETER Angular DIMANGULAR \
-               Continue DIMCONTINUE Baseline DIMBASELINE "Dimension Style..." DIMSTYLE} { mcmd .mb.dim $l $c }
+               Continue DIMCONTINUE Baseline DIMBASELINE Leader LEADER "Dimension Style..." DIMSTYLE} { mcmd .mb.dim $l $c }
 foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pick)" LAYOFF "Layer Freeze (pick)" LAYFRZ
                "Layers On" LAYON "Layers Thaw" LAYTHW "Layer Lock (pick)" LAYLCK "Layer Unlock (pick)" LAYULK
                "Change to Current Layer" LAYCUR "Match Object Layer" LAYMCH "Merge Layers" LAYMRG "Delete Layer" LAYDEL
@@ -254,7 +254,7 @@ proc tbgroup {name title items {rows 2}} {
 }
 tbgroup draw Draw {Line LINE Polyline PLINE Circle CIRCLE Arc ARC Rectangle RECTANG Text TEXT}
 tbgroup modify Modify {Move MOVE Copy COPY Rotate ROTATE Mirror MIRROR Scale SCALE Offset OFFSET Trim TRIM Extend EXTEND Fillet FILLET Erase ERASE Explode EXPLODE Array ARRAY}
-tbgroup annot Annotation {Linear DIMLINEAR Aligned DIMALIGNED "Edit Text" TEXTEDIT Block BLOCK Insert INSERT List LIST}
+tbgroup annot Annotation {Linear DIMLINEAR Aligned DIMALIGNED Leader LEADER "Edit Text" TEXTEDIT Block BLOCK Insert INSERT List LIST}
 set lf [ttk::frame .tb.layers -padding {2 0 6 0}]
 set lr [ttk::frame $lf.r]
 canvas $lr.sw -width 14 -height 14 -highlightthickness 0 -background $panel
