@@ -569,3 +569,67 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
     (setf *plot-settings* s)))
 
 (defcmd "-PLOT" () "Plots at the command line (for scripts)." (plot-command-line))
+
+;;; ---------- drawing limits (LIMITS, Format > Drawing Limits) ----------
+
+(defun limits-for-sheet (paper scale landscape &optional (origin (pt 0 0)))
+  "Upper-right limits corner for sheet PAPER at plot SCALE (the area the sheet covers), from ORIGIN."
+  (let* ((p (assoc paper *paper-sizes* :test #'string-equal))
+         (w (and p (if landscape (max (second p) (third p)) (min (second p) (third p)))))
+         (h (and p (if landscape (min (second p) (third p)) (max (second p) (third p)))))
+         (ipu (scale-paper-inches-per-unit scale (default-plot-units))))
+    (when (and p ipu (plusp ipu))
+      (pt (+ (px origin) (/ w ipu)) (+ (py origin) (/ h ipu))))))
+
+(defun limits-dialog ()
+  (let* ((lo (pt3 (sysvar "LIMMIN"))) (hi (pt3 (sysvar "LIMMAX")))
+         (vals (list (fmt-len (px lo)) (fmt-len (py lo)) (fmt-len (px hi)) (fmt-len (py hi))))
+         (paper "ARCH D (24 x 36 in)") (scale "1/4\" = 1'-0\"") (land "1")
+         (gridin (if (eql (sysvar "GRIDDISPLAY") 0) "1" "0")) (check (if (eql (sysvar "LIMCHECK") 1) "1" "0"))
+         (r nil))
+    (unless (assoc paper *paper-sizes* :test #'string-equal) (setf paper (first (nth 4 *paper-sizes*))))
+    (loop
+      (setf r (tk-ask (format nil "limitsdlg ~A ~A ~A ~A ~A ~A ~A ~A ~A ~A ~A"
+                              (tq (first vals)) (tq (second vals)) (tq (third vals)) (tq (fourth vals))
+                              (tcl-list (mapcar #'first *paper-sizes*))
+                              (tcl-list (remove "Fit to paper" *plot-scales* :test #'string=))
+                              gridin check (tq paper) (tq scale) land)))
+      (if (and (> (length r) 6) (string= (subseq r 0 6) "SHEET "))
+          ;; "Use sheet": the area that sheet covers at that scale, then the dialog again
+          (destructuring-bind (x0 y0 x1 y1 p sc ld gi ck) (split-string (subseq r 6) (code-char 31))
+            (setf paper p scale sc land ld gridin gi check ck)
+            (let* ((o (pt (or (parse-number-text x0) 0) (or (parse-number-text y0) 0)))
+                   (c (limits-for-sheet p sc (string= ld "1") o)))
+              (setf vals (list x0 y0 (if c (fmt-len (px c)) x1) (if c (fmt-len (py c)) y1)))))
+          (return)))
+    (when (and (> (length r) 3) (string= (subseq r 0 3) "OK "))
+      (destructuring-bind (x0 y0 x1 y1 gridin check) (split-string (subseq r 3) (code-char 31))
+        (let ((a (mapcar #'parse-number-text (list x0 y0 x1 y1))))
+          (if (and (every #'realp a) (< (first a) (third a)) (< (second a) (fourth a)))
+              (progn
+                (setf (sysvar "LIMMIN") (list (d (first a)) (d (second a)))
+                      (sysvar "LIMMAX") (list (d (third a)) (d (fourth a)))
+                      (sysvar "GRIDDISPLAY") (if (string= gridin "1") 0 1)
+                      (sysvar "LIMCHECK") (if (string= check "1") 1 0))
+                (touch)
+                (zoom-to-box (d (first a)) (d (second a)) (d (third a)) (d (fourth a)))
+                (out (format nil "Drawing limits: ~A,~A to ~A,~A (~A x ~A).~%"
+                             (fmt-len (first a)) (fmt-len (second a)) (fmt-len (third a)) (fmt-len (fourth a))
+                             (fmt-len (- (third a) (first a))) (fmt-len (- (fourth a) (second a))))))
+              (tell-user "The upper-right corner must be above and to the right of the lower-left corner.")))))))
+
+(defcmd "LIMITS" ("DRAWINGLIMITS") "Sets the drawing's size (its limits): the area the grid, ZOOM All and Plot Limits use."
+  (if (and (gui-p) (not (from-lisp-p)))
+      (limits-dialog)
+      (let ((r (gpoint (format nil "Specify lower left corner or [ON/OFF] <~A,~A>: "
+                               (fmt-len (px (sysvar "LIMMIN"))) (fmt-len (py (sysvar "LIMMIN"))))
+                       :keywords '("ON" "OFF"))))
+        (cond ((equal r "ON") (setf (sysvar "LIMCHECK") 1))
+              ((equal r "OFF") (setf (sysvar "LIMCHECK") 0))
+              (t (let* ((lo (if (pointp r) r (pt3 (sysvar "LIMMIN"))))
+                        (hi (gpoint (format nil "Specify upper right corner <~A,~A>: "
+                                            (fmt-len (px (sysvar "LIMMAX"))) (fmt-len (py (sysvar "LIMMAX")))))))
+                   (setf hi (if (pointp hi) hi (pt3 (sysvar "LIMMAX"))))
+                   (setf (sysvar "LIMMIN") (list (px lo) (py lo)) (sysvar "LIMMAX") (list (px hi) (py hi)))
+                   (touch)
+                   (when (gui-p) (gui-regen))))))))

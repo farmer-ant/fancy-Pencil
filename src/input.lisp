@@ -593,6 +593,11 @@
     (:int "Requires an integer value.")
     (t "Invalid input.")))
 
+(defun outside-limits-p (p)
+  (let ((lo (sysvar "LIMMIN")) (hi (sysvar "LIMMAX")))
+    (and (consp lo) (consp hi)
+         (not (and (<= (px lo) (px p) (px hi)) (<= (py lo) (py p) (py hi)))))))
+
 (defun get-user-input (kind &key (prompt "") base keywords (flags 0) drag spaces nosnap)
   "Ask for input of KIND. Returns the value, NIL for Enter, or a matched keyword string.
 NOSNAP turns off object snap, grid snap and ortho (used for selection windows)."
@@ -628,6 +633,8 @@ NOSNAP turns off object snap, grid snap and ortho (used for selection windows)."
            (out (format nil "Value must be nonzero.~%")))
           ((and (realp value) (logtest flags 4) (minusp value))
            (out (format nil "Value must be positive.~%")))
+          ((and (pointp value) (member kind '(:point :corner)) (eql (sysvar "LIMCHECK") 1) (outside-limits-p value))
+           (out (format nil "**Outside limits~%")))
           (t
            (when (and (pointp value) (member kind '(:point :corner)))
              (setf (sysvar "LASTPOINT") value))

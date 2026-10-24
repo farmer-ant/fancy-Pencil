@@ -137,20 +137,84 @@
                  (format nil "~A (~D)" (type-display-name (first types)) (length sel))
                  (format nil "All (~D)" (length sel)))))))
 
-(defun refresh-palette ()
-  (when (and (eq *ui* :gui) *palette-shown*)
-    (let* ((sel (remove-if-not #'ent-live-p *pickfirst*))
-           (rows (palette-rows sel)))
-      (tk "palette_set ~A {~{~A~^ ~}}" (tq (palette-title sel))
+(defvar *palette-type* nil "Object type the Properties palette is limited to (NIL = all selected).")
+(defvar *palette-sel-key* nil)
+
+
+(defun palette-selection ()
+  "The selected objects the palette shows and edits: all of them, or only the chosen type."
+  (let* ((sel (remove-if-not #'ent-live-p *pickfirst*))
+         (key (sort (mapcar #'ename-handle sel) #'string<)))
+    (unless (equal key *palette-sel-key*)          ; a new selection starts again at "All"
+      (setf *palette-sel-key* key *palette-type* nil))
+    (if (and *palette-type* (find *palette-type* sel :key #'ent-type :test #'equal))
+        (remove-if-not (lambda (e) (equal (ent-type e) *palette-type*)) sel)
+        (progn (setf *palette-type* nil) sel))))
+
+(defun palette-type-choices ()
+  "({type label} ...): All (n), then each object type in the selection with its count."
+  (let* ((sel (remove-if-not #'ent-live-p *pickfirst*))
+         (types (remove-duplicates (mapcar #'ent-type sel) :test #'equal :from-end t)))
+    (when sel
+      (cons (list "ALL" (format nil "All (~D)" (length sel)))
+            (loop for ty in types
+                  collect (list ty (format nil "~A (~D)" (type-display-name ty) (count ty sel :key #'ent-type :test #'equal))))))))
+
+(defun rows-tcl (rows)
+  (format nil "{~{~A~^ ~}}"
           (mapcar (lambda (r)
                     (destructuring-bind (key label value kind &optional choices) r
                       (format nil "{~A ~A ~A ~A ~A}" (tq key) (tq label) (tq (if (stringp value) value (lisp-repr value nil)))
                               (string-downcase (symbol-name kind)) (tcl-list choices))))
-                  rows)))))
+                  rows)))
+
+(defun types-tcl ()
+  (let ((choices (palette-type-choices)))
+    (values (format nil "{~{{~A ~A}~^ ~}}" (loop for (ty label) in choices append (list (tq ty) (tq label))))
+            (tq (or *palette-type* "ALL")))))
+
+(defparameter *quick-keys*
+  '("COLOR" "LAYER" "LTYPE" "LTSCALE" "LENGTH" "ANGLE" "RADIUS" "DIAMETER" "TEXT" "TSTYLE" "HEIGHT" "ROT"
+    "MTWIDTH" "WIDTH" "CLOSED" "HPAT" "HSCALE" "HANG" "DIMTEXT" "DIMSTY" "SCX" "SCY" "THICK"))
+(defparameter *quick-ro-labels* '("Area" "Length" "Circumference" "Arc length" "Measurement" "Name" "Vertices"))
+
+(defun quick-rows (sel)
+  "The short list of properties AutoCAD's Quick Properties shows."
+  (remove-if-not (lambda (r) (destructuring-bind (key label value kind &rest ignore) r
+                               (declare (ignore value ignore))
+                               (or (and (eq kind :head) nil)
+                                   (member key *quick-keys* :test #'string=)
+                                   (and (eq kind :ro) (member label *quick-ro-labels* :test #'string=)))))
+                 (palette-rows sel)))
+
+(defun refresh-palette ()
+  (when (eq *ui* :gui)
+    (let* ((sel (palette-selection)))
+      (when *palette-shown*
+        (multiple-value-bind (types cur) (types-tcl)
+          (tk "palette_set ~A ~A ~A ~A" (tq (palette-title sel)) (rows-tcl (palette-rows sel)) types cur)))
+      (when *quick-shown*
+        (if (null sel)
+            (progn (setf *quick-shown* nil) (tk "qpanel_hide"))
+            (multiple-value-bind (types cur) (types-tcl)
+              (tk "qpanel_set ~A ~A ~A" (rows-tcl (quick-rows sel)) types cur)))))))
+
+(defun set-palette-type (ty)
+  (setf *palette-type* (if (string-equal ty "ALL") nil ty))
+  (refresh-palette))
+
+(defcmd "QUICKPROPERTIES" ("QP" "QUICKPROP") "Quick Properties: a small panel with the main properties of the selected objects."
+  (let ((sel (remove-if-not #'ent-live-p *pickfirst*)))
+    (unless sel
+      (setf sel (get-selection "Select objects: "))
+      (when sel (setf *pickfirst* sel) (when (gui-p) (ui-highlight sel t) (refresh-grips))))
+    (when (and sel (gui-p))
+      (setf *quick-shown* t)
+      (refresh-palette))))
 
 (defun apply-palette-edit (rest)
   (let* ((sp (position #\Space rest)) (key (subseq rest 0 sp)) (val (if sp (subseq rest (1+ sp)) ""))
-         (sel (remove-if-not #'ent-live-p *pickfirst*))
+         (sel (palette-selection))
          (num (parse-number-text val)) (angv (angtof val)))
     (when (string= val "*VARIES*") (return-from apply-palette-edit nil))
     (if (null sel)

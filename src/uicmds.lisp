@@ -89,7 +89,7 @@
                (when ins (list "Edit Block..." "BEDIT"))
                (when ins (list "Rename Block..." "RENAME"))
                :sep
-               (list "Deselect All" "DESELECT") (list "Properties" "PROPERTIES"))
+               (list "Deselect All" "DESELECT") (list "Quick Properties" "QUICKPROPERTIES") (list "Properties" "PROPERTIES"))
          (list (list "Undo" "U") (list "Redo" "REDO")
                :sep
                (list "Zoom Extents" "ZOOM E") (list "Zoom Window" "ZOOM W")
