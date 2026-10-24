@@ -242,6 +242,21 @@ A drawing opens on the layer that was current when it was saved. Object Snap set
 you rather than to a drawing: the same snaps are on in every drawing, and they're remembered the
 next time Fancy Pencil starts (with the cursor settings, in `~/.config/fancypencil/settings.lisp`).
 
+### Leaders (LEADER, alias LE, QL)
+
+Annotation → **Leader**, Dimension → Leader, or type LE. Click the arrow tip, then the points of
+the leader line, then press Enter and type the note (Enter for a new line; click outside or
+Ctrl+Enter to finish). While picking points:
+
+* **Spline** / **STraight** switch the line between a smooth curve and straight segments
+  (type S or ST at any prompt; the choice is remembered for the next leader).
+* **Arrow** / **None** turn the arrowhead on or off.
+* **NOText** finishes the leader without a note; **Undo** takes back the last point.
+
+A short horizontal landing line is added before the note when the last segment slopes, and the
+note goes on the side the leader points to. Arrow size and text height follow the current
+dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LEADER objects.
+
 ### Layer controls
 
 The Layers panel has **Make Current** (click an object: its layer becomes the current layer —
