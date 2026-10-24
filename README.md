@@ -272,9 +272,15 @@ has grips at both ends of its dimension line (where the arrows are): drag either
 dimension line closer or further away — it snaps to the level of other dimensions the same way.
 The extension line origins and the text have grips as before.
 
-### Cursor & Selection (OPTIONS, OP)
+### Cursor, Selection & Background (OPTIONS, OP)
 
-Tools → Cursor & Selection: crosshair size (percent of the screen; 100 = full screen) and color,
+**Drawing background**: Tools → Cursor, Selection & Background → Drawing background offers dark
+(the default), black, dark gray, dark blue, gray, light gray, paper and white, or Custom... for any
+color (`BACKGROUND` at the command line). On a light background, white (color 7) objects are shown
+black, as in AutoCAD, and the grid and crosshairs switch to dark so they stay visible. Plots are
+not affected.
+
+Tools → Cursor, Selection & Background: crosshair size (percent of the screen; 100 = full screen) and color,
 pickbox size, snap target (aperture) size, snap marker size, grip size, and rollover tips, with a
 preview. These are your settings rather than the drawing's: they apply in every tab and are kept
 in `~/.config/fancypencil/settings.lisp` for next time.

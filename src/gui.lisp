@@ -224,7 +224,34 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
                     ((< hp 4) (list 0 x c)) ((< hp 5) (list x 0 c)) (t (list c 0 x)))))
     (format nil "#~{~2,'0X~}" (mapcar (lambda (k) (round (* 255 (+ k m)))) rgb))))
 
+(defun hex-rgb (h)
+  (if (and (stringp h) (= (length h) 7) (char= (char h 0) #\#))
+      (list (parse-integer h :start 1 :end 3 :radix 16) (parse-integer h :start 3 :end 5 :radix 16)
+            (parse-integer h :start 5 :end 7 :radix 16))
+      (list 33 40 48)))
+(defun rgb-hex (r g b) (format nil "#~2,'0X~2,'0X~2,'0X" (round r) (round g) (round b)))
+
+(defun background-color ()
+  (let ((c (sysvar "BKGCOLOR"))) (if (and (stringp c) (= (length c) 7)) c "#212830")))
+
+(defun light-background-p ()
+  "True when the drawing background is light (white objects are then shown black, as in AutoCAD)."
+  (destructuring-bind (r g b) (hex-rgb (background-color))
+    (> (+ (* 0.299 r) (* 0.587 g) (* 0.114 b)) 140)))
+
+(defun bg-mix (amount &optional tint)
+  "The background moved AMOUNT (0..1) toward its contrast color (or toward TINT, an rgb list)."
+  (destructuring-bind (r g b) (hex-rgb (background-color))
+    (destructuring-bind (tr tg tb) (or tint (if (light-background-p) '(0 0 0) '(255 255 255)))
+      (rgb-hex (+ r (* amount (- tr r))) (+ g (* amount (- tg g))) (+ b (* amount (- tb b)))))))
+
+(defun grid-color (kind)
+  (case kind
+    (:minor (bg-mix 0.05)) (:major (bg-mix 0.11))
+    (:x-axis (bg-mix 0.22 '(210 75 75))) (:y-axis (bg-mix 0.22 '(75 191 90)))))
+
 (defun aci->hex (i)
+  (when (and (eql i 7) (light-background-p)) (return-from aci->hex "#000000"))
   (case i
     (1 "#FF0000") (2 "#FFFF00") (3 "#00FF00") (4 "#00FFFF") (5 "#0000FF") (6 "#FF00FF")
     (7 "#FFFFFF") (8 "#808080") (9 "#C0C0C0")
@@ -555,9 +582,9 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
           (let* ((ks (mapcar (lambda (x y) (/ (- y (* slope x)) g)) (list x0 x0 x1 x1) (list y0 y1 y0 y1))))
             (loop for k from (floor (reduce #'min ks)) to (ceiling (reduce #'max ks))
                   do (seg (pt x0 (+ (* slope x0) (* k g))) (pt x1 (+ (* slope x1) (* k g)))
-                          (if (zerop (mod k 5)) "#323a46" "#282f39")))))
+                          (if (zerop (mod k 5)) (grid-color :major) (grid-color :minor))))))
         (loop for k from (floor x0 (* g c)) to (ceiling x1 (* g c))
-              do (seg (pt (* k g c) y0) (pt (* k g c) y1) (if (zerop (mod k 5)) "#323a46" "#282f39"))))
+              do (seg (pt (* k g c) y0) (pt (* k g c) y1) (if (zerop (mod k 5)) (grid-color :major) (grid-color :minor)))))
       out)))
 
 (defun grid-cmds ()
@@ -572,9 +599,9 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
                (hline (y col) (multiple-value-bind (sx sy) (w->s (pt 0 y)) (declare (ignore sx))
                                 (push (format nil ".c create line 0 ~A ~D ~A -fill ~A -tags grid" (fmtn sy) *cw* (fmtn sy) col) out))))
           (loop for i from (floor x0 g) to (ceiling x1 g)
-                do (vline (* i g) (cond ((zerop i) "#45343a") ((zerop (mod i major)) "#323a46") (t "#282f39"))))
+                do (vline (* i g) (cond ((zerop i) (grid-color :x-axis)) ((zerop (mod i major)) (grid-color :major)) (t (grid-color :minor)))))
           (loop for i from (floor y0 g) to (ceiling y1 g)
-                do (hline (* i g) (cond ((zerop i) "#2f4536") ((zerop (mod i major)) "#323a46") (t "#282f39")))))
+                do (hline (* i g) (cond ((zerop i) (grid-color :y-axis)) ((zerop (mod i major)) (grid-color :major)) (t (grid-color :minor))))))
         out))))
 
 (defun ucs-icon-cmds ()
