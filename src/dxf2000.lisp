@@ -369,4 +369,4 @@
     (with-open-file (out path :direction :output :if-exists :supersede :external-format :latin-1)
       (dolist (l lines) (write-line l out)))))
 
-(defun dxf-export-2000 (path) (let ((*ucs-off* t)) (%dxf-export-2000 path)))
+(defun dxf-export-2000 (path) (let ((*ucs-off* t)) (ignore-errors (prune-unused-dimension-blocks)) (%dxf-export-2000 path)))

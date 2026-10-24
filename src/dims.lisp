@@ -585,3 +585,56 @@ measurement stays the same); the text moves with it."
     (declare (ignore id))
     (let ((d1 (set-dxf 10 new data)))
       (if (dxf 11 d1) (set-dxf 11 (v+ (pt3 (dxf 11 d1)) dv) d1) d1))))
+
+;;; ---------- pictures that no longer match their dimensions ----------
+
+(defun dimension-picture-misplaced-p (data)
+  "True when the saved picture (block) of dimension DATA lies away from its own points - left
+behind when the dimension was moved without redrawing it (pasted with an older version)."
+  (let* ((b (find-block (dxf 2 data)))
+         (box (and b (ignore-errors (pieces-bbox (loop for sub in (block-def-entities b) append (data-pieces sub))))))
+         (pts (remove nil (mapcar (lambda (c) (let ((p (dxf c data))) (and (consp p) (pt3 p)))) '(10 13 14 15 16)))))
+    ;; a picture left behind is near none of the dimension's own points
+    (and box pts
+         (let* ((size (max 1d-9 (- (third box) (first box)) (- (fourth box) (second box))))
+                (m (* 0.5 size)))
+           (notany (lambda (p) (and (<= (- (first box) m) (px p) (+ (third box) m))
+                                      (<= (- (second box) m) (py p) (+ (fourth box) m))))
+                     pts)))))
+
+(defun regen-dimension (e)
+  "Redraw dimension E's picture from its points (dimensions Fancy Pencil can draw)."
+  (let ((*keep-dimension-blocks* nil))
+    (set-entity-data e (ent-data e))))
+
+(defun fix-misplaced-dimensions ()
+  "Redraw dimensions whose picture was left behind; returns how many."
+  (let ((n 0))
+    (dolist (e (live-entities) n)
+      (when (and (equal (ent-type e) "DIMENSION") (dimension-picture-misplaced-p (ent-data e)))
+        (regen-dimension e) (incf n)))))
+
+(defcmd "DIMREGEN" () "Redraws every dimension's picture from its points and current style."
+  (let ((n 0))
+    (dolist (e (live-entities))
+      (when (equal (ent-type e) "DIMENSION") (regen-dimension e) (incf n)))
+    (out (format nil "~D dimension~:P redrawn.~%" n))
+    (when (gui-p) (gui-regen))))
+
+(defun prune-unused-dimension-blocks ()
+  "Drop dimension pictures (*D blocks) that no dimension uses any more (left by edits and pastes)."
+  (let ((used (make-hash-table :test #'equalp)))
+    (labels ((note (data)
+               (let ((n (dxf 2 data)))
+                 (when (and (stringp n) (member (dxf 0 data) '("INSERT" "DIMENSION") :test #'equal)
+                            (not (gethash n used)))
+                   (setf (gethash n used) t)
+                   (let ((b (find-block n))) (when b (mapc #'note (block-def-entities b))))))))
+      (dolist (e (live-entities)) (note (ename-data e)))
+      ;; blocks drawn inside other (named) blocks count too
+      (dolist (b (drawing-blocks *dwg*))
+        (unless (anonymous-block-name-p (block-def-name b)) (mapc #'note (block-def-entities b)))))
+    (setf (drawing-blocks *dwg*)
+          (remove-if (lambda (b) (let ((n (block-def-name b)))
+                                   (and (>= (length n) 2) (string-equal (subseq n 0 2) "*D") (not (gethash n used)))))
+                     (drawing-blocks *dwg*)))))

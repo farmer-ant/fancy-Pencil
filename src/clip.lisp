@@ -127,6 +127,10 @@
                (r (and (equal (dxf 0 dd) "DIMENSION") (stringp (dxf 2 dd))
                        (assoc (dxf 2 dd) renames :test #'string-equal)))
                (dd (if r (set-dxf 2 (cdr r) dd) dd)))
+          ;; a dimension's picture (its block) is in drawing coordinates: it moves with it
+          (when (and r (find-block (cdr r)))
+            (let ((b (find-block (cdr r))))
+              (setf (block-def-entities b) (mapcar (lambda (sub) (xform-data sub xf)) (block-def-entities b)))))
           (push (add-entity (rem-dxf 5 (xform-data dd xf))) made))))
     (nreverse made)))
 

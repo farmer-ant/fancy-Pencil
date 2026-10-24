@@ -265,6 +265,14 @@ dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LE
   text together). Each new leader keeps that size, as an override on that leader only.
 * For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
 
+### Dimensions in copy/paste, DIMREGEN
+
+Copying dimensions to another drawing brings their pictures along to wherever they are pasted.
+When a drawing opens with dimensions whose picture was left at an old position (pasted with
+version 0.3.37 or earlier), they are redrawn in place and the command line says so; save to keep
+the repair. **DIMREGEN** redraws every dimension from its points and current style. Saving drops
+dimension pictures no dimension uses any more, which keeps files small.
+
 ### Layer controls
 
 The Layers panel has **Make Current** (click an object: its layer becomes the current layer —
