@@ -121,19 +121,38 @@
 
 (defun polyline-length (pts) (loop for (a b) on pts while b sum (dist2d a b)))
 
+(defun point-along (pts dist)
+  "The point DIST along the polyline PTS (clamped to its ends)."
+  (loop for (a b) on pts while b
+        for len = (dist2d a b)
+        do (if (<= dist len)
+               (return-from point-along (if (< len 1d-15) a (at-param a b (/ dist len))))
+               (decf dist len)))
+  (car (last pts)))
+
 (defun dash-runs (pts pattern scale)
   "Split the polyline PTS into dash runs following PATTERN (world units x SCALE).
-Returns a list of point lists; dots become very short runs."
+Returns a list of point lists; dots become very short runs. As in AutoCAD, an open line, arc or
+polyline segment is drawn with the pattern centred on it, and its two ends always show as dashes,
+so the visible line reaches its real endpoints."
   (let* ((pat (mapcar (lambda (x) (* x scale)) pattern))
          (period (reduce #'+ (mapcar #'abs pat)))
          (runs nil) (cur nil)
          (k 0) (remaining (abs (first pat))) (on (>= (first pat) 0))
-         (dotlen (/ 0.75d0 *vscale*)))
+         (dotlen (/ 0.75d0 *vscale*))
+         (total (if pts (polyline-length pts) 0d0))
+         (closed (and pts (cdr pts) (< (dist2d (first pts) (car (last pts))) 1d-9))))
     (when (or (< period 1d-12) (null pts)) (return-from dash-runs (list pts)))
     (flet ((advance ()
              (setf k (mod (1+ k) (length pat)))
              (setf remaining (abs (nth k pat)) on (>= (nth k pat) 0))))
-      ;; zero-length dot at the very start
+      ;; centre the pattern: the middle of the line falls in the middle of the first dash
+      (unless closed
+        (let ((phase (mod (- (/ (abs (first pat)) 2) (/ total 2)) period)))
+          (loop while (> phase 1d-12)
+                do (if (>= phase remaining)
+                       (progn (decf phase remaining) (advance))
+                       (progn (decf remaining phase) (setf phase 0d0))))))
       (loop for (a b) on pts while b
             do (let ((seglen (dist2d a b)) (pos 0d0))
                  (loop while (< pos seglen) do
@@ -155,7 +174,16 @@ Returns a list of point lists; dots become very short runs."
                            (when (and on cur) (push (nreverse cur) runs) (setf cur nil))
                            (advance)))))))
       (when cur (push (nreverse cur) runs))
-      (nreverse runs))))
+      (setf runs (nreverse runs))
+      ;; an end that landed in a gap gets a short dash, so the line visibly reaches it
+      (unless closed
+        (let ((stub (min (/ (abs (first pat)) 2) (/ total 4)))
+              (start (first pts)) (end (car (last pts))))
+          (when (and (> stub 1d-12) (not (and runs (< (dist2d (first (first runs)) start) 1d-9))))
+            (push (list start (point-along pts stub)) runs))
+          (when (and (> stub 1d-12) (not (and runs (< (dist2d (car (last (car (last runs)))) end) 1d-9))))
+            (setf runs (append runs (list (list (point-along pts (- total stub)) end)))))))
+      runs)))
 
 (defun ltype-scale-for (data &optional (parent-scale 1d0))
   (* (d (or (sysvar "LTSCALE") 1)) (d (or (dxf 48 data) 1)) parent-scale))
