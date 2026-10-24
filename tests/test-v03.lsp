@@ -379,6 +379,13 @@
 (command "-layer" "s" "LC2" "")
 (command "laymcur" lc1)
 (check "make object's layer current" (getvar "CLAYER") "LC1")
+(command "line" '(0 11) '(1 11) "")
+(setq cl1 (entlast))
+(command "line" '(0 12) '(1 12) "")
+(command "changelayer" cl1 (entlast) "" "LC2")
+(check "change layer" (list (g cl1 8) (g (entlast) 8)) '("LC2" "LC2"))
+(command "changelayer" cl1 "" "")
+(check "change layer to current" (g cl1 8) "LC1")
 (command "close")
 
 ;; ---------- point style ----------

@@ -250,6 +250,11 @@ to, or type N to pick the layer by name — LAYMCH). Both use objects you select
 also in the Format menu and the right-click menu. Format → Change to Current Layer moves objects
 to the current layer (LAYCUR).
 
+**Change** (CHANGELAYER, alias CL) moves the selected objects to a layer you pick from a list
+that shows each layer's color; double-click a layer or pick it and press OK. As in AutoCAD,
+choosing a layer in the layer drop-down while objects are selected also moves them to that
+layer (with nothing selected it sets the current layer, as before).
+
 ### Views (View → 3D Views, or the view picker)
 
 The **view picker** at the top right of the drawing shows a small cube for each standard view:
