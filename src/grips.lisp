@@ -130,7 +130,8 @@
                           (round (- x s)) (round (- y s)) (round (+ x s)) (round (+ y s)))
                   cmds))))
       (push ".c raise tmp" cmds)
-      (tk-send-string (format nil "~{~A~%~}" (nreverse cmds))))))
+      (tk-send-string (format nil "~{~A~%~}" (nreverse cmds))))
+    (refresh-layer-box)))
 
 (defun grip-at (p)
   "The grip point within pick distance of P, if any."
