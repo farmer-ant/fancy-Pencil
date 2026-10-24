@@ -1820,7 +1820,19 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     ttk::combobox $f.bgf.c -state readonly -width 20 -values $bnames
     $f.bgf.c set [expr {$bcur ne "" ? $bcur : "Custom..."}]
     canvas $f.bgf.sw -width 40 -height 20 -highlightthickness 1 -highlightbackground "#5a626e" -background $bg
-    pack $f.bgf.c $f.bgf.sw -side left -padx 3
+    # black-to-white slide: any shade of gray
+    lassign [winfo rgb . $bg] r0 g0 b0
+    set ::cud(gray) [expr {round((0.299*$r0 + 0.587*$g0 + 0.114*$b0) / 257.0)}]
+    ttk::frame $f.bgf.s
+    ttk::label $f.bgf.s.lo -text "Black" -style Dim.TLabel
+    ttk::scale $f.bgf.s.sc -from 0 -to 255 -orient horizontal -length 220 -variable ::cud(gray) -command cud_bggray
+    ttk::label $f.bgf.s.hi -text "White" -style Dim.TLabel
+    pack $f.bgf.s.lo -side left
+    pack $f.bgf.s.sc -side left -padx 4 -fill x -expand 1
+    pack $f.bgf.s.hi -side left
+    grid $f.bgf.c -row 0 -column 0 -sticky w -padx 3
+    grid $f.bgf.sw -row 0 -column 1 -sticky w -padx 3
+    grid $f.bgf.s -row 1 -column 0 -columnspan 2 -sticky ew -pady {6 0}
     bind $f.bgf.c <<ComboboxSelected>> cud_bgpick
     ttk::checkbutton $f.roll -text "Show object sizes when the cursor rests on an object (rollover tips)" -variable ::cud(roll)
     grid $f.ch -row 0 -column 0 -sticky nsew -padx {0 8}
@@ -1849,6 +1861,14 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     foreach key {size pick ap snap grip} { catch {trace remove variable ::cud($key) write {apply {args cud_preview}}} }
     return $::cud(result)
 }
+proc cud_bggray {v} {
+    set g [expr {max(0, min(255, round($v)))}]
+    set ::cud(bg) [format "#%02x%02x%02x" $g $g $g]
+    .cud.f.bgf.c set [expr {$g == 0 ? "Black" : ($g == 255 ? "White" : "Custom...")}]
+    .cud.f.bgf.sw configure -background $::cud(bg)
+    .cud.f.pv configure -background $::cud(bg)
+    cud_preview
+}
 proc cud_bgpick {} {
     set n [.cud.f.bgf.c get]
     if {$n eq "Custom..."} {
@@ -1860,6 +1880,8 @@ proc cud_bgpick {} {
     }
     .cud.f.bgf.sw configure -background $::cud(bg)
     .cud.f.pv configure -background $::cud(bg)
+    lassign [winfo rgb . $::cud(bg)] r0 g0 b0
+    set ::cud(gray) [expr {round((0.299*$r0 + 0.587*$g0 + 0.114*$b0) / 257.0)}]
     cud_preview
 }
 proc cud_color {} {

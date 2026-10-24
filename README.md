@@ -275,7 +275,7 @@ The extension line origins and the text have grips as before.
 ### Cursor, Selection & Background (OPTIONS, OP)
 
 **Drawing background**: Tools → Cursor, Selection & Background → Drawing background offers dark
-(the default), black, dark gray, dark blue, gray, light gray, paper and white, or Custom... for any
+(the default), black, dark gray, dark blue, gray, light gray, paper and white, a Black-to-White slide for any shade of gray, or Custom... for any
 color (`BACKGROUND` at the command line). On a light background, white (color 7) objects are shown
 black, as in AutoCAD, and the grid and crosshairs switch to dark so they stay visible. Plots are
 not affected.
