@@ -257,6 +257,14 @@ A short horizontal landing line is added before the note when the last segment s
 note goes on the side the leader points to. Arrow size and text height follow the current
 dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LEADER objects.
 
+**Arrow size.** Three ways:
+
+* For one or more existing leaders: select them and change **Arrow size** (or **Overall scale**)
+  in Properties or Quick Properties. Arrowhead on/off and Path (Straight/Spline) are there too.
+* For the next leaders you draw: type `DIMASZ` and enter a size (or `DIMSCALE` for arrow and
+  text together). Each new leader keeps that size, as an override on that leader only.
+* For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
+
 ### Layer controls
 
 The Layers panel has **Make Current** (click an object: its layer becomes the current layer —

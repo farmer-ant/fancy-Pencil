@@ -91,6 +91,14 @@
              (list "" "Measurement" (v (lambda (d) (fmt-num (or (dxf 42 d) 0d0)))) :ro)
              (list "DIMTEXT" "Text override" (v (lambda (d) (or (dxf 1 d) ""))) :entry)
              (list "DIMSTY" "Dim style" (v (lambda (d) (or (dxf 3 d) "Standard"))) :combo (mapcar #'dimstyle-name (all-dimstyles)))))
+      ((equal type "LEADER")
+       (list '("" "Leader" "" :head)
+             (list "LDRASZ" "Arrow size" (v (lambda (d) (fmt-num (getf (leader-arrow-vars d) :dimasz)))) :entry)
+             (list "LDRSCALE" "Overall scale" (v (lambda (d) (fmt-factor (getf (leader-arrow-vars d) :dimscale)))) :entry)
+             (list "LDRARROW" "Arrowhead" (v (lambda (d) (if (eql (dxf 71 d) 0) "None" "Yes"))) :combo '("Yes" "None"))
+             (list "LDRPATH" "Path" (v (lambda (d) (if (eql (dxf 72 d) 1) "Spline" "Straight"))) :combo '("Straight" "Spline"))
+             (list "DIMSTY" "Dim style" (v (lambda (d) (or (dxf 3 d) "Standard"))) :combo (mapcar #'dimstyle-name (all-dimstyles)))
+             (list "" "Vertices" (v (lambda (d) (princ-to-string (length (leader-vertices d))))) :ro)))
       ((equal type "POINT")
        (list '("" "Geometry" "" :head)
              (list "PX" "Position X" (v (lambda (d) (fmt-num (px (dxf 10 d))))) :entry)
@@ -175,7 +183,8 @@
 
 (defparameter *quick-keys*
   '("COLOR" "LAYER" "LTYPE" "LTSCALE" "LENGTH" "ANGLE" "RADIUS" "DIAMETER" "TEXT" "TSTYLE" "HEIGHT" "ROT"
-    "MTWIDTH" "WIDTH" "CLOSED" "HPAT" "HSCALE" "HANG" "DIMTEXT" "DIMSTY" "SCX" "SCY" "THICK"))
+    "MTWIDTH" "WIDTH" "CLOSED" "HPAT" "HSCALE" "HANG" "DIMTEXT" "DIMSTY" "SCX" "SCY" "THICK"
+    "LDRASZ" "LDRARROW" "LDRPATH"))
 (defparameter *quick-ro-labels* '("Area" "Length" "Circumference" "Arc length" "Measurement" "Name" "Vertices"))
 
 (defun quick-rows (sel)
@@ -284,6 +293,10 @@
                       ((string= key "DIMTEXT") (setf nd (set-dxf 1 val nd)))
                       ((string= key "DIMSTY") (let ((ds (find-dimstyle val)))
                                                 (when ds (setf nd (set-dxf :dimvars (dimstyle-vars ds) (set-dxf 3 (dimstyle-name ds) nd))))))
+                      ((and (string= key "LDRASZ") num (>= num 0) (equal type "LEADER")) (setf nd (set-dxf :ldr-asz (d num) nd)))
+                      ((and (string= key "LDRSCALE") num (> num 0) (equal type "LEADER")) (setf nd (set-dxf :ldr-scale (d num) nd)))
+                      ((and (string= key "LDRARROW") (equal type "LEADER")) (setf nd (set-dxf 71 (if (string-equal val "None") 0 1) nd)))
+                      ((and (string= key "LDRPATH") (equal type "LEADER")) (setf nd (set-dxf 72 (if (string-equal val "Spline") 1 0) nd)))
                       ((and (string= key "RATIO") num (< 0 num 1.0000001)) (setf nd (set-dxf 40 (d num) nd)))))
                   (unless (eq nd d0) (set-entity-data e nd)))))))
     (when (member key '("LTSCALE" "GLTSCALE" "LTYPE") :test #'string=)
