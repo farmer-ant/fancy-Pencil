@@ -8,11 +8,6 @@
 
 (in-package :fancy-pencil)
 
-(defun unit3 (v) (let ((l (sqrt (vdot3 v v)))) (if (< l 1d-12) v (v* v (/ 1 l)))))
-(defun cross3 (a b)
-  (pt (- (* (py a) (pz b)) (* (pz a) (py b)))
-      (- (* (pz a) (px b)) (* (px a) (pz b)))
-      (- (* (px a) (py b)) (* (py a) (px b)))))
 
 (defparameter *standard-views*
   ;; name  direction toward the viewer  (right up), or NIL to work them out
@@ -51,9 +46,9 @@
           (when (gui-p) (zoom-extents) (refresh-grips) (gui-sync))
           (out (format nil "~A view.~A~%" (first spec)
                        (cond ((null *view*) "")
-                             ((edge-on-view-p)
-                              (format nil "~%Objects show at their heights. Select and edit them here: dragging a grip or moving~%~
-                                           up and down changes heights (Z); left and right moves them across."))
+                             ((ucs)
+                              (format nil "~%You are drawing in this view's plane (X right, Y up, Z toward you): every command works~%~
+                                           here. Objects in other planes show edge-on; move, copy, rotate or mirror them in 3D."))
                              (t "  You can draw and edit on the ground plane here; text shows as its outline."))))))))
 
 (defparameter *view-keywords*
@@ -192,6 +187,8 @@
 
 (defun view-object-height (data)
   "(values elevation thickness) the 3D views draw DATA with."
+  ;; an object in another plane has its height and thickness in its pieces already
+  (when (offplane-p data) (return-from view-object-height (values 0d0 0d0)))
   (values (if (equal (dxf 0 data) "LWPOLYLINE") (d (or (dxf 38 data) 0)) 0d0)
           (if (member (dxf 0 data) '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal)
               (d (or (dxf 39 data) 0)) 0d0)))
@@ -227,8 +224,10 @@
   (let ((b (ignore-errors (entity-bbox e))))
     (when b
       (multiple-value-bind (elev th) (view-object-height (ent-data e))
-        (let* ((zs (let ((z0 (+ elev (let ((p (dxf 10 (ent-data e)))) (if (and (consp p) (realp (pz p))) (pz p) 0d0)))))
-                     (list z0 (+ z0 th))))
+        (let* ((zs (if (offplane-p (ent-data e))
+                       nil
+                       (let ((z0 (+ elev (let ((p (dxf 10 (ent-data e)))) (if (and (consp p) (realp (pz p))) (pz p) 0d0)))))
+                         (list z0 (+ z0 th)))))
                (u0 nil) (v0 nil) (u1 nil) (v1 nil))
           ;; objects with points at several heights (3D lines): use their real points too
           (dolist (pc (entity-pieces e))
@@ -274,7 +273,7 @@
 
 (defun view-dist (a b)
   "Distance on the screen (in drawing units) between world points A and B."
-  (if *view* (dist2d (w->uv a) (w->uv b)) (dist2d a b)))
+  (if (projected-view-p) (dist2d (w->uv a) (w->uv b)) (dist2d a b)))
 
 (defun view-osnap-candidates (p bits tol)
   "Object snap candidates near P measured on the screen: endpoints, midpoints, centres, nodes,

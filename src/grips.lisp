@@ -6,6 +6,7 @@
 
 (defun entity-grips (data)
   "List of (point . id) grips for DATA."
+  (when (offplane-p data) (return-from entity-grips (offplane-grips data)))
   (let ((type (dxf 0 data)))
     (flet ((g (code id) (let ((p (dxf code data))) (and p (cons (pt3 p) id)))))
       (remove nil
@@ -76,6 +77,7 @@
   "New entity data after dragging grip ID from FROM to TO."
   (let ((type (dxf 0 data)) (dv (v- to from)))
     (cond
+      ((eq id :offplane) (xform-data data (xf-move dv)))
       ((member id '(:center :insert :move))
        (xform-data data (xf-move dv)))
       ((and (equal type "MTEXT") (member id '(:mtw-left :mtw-right)))

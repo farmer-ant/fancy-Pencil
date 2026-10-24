@@ -103,7 +103,29 @@
                 ((member type '("TEXT" "INSERT") :test #'equal)
                  (set-dxf 50 (norm-ang (- +pi+ (or (dxf 50 data) 0d0))) d1))
                 (t d1)))
-        (rem-dxf 210 data))))
+        (let ((nv (and n (consp n) (pt3 n))))
+          (if (or (null nv) (up-normal-p (unit3 nv)) (wcs-type-p (dxf 0 data)))
+              (rem-dxf 210 data)
+              ;; an object in another plane: keep its plane; the types DXF stores in world
+              ;; coordinates are kept in their plane's coordinates like the others
+              (wcs-codes-to-ocs (set-dxf 210 (unit3 nv) data)))))))
+
+(defparameter *wcs-coded*
+  ;; type -> (point codes . vector codes) that DXF stores in world coordinates
+  '(("ELLIPSE" (10) 11) ("MTEXT" (10)) ("SPLINE" (10 11) 12 13) ("LEADER" (10))))
+
+(defun map-vectors (data codes fn)
+  (mapcar (lambda (p) (if (and (consp p) (member (car p) codes) (consp (cdr p))) (cons (car p) (funcall fn (pt3 (cdr p)))) p)) data))
+
+(defun wcs-codes-convert (data to-ocs)
+  (let ((spec (assoc (dxf 0 data) *wcs-coded* :test #'equal)))
+    (if (or (null spec) (not (offplane-p data)))
+        data
+        (multiple-value-bind (ax ay az) (ocs-axes (entity-normal data))
+          (let ((f (if to-ocs (lambda (p) (w->ocs p ax ay az)) (lambda (p) (ocs->w p ax ay az)))))
+            (map-vectors (map-vectors data (second spec) f) (cddr spec) f))))))
+(defun wcs-codes-to-ocs (data) (wcs-codes-convert data t))
+(defun wcs-codes-to-world (data) (wcs-codes-convert data nil))
 
 (defun convert-in (g)
   "Convert one raw DXF entity group to internal alist (radians, world coords)."
@@ -122,7 +144,10 @@
       ((equal type "LEADER") (setf data (leader-from-dxf g data)))
       ((equal type "MTEXT")
        ;; rotation: the direction vector (11) wins; group 50 is in degrees despite the DXF reference
-       (let ((dir (dxf 11 data)))
+       (let ((dir (let ((v (dxf 11 data)) (n (dxf 210 data)))
+                    (if (and v n (consp n) (not (up-normal-p (unit3 (pt3 n)))) (not (down-normal-p (unit3 (pt3 n)))))
+                        (multiple-value-bind (ax ay az) (ocs-axes (unit3 (pt3 n))) (w->ocs (pt3 v) ax ay az))
+                        v))))
          (setf data (if dir
                         (append (rem-dxf 50 (rem-dxf 11 data)) (list (cons 50 (ang (pt 0 0) dir))))
                         (map-codes data '(50) #'rad))))
@@ -227,7 +252,7 @@
                                    (equalp (princ-to-string (dxf 5 r)) (princ-to-string handle))))
                   tables)))
 
-(defun dxf-import (path &key (replace t))
+(defun %dxf-import (path &key (replace t))
   "Load PATH into the current drawing (clearing it first when REPLACE)."
   (let ((*keep-dimension-blocks* t))
     (dxf-import-1 path replace)))
@@ -363,6 +388,11 @@
 (defun write-entity (out data)
   (let ((type (dxf 0 data)))
     (cond
+      ((offplane-p data)                    ; R12: an object in another plane goes out as its edges
+       (dolist (pc (offplane-pieces data))
+         (when (member (first pc) '(:seg :gseg))
+           (write-entity out (append (list (cons 0 "LINE") (cons 8 (or (dxf 8 data) "0")) (cons 10 (second pc)) (cons 11 (third pc)))
+                                     (let ((c (assoc 62 data))) (and c (list c))))))))
       ((equal type "LWPOLYLINE")
        (wr out 0 "POLYLINE") (wr out 8 (dxf 8 data))
        (when (dxf 62 data) (wr out 62 (dxf 62 data)))
@@ -408,7 +438,7 @@
                      ((and (equal type "DIMENSION") (= code 3)) nil)
                      ((or (stringp v) (realp v)) (wr out code v)))))))))))
 
-(defun dxf-export (path)
+(defun %dxf-export (path)
   (with-open-file (out path :direction :output :if-exists :supersede :external-format :utf-8)
     (let ((ext (or (drawing-extents) (list 0d0 0d0 12d0 9d0))))
       (wr out 0 "SECTION") (wr out 2 "HEADER")
@@ -522,3 +552,7 @@
           collect (list (concatenate 'string "$" name)
                         (if (eq kind :int) 70 (if (string-equal name "LWDISPLAY") 290 40))
                         (case kind (:int (round v)) (:angle (* (d v) (/ 180 pi))) (t (d v))))))
+
+;; files always hold world coordinates, whatever view is showing
+(defun dxf-import (path &key (replace t)) (let ((*ucs-off* t)) (%dxf-import path :replace replace)))
+(defun dxf-export (path) (let ((*ucs-off* t)) (%dxf-export path)))

@@ -15,7 +15,7 @@
       (cond ((null r) nil)
             ((member r '("Extents" "E") :test #'string-equal) (zoom-extents))
             ((member r '("All" "A") :test #'string-equal)
-             (if *view* (zoom-extents)
+             (if (projected-view-p) (zoom-extents)
                  (let ((b (or (drawing-extents) (list 0 0 12 9))))
                    (zoom-to-box (min 0 (first b)) (min 0 (second b)) (max 12 (third b)) (max 9 (fourth b))))))
             ((member r '("Previous" "P") :test #'string-equal) (zoom-previous))
@@ -331,7 +331,7 @@
               (ents (and base (get-selection))))
          (when ents (make-block name base ents :convert)))))))
 
-(defun load-block-from-dxf (name)
+(defun %load-block-from-dxf (name)
   "Make a block NAME from a DXF file on the support path."
   (let ((path (find-file-in-support (if (search ".dxf" name :test #'char-equal) name (concatenate 'string name ".dxf")))))
     (when path
@@ -747,7 +747,7 @@ a DXF next to it instead and leave the DWG untouched."
   (declare (ignore apps))
   (let ((e (aename e)))
     (and (not (ename-deleted e))
-         (cons (cons -1 e) (copy-tree (lisp-visible-data (ename-data e)))))))
+         (cons (cons -1 e) (copy-tree (lisp-visible-data (ent-data e)))))))
 
 (defun valid-entity-data-p (data)
   (let ((type (dxf 0 data)))
@@ -953,3 +953,5 @@ a DXF next to it instead and leave the DWG untouched."
          (data (set-dxf 10 (pt 0 0) (set-dxf 50 0d0 (if (assoc 40 data) data (append data (list (cons 40 (d (sysvar "TEXTSIZE"))))))))))
     (let ((c (text-box data)))
       (list (pt (px (first c)) (py (first c))) (pt (px (third c)) (py (third c)))))))
+
+(defun load-block-from-dxf (name) (let ((*ucs-off* t)) (%load-block-from-dxf name)))

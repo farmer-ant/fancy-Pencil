@@ -98,7 +98,7 @@ Returns an alist of (dimvar-code . value) — e.g. 41 arrow size, 40 overall sca
     (w out 40 (d (or (dxf 40 data) 0))) (w out 41 (d (or (dxf 41 data) 0)))
     (w out 76 (length verts))
     (dolist (v verts) (wp out 10 v))
-    (wp out 210 (pt 0 0 1))
+    (wp out 210 (entity-normal data))
     ;; per-leader overrides, as AutoCAD stores them
     (when (or (dxf :ldr-asz data) (dxf :ldr-scale data))
       (w out 1001 "ACAD") (w out 1000 "DSTYLE") (w out 1002 "{")

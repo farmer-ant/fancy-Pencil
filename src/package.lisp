@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.35")
+(defparameter *version* "0.3.36")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -27,6 +27,13 @@
 then snaps onto the dimension line of an existing parallel dimension, so they line up.")
 (defvar *dimline-exclude* nil "The dimension being edited (not a snap target).")
 (defvar *dimline-match* nil "(from to) of the dimension line last snapped to, for drawing the guide.")
+(defvar *local-cache* (make-hash-table :test #'eq)
+  "ename -> (frame world-data local-data): each object as the current working plane sees it.")
+(defvar *planar-only* nil "Bound true in commands that can only work on objects in the working plane.")
+(defparameter *planar-commands*
+  '("TRIM" "EXTEND" "OFFSET" "FILLET" "CHAMFER" "BREAK" "BREAKATPOINT" "LENGTHEN" "JOIN" "PEDIT" "STRETCH"
+    "EXPLODE" "DIVIDE" "MEASURE" "SPLINEDIT" "BOUNDARY" "HATCH" "BHATCH")
+  "Commands that work on an object's shape in its own plane: they skip objects lying in other planes.")
 (defvar *view* nil
   "NIL for the plan (Top) view, else (name right up dir): the 3D view direction, with RIGHT and
 UP the world directions that point right and up on the screen and DIR pointing at the viewer.")
