@@ -191,6 +191,7 @@ mcmd .mb.modify "Properties" PROPERTIES
 mcmd .mb.format "Layer..." LAYER
 mcmd .mb.format "Make Object's Layer Current" LAYMCUR
 mcmd .mb.format "Match Layer" LAYMCH
+mcmd .mb.format "Change Layer..." CHANGELAYER
 mcmd .mb.format "Change to Current Layer" LAYCUR
 mcmd .mb.format "Linetype..." LINETYPE
 mcmd .mb.format "Lineweight..." LWEIGHT
@@ -264,8 +265,9 @@ pack $lr.sw $lr.cb -side left -padx 2
 ttk::button $lf.lp -text "Layer Properties" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYER}
 set lb [ttk::frame $lf.b]
 ttk::button $lb.mc -text "Make Current" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCUR}
-ttk::button $lb.mh -text "Match Layer" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
-pack $lb.mc $lb.mh -side left -expand 1 -fill x
+ttk::button $lb.mh -text "Match" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
+ttk::button $lb.ch -text "Change" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd CHANGELAYER}
+pack $lb.mc $lb.mh $lb.ch -side left -expand 1 -fill x
 ttk::label $lf.t -text Layers -style Group.TLabel
 pack $lr -side top -pady 1
 pack $lf.lp -side top -fill x
@@ -2251,6 +2253,55 @@ proc lim_done {act} {
         default { set ::lim(result) CANCEL }
     }
     destroy .lim
+}
+
+# ---------------------------------------------------------------- Change Layer: pick a layer from a list
+# layers: list of {name #color frozen locked}. Returns "CANCEL" or "OK name".
+proc layerpickdlg {title layers current} {
+    set w .lpk
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w $title
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 10]
+    pack $f -fill both -expand 1
+    set ::lpk(result) CANCEL
+    ttk::treeview $f.t -columns {state} -height [expr {min(16, max(4, [llength $layers]))}] -selectmode browse
+    $f.t heading #0 -text "Layer"
+    $f.t heading state -text ""
+    $f.t column #0 -width 220
+    $f.t column state -width 90 -anchor w
+    set i 0
+    foreach l $layers {
+        lassign $l name col frz lck
+        set img [image create photo -width 14 -height 12]
+        $img put "#1b1f24" -to 0 0 14 12
+        $img put $col -to 1 1 13 11
+        set st [string trim "[expr {$frz ? {frozen} : {}}] [expr {$lck ? {locked} : {}}]"]
+        set id [$f.t insert {} end -text "  $name" -image $img -values [list $st]]
+        set ::lpk(name,$id) $name
+        if {$name eq $current} { $f.t selection set $id; $f.t see $id }
+        incr i
+    }
+    pack $f.t -fill both -expand 1
+    bind $f.t <Double-Button-1> {lpk_done 1}
+    set b [ttk::frame $f.b]
+    ttk::button $b.ok -text OK -command {lpk_done 1}
+    ttk::button $b.no -text Cancel -command {lpk_done 0}
+    pack $b.no $b.ok -side right -padx 3
+    pack $b -fill x -pady {10 0}
+    bind $w <Escape> {lpk_done 0}
+    bind $w <Return> {lpk_done 1}
+    wm geometry $w +[expr {[winfo rootx .] + 300}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    focus $f.t
+    tkwait window $w
+    return $::lpk(result)
+}
+proc lpk_done {ok} {
+    set s [.lpk.f.t selection]
+    if {$ok && $s ne ""} { set ::lpk(result) "OK $::lpk(name,$s)" }
+    destroy .lpk
 }
 
 # ---------------------------------------------------------------- right-click menus on the drawing

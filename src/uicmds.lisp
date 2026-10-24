@@ -80,6 +80,7 @@
                (list "Align" "ALIGN") (list "Array" "ARRAY")
                (list "Match Properties" "MATCHPROP")
                (list "Match Layer" "LAYMCH")
+               (list "Change Layer..." "CHANGELAYER")
                (when (= (length sel) 1) (list "Make Object's Layer Current" "LAYMCUR"))
                :sep
                (list "Cut" "CUTCLIP") (list "Copy to Clipboard" "COPYCLIP")

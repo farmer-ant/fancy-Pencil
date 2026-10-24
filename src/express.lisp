@@ -253,6 +253,39 @@
         (ui-highlight ents nil)
         (when (gui-p) (gui-regen))))))
 
+(defun pick-layer-dialog (title current)
+  "A list of the drawing's layers with their colors; returns the chosen layer name or NIL."
+  (let ((r (tk-ask (format nil "layerpickdlg ~A {~{~A~^ ~}} ~A" (tq title)
+                           (loop for l in (drawing-layers *dwg*)
+                                 collect (format nil "{~A ~A ~D ~D}" (tq (layer-name l)) (aci->hex (abs (layer-color l)))
+                                                 (if (layer-frozen l) 1 0) (if (layer-locked l) 1 0)))
+                           (tq current)))))
+    (and (> (length r) 3) (string= (subseq r 0 3) "OK ") (subseq r 3))))
+
+(defun change-layer-of (ents name)
+  (let ((l (find-layer name)) (ok (filter-editable ents)))
+    (when l
+      (dolist (e ok) (set-entity-data e (set-dxf 8 (layer-name l) (ent-data e))))
+      (out (format nil "~D object~:P moved to layer \"~A\".~%" (length ok) (layer-name l)))
+      (when (gui-p) (gui-regen) (refresh-palette)))))
+
+(defcmd "CHANGELAYER" ("CL" "-CHANGELAYER" "LAYCHANGE") "Moves selected objects to a layer you choose from a list."
+  (let ((ents (let ((pre (remove-if-not #'ent-live-p *pickfirst*)))
+                (if pre (take-pickfirst) (get-selection "Select objects to move to another layer: ")))))
+    (when ents
+      (ui-highlight ents t)
+      (unwind-protect
+           (let ((name (if (and (gui-p) (not (from-lisp-p)))
+                           (pick-layer-dialog (format nil "Change ~D object~:P to layer" (length ents))
+                                              (let ((ls (remove-duplicates (mapcar #'ent-layer ents) :test #'string-equal)))
+                                                (if (= (length ls) 1) (first ls) (sysvar "CLAYER"))))
+                           (let ((s (gstring (format nil "Enter layer name <~A>: " (sysvar "CLAYER")) t)))
+                             (if (string= s "") (sysvar "CLAYER") s)))))
+             (cond ((null name) nil)
+                   ((not (find-layer name)) (out (format nil "No layer named ~A.~%" name)))
+                   (t (change-layer-of ents name))))
+        (ui-highlight ents nil)))))
+
 (defcmd "LAYMRG" ("-LAYMRG") "Express: merges layers into a target layer."
   (let* ((from (remove-duplicates (mapcar #'ent-layer (select-objects :prompt "Select object on layer to merge: " :editable nil))
                                   :test #'string-equal))
