@@ -7,38 +7,98 @@
 
 (defvar *align-scale* "No" "Last answer to ALIGN's scale question (offered as the default next time).")
 
-(defun align-xf (s1 d1 s2 d2 scale)
-  "Move S1 to D1, turn S1->S2 onto D1->D2 and, when SCALE, stretch it to the same length."
-  (let ((xf (xf-move (v- d1 s1))))
-    (when (and s2 d2 (> (dist2d s1 s2) 1d-12) (> (dist2d d1 d2) 1d-12))
-      (setf xf (xf-compose xf (xf-rotate d1 (- (ang d1 d2) (ang s1 s2)))))
-      (when scale (setf xf (xf-compose xf (xf-scaler d1 (/ (dist2d d1 d2) (dist2d s1 s2)))))))
-    xf))
+;;; ALIGN works in 3D: one pair of points moves; two pairs also turn the objects so the first
+;;; source edge lies along the first destination edge (the smallest turn that does it, so objects
+;;; in the working plane stay in it); three pairs also bring the plane through the three source
+;;; points onto the plane through the three destination points - the way to fit a panel against
+;;; another one at any angle. Scaling (from the first edge) is optional, as in AutoCAD.
 
-(defcmd "ALIGN" ("AL") "Moves, rotates and optionally scales objects so two points line up with two others."
+(defun mat-apply (m p) (pt (vdot3 (first m) p) (vdot3 (second m) p) (vdot3 (third m) p)))
+(defun mat-from-frames (e1 e2 e3 f1 f2 f3)
+  "Rows of the rotation taking the frame E onto the frame F."
+  (flet ((row (i) (let ((sel (lambda (v) (case i (0 (px v)) (1 (py v)) (t (pz v))))))
+                    (v+ (v+ (v* e1 (funcall sel f1)) (v* e2 (funcall sel f2))) (v* e3 (funcall sel f3))))))
+    (list (row 0) (row 1) (row 2))))
+
+(defun any-perpendicular (u)
+  (unit3 (if (< (abs (pz u)) 0.9d0) (cross3 u (pt 0 0 1)) (cross3 u (pt 1 0 0)))))
+
+(defun rotation-taking (u v)
+  "The smallest rotation (rows) taking unit vector U onto unit vector V."
+  (let* ((c (vdot3 u v)) (ax (cross3 u v)) (s (sqrt (vdot3 ax ax))))
+    (cond ((> c (- 1 1d-12)) (list (pt 1 0 0) (pt 0 1 0) (pt 0 0 1)))
+          ((< s 1d-12)                      ; opposite: half a turn about any perpendicular axis
+           (let ((k (any-perpendicular u)))
+             (flet ((r (i) (let ((ki (case i (0 (px k)) (1 (py k)) (t (pz k)))))
+                             (v- (v* k (* 2 ki)) (case i (0 (pt 1 0 0)) (1 (pt 0 1 0)) (t (pt 0 0 1)))))))
+               (list (r 0) (r 1) (r 2)))))
+          (t (let* ((k (v* ax (/ 1 s))) (e2 (unit3 (cross3 k u))) (f2 (unit3 (cross3 k v))))
+               (mat-from-frames u e2 k v f2 k))))))
+
+(defun align-xf (s1 d1 s2 d2 scale &optional s3 d3)
+  "Move S1 to D1; turn S1->S2 onto D1->D2 (and the plane S1 S2 S3 onto D1 D2 D3); when SCALE,
+stretch so S1->S2 is as long as D1->D2. Points in 3D."
+  (let* ((s1 (pt3 s1)) (d1 (pt3 d1))
+         (m (list (pt 1 0 0) (pt 0 1 0) (pt 0 0 1))) (k 1d0))
+    (when (and s2 d2 (> (dist (pt3 s1) (pt3 s2)) 1d-12) (> (dist d1 (pt3 d2)) 1d-12))
+      (let* ((e1 (unit3 (v- (pt3 s2) s1))) (f1 (unit3 (v- (pt3 d2) d1))))
+        (setf m (rotation-taking e1 f1))
+        (when (and s3 d3)
+          (let* ((a (v- (pt3 s3) s1)) (b (v- (pt3 d3) d1))
+                 (a2 (v- a (v* e1 (vdot3 a e1)))) (b2 (v- b (v* f1 (vdot3 b f1)))))
+            (when (and (> (vdot3 a2 a2) 1d-18) (> (vdot3 b2 b2) 1d-18))
+              (let* ((e2 (unit3 a2)) (f2 (unit3 b2)))
+                (setf m (mat-from-frames e1 e2 (cross3 e1 e2) f1 f2 (cross3 f1 f2)))))))
+        (when scale (setf k (/ (dist d1 (pt3 d2)) (dist s1 (pt3 s2)))))))
+    (let ((m m) (k k))
+      (make-xf :fn (lambda (p) (v+ d1 (v* (mat-apply m (v- (pt3 p) s1)) k)))
+               :scale (d k)))))
+
+(defun align-flat-p (xf)
+  "True when XF keeps the X,Y plane (a turn about Z only): objects can be handled the 2D way."
+  (let* ((fn (xf-fn xf)) (o (funcall fn (pt 0 0 0))) (z (v- (funcall fn (pt 0 0 1)) o)))
+    (and (< (abs (px z)) 1d-9) (< (abs (py z)) 1d-9) (plusp (pz z)))))
+
+(defun transform-entities-3d (ents xf)
+  (dolist (e ents)
+    (set-entity-data e (if (align-flat-p xf)
+                           (xform-data (ent-data e) (align-2d-xf xf))
+                           (xform-any (ent-data e) xf)))))
+
+(defun align-2d-xf (xf)
+  "The same transform, with the angle and mirror information the 2D object code needs."
+  (let* ((fn (xf-fn xf)) (o (funcall fn (pt 0 0 0))) (x (v- (funcall fn (pt 1 0 0)) o))
+         (a (atan (py x) (px x))))
+    (make-xf :fn fn :ang (lambda (v) (norm-ang (+ v a))) :scale (xf-scale xf))))
+
+(defcmd "ALIGN" ("AL" "3DALIGN") "Moves, rotates and optionally scales objects so up to three points line up with three others, in 3D."
   (let ((ents (get-selection)))
     (when ents
       (let* ((s1 (gpoint "Specify first source point: "))
              (d1 (and (pointp s1) (gpoint "Specify first destination point: " :base s1))))
         (when (pointp d1)
           ;; like AutoCAD, nothing moves until the last question is answered: only rubber-band lines
-          ;; from each source point to the cursor
-          (let* ((pair1 (lambda (c) (declare (ignore c)) (list (list :data (line-data s1 d1)))))
-                 (s2 (gpoint "Specify second source point or <continue>: " :drag pair1))
-                 (d2 (and (pointp s2) (gpoint "Specify second destination point: " :base s2 :drag pair1))))
+          ;; from each source point to its destination
+          (let* ((pairs (list (list s1 d1)))
+                 (drag (lambda (c) (declare (ignore c))
+                         (mapcar (lambda (pr) (list :data (line-data (first pr) (second pr)))) pairs)))
+                 (s2 (gpoint "Specify second source point or <continue>: " :drag drag))
+                 (d2 (and (pointp s2) (gpoint "Specify second destination point: " :base s2 :drag drag))))
             (if (not (and (pointp s2) (pointp d2)))
                 ;; one pair: a plain move
-                (transform-entities ents (xf-move (v- d1 s1)))
+                (transform-entities ents (xf-move (v- (pt3 d1) (pt3 s1))))
                 (progn
-                  ;; a third pair only matters in 3D; accept and ignore it like AutoCAD does for flat objects
-                  (let ((s3 (gpoint "Specify third source point or <continue>: ")))
-                    (when (pointp s3) (gpoint "Specify third destination point: " :base s3)))
-                  (let* ((ls (dist2d s1 s2)) (ld (dist2d d1 d2))
-                         (ans (gkw (format nil "Scale objects based on alignment points? [Yes/No] <~A>: " *align-scale*)
-                                   '("Yes" "No") *align-scale*))
+                  (setf pairs (append pairs (list (list s2 d2))))
+                  (let* ((s3 (gpoint "Specify third source point or <continue>: " :drag drag))
+                         (d3 (and (pointp s3) (gpoint "Specify third destination point: " :base s3 :drag drag)))
+                         (ls (dist (pt3 s1) (pt3 s2))) (ld (dist (pt3 d1) (pt3 d2)))
+                         (ans (if (pointp d3)
+                                  "No"            ; three pairs: AutoCAD does not offer scaling
+                                  (gkw (format nil "Scale objects based on alignment points? [Yes/No] <~A>: " *align-scale*)
+                                       '("Yes" "No") *align-scale*)))
                          (scale (string-equal ans "Yes")))
-                    (setf *align-scale* (if scale "Yes" "No"))
-                    (transform-entities ents (align-xf s1 d1 s2 d2 scale))
+                    (unless (pointp d3) (setf *align-scale* (if scale "Yes" "No")))
+                    (transform-entities-3d ents (align-xf s1 d1 s2 d2 scale (and (pointp d3) s3) (and (pointp d3) d3)))
                     (when (and scale (> ls 1d-12))
                       (out (format nil "Scaled by ~A.~%" (fmt-num (/ ld ls))))))))))))))
 
