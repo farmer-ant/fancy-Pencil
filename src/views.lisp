@@ -153,3 +153,33 @@
         (loop for (kw name) in *view-keywords*
               collect (format nil "{~A ~A {~{~A~^ ~}}}" (tq kw) (tq name)
                               (mapcar (lambda (poly) (format nil "{~{~A~^ ~}}" poly)) (view-cube-picture name)))))))
+
+;;; ---------- Point Style (DDPTYPE) ----------
+
+(defparameter *point-modes* '(0 1 2 3 4 32 33 34 35 36 64 65 66 67 68 96 97 98 99 100))
+
+(defun point-style-dialog ()
+  (let* ((ps (d (or (sysvar "PDSIZE") 0)))
+         (rel (<= ps 0))
+         (size (cond ((zerop ps) 5d0) ((minusp ps) (- ps)) (t ps)))
+         (r (tk-ask (format nil "ptypedlg ~D ~A ~D" (or (sysvar "PDMODE") 0) (tq (fmt-plain size)) (if rel 1 0)))))
+    (when (and (> (length r) 3) (string= (subseq r 0 3) "OK "))
+      (destructuring-bind (m sz rl) (split-string (subseq r 3) #\Space)
+        (let ((mode (ignore-errors (parse-integer m))) (n (parse-number-text sz)))
+          (when (and mode (member mode *point-modes*))
+            (setf (sysvar "PDMODE") mode))
+          (when (and n (plusp n))
+            (setf (sysvar "PDSIZE") (if (string= rl "1") (- (d n)) (d n))))
+          (touch)
+          (gui-regen)
+          (out (format nil "Point style: PDMODE=~D  PDSIZE=~A~%" (sysvar "PDMODE") (fmt-plain (sysvar "PDSIZE")))))))))
+
+(defcmd "DDPTYPE" ("PTYPE" "POINTSTYLE") "Point Style dialog: how points are shown and how big."
+  (if (and (gui-p) (not (from-lisp-p)))
+      (point-style-dialog)
+      (progn
+        (let ((m (gint (format nil "Enter new value for PDMODE (0,1,2,3,4 plus 32 circle, 64 square) <~D>: " (sysvar "PDMODE")))))
+          (when (and m (member m *point-modes*)) (setf (sysvar "PDMODE") m)))
+        (let ((s (greal (format nil "Enter new value for PDSIZE (0 = 5% of screen, negative = % of screen) <~A>: "
+                                (fmt-plain (sysvar "PDSIZE"))))))
+          (when (realp s) (setf (sysvar "PDSIZE") (d s)))))))

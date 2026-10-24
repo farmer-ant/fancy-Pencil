@@ -114,13 +114,29 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
         (let ((len (ignore-errors (polyline-length (piece-polyline pc)))))
           (and len (> (/ len period) 5000))))))
 
+(defun plot-point-symbol (p color lw)
+  "A point as its PDMODE symbol: PDSIZE in drawing units, or (relative sizes) 1/8 inch on paper."
+  (let* ((mode (or (sysvar "PDMODE") 0)) (ps (d (or (sysvar "PDSIZE") 0)))
+         (s (if (plusp ps) (/ ps 2) (if *plot-ppu* (/ 4.5d0 *plot-ppu*) 0.05d0)))
+         (x (px p)) (y (py p)) (lw (if (and (realp lw) (plusp lw)) lw 0.18d0)))
+    (flet ((ln (x1 y1 x2 y2) (emit-prim (list :poly (list (pt x1 y1) (pt x2 y2)) color lw))))
+      (case (mod mode 32)
+        (0 (emit-prim (list :fill (list (arc-points p (if *plot-ppu* (/ 1.2d0 *plot-ppu*) 0.02d0) 0 +2pi+ 8)) color)))
+        (2 (ln (- x s) y (+ x s) y) (ln x (- y s) x (+ y s)))
+        (3 (ln (- x s) (- y s) (+ x s) (+ y s)) (ln (- x s) (+ y s) (+ x s) (- y s)))
+        (4 (ln x y x (+ y s))))
+      (when (logtest mode 32) (emit-prim (list :arc p s 0d0 +2pi+ color lw)))
+      (when (logtest mode 64)
+        (emit-prim (list :poly (list (pt (- x s) (- y s)) (pt (+ x s) (- y s)) (pt (+ x s) (+ y s)) (pt (- x s) (+ y s)) (pt (- x s) (- y s)))
+                         color lw))))))
+
 (defun plot-pieces (pieces color lw pattern scale)
   (dolist (pc pieces)
     (when (and pattern (not (member (first pc) '(:gseg :pt))) (pattern-too-fine-p pattern scale pc))
       (setf pc (cons :solid pc)))
     (case (first pc)
       (:gseg nil)
-      (:pt (emit-prim (list :fill (list (arc-points (second pc) 0.02d0 0 +2pi+ 8)) color)))
+      (:pt (plot-point-symbol (second pc) color lw))
       (:solid (plot-pieces (list (rest pc)) color lw nil 1d0))
       (t
        (if pattern

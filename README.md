@@ -207,6 +207,13 @@ base point (or type X and Y), **Select objects**, and choose whether the objects
 converted to the block, or deleted. Objects selected before you start are used automatically.
 `-BLOCK` does the same at the command line. Insert copies with INSERT.
 
+### Point Style (DDPTYPE, Format → Point Style...)
+
+The Point Style dialog shows the 20 point symbols (dot, none, plus, X, tick, and each with a
+circle, a square, or both); click one (double-click to choose it at once). Point size is set
+relative to the screen (a percentage of the drawing area's height, so points look the same at any
+zoom) or in absolute drawing units. Points are drawn — and plotted — with the chosen symbol.
+
 ### Colors
 
 Color choices (Properties panel → Select Color..., the Properties palette, the Layer Properties
