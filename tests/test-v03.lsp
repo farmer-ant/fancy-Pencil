@@ -420,6 +420,9 @@
 (command "leader" "Arrow" '(30 0) '(28 3) "U" '(26 0) "" "LEFT" "")
 (check "leftward note right-attached" (g (entlast) 71) 3)
 (check "undo leader point" (length (vl-remove-if-not '(lambda (p) (= (car p) 10)) (entget (entbefore (entlast))))) 2)
+(command "-layer" "m" "NOTES" "")
+(command "leader" '(40 0) '(42 2) "" "ON NOTES" "")
+(check "hooked leader keeps its layer" (g (entbefore (entlast)) 8) "NOTES")
 (command "close")
 
 (princ (strcat "\nv0.3 tests: " (itoa *pass*) " passed, " (itoa *fail*) " failed.\n"))

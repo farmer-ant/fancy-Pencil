@@ -116,9 +116,18 @@ Returns an alist of (dimvar-code . value) — e.g. 41 arrow size, 40 overall sca
 (defvar *leader-arrow* t "LEADER draws an arrowhead (remembered for the next leader).")
 
 (defun leader-data (pts &key spline (arrow t) hook)
-  (append (list (cons 0 "LEADER") (cons 3 (or (sysvar "DIMSTYLE") "Standard"))
-                (cons 71 (if arrow 1 0)) (cons 72 (if spline 1 0)) (cons 75 (if hook 1 0)))
-          (mapcar (lambda (p) (cons 10 (pt3 p))) pts)))
+  "A new leader. An arrow size or overall scale set at the command line (DIMASZ, DIMSCALE) that
+differs from the dimension style is kept on the leader, as AutoCAD keeps dimension overrides."
+  (let* ((style (or (sysvar "DIMSTYLE") "Standard"))
+         (svars (dimstyle-vars* style))
+         (asz (sysvar "DIMASZ")) (sc (sysvar "DIMSCALE")))
+    (append (list (cons 0 "LEADER") (cons 3 style)
+                  (cons 71 (if arrow 1 0)) (cons 72 (if spline 1 0)) (cons 75 (if hook 1 0)))
+            (mapcar (lambda (p) (cons 10 (pt3 p))) pts)
+            (when (and (realp asz) (>= asz 0) (> (abs (- asz (d (dv svars :dimasz)))) 1d-9))
+              (list (cons :ldr-asz (d asz))))
+            (when (and (realp sc) (plusp sc) (> (abs (- sc (d (dv svars :dimscale)))) 1d-9))
+              (list (cons :ldr-scale (d sc)))))))
 
 (defun leader-text-layout (pts)
   "Where a leader's note goes: (values landing-end insertion attachment height hook-p).
@@ -206,8 +215,10 @@ The note sits to the right of the last point when the leader runs rightward, els
               (let ((content (and note (leader-note-text ins attach h))))
                 (when content
                   (when hook
-                    (set-entity-data ldr (leader-data (append pts (list land)) :spline *leader-spline*
-                                                                               :arrow *leader-arrow* :hook t)))
+                    ;; keep the layer, color, linetype ... the new leader was given
+                    (set-entity-data ldr (with-props (leader-data (append pts (list land)) :spline *leader-spline*
+                                                                                          :arrow *leader-arrow* :hook t)
+                                                     (ent-data ldr))))
                   (add (list (cons 0 "MTEXT") (cons 10 (pt3 ins)) (cons 40 (d h)) (cons 41 0d0)
                              (cons 71 attach) (cons 72 1) (cons 1 content) (cons 50 0d0)
                              (cons 7 (textstyle-name (current-textstyle)))))))
