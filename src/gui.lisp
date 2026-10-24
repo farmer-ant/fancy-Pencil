@@ -833,7 +833,11 @@ several), else the current layer. Only shows it; the current layer is not change
 
 (defun update-cursor (sx sy)
   (setf *mouse-sx* sx *mouse-sy* sy *mouse-in* t)
-  (let* ((raw (s->w sx sy)) (kind (and *req* (inreq-kind *req*))))
+  (let* ((kind (and *req* (inreq-kind *req*)))
+         ;; in a 3D view, points land on the work plane through the base point (if there is one)
+         (raw (if (and *view* (member kind '(:point :corner :distance :angle)))
+                  (view-work-point sx sy (inreq-base *req*))
+                  (s->w sx sy))))
     (cond ((and (member kind '(:point :corner)) (inreq-nosnap *req*))
            (setf *cursor-world* raw *snap-bit* nil))
           ((member kind '(:point :corner :distance :angle))

@@ -3,9 +3,8 @@
 ;;;; ISOPLANE, F5).
 ;;;;
 ;;;; Drawings are 2D with optional heights: objects can sit at a Z elevation and have a THICKNESS
-;;;; (they then show as walls in the 3D views). In Top and the isometric views points you pick land
-;;;; on the ground (XY) plane, so you can draw and edit there; Front, Back, Left and Right look at
-;;;; that plane edge-on and are for looking.
+;;;; (they then show as walls in the 3D views). Objects can be picked, window-selected, snapped to
+;;;; and edited in every view (see "picking ... in the 3D / side views" at the end of this file).
 
 (in-package :fancy-pencil)
 
@@ -53,8 +52,8 @@
           (out (format nil "~A view.~A~%" (first spec)
                        (cond ((null *view*) "")
                              ((edge-on-view-p)
-                              (format nil "~%This view looks at the drawing plane edge-on: use it to look (objects with a thickness or height show as~%~
-                                           walls). Draw and edit in Top or an isometric view."))
+                              (format nil "~%Objects show at their heights. Select and edit them here: dragging a grip or moving~%~
+                                           up and down changes heights (Z); left and right moves them across."))
                              (t "  You can draw and edit on the ground plane here; text shows as its outline."))))))))
 
 (defparameter *view-keywords*
@@ -183,3 +182,147 @@
         (let ((s (greal (format nil "Enter new value for PDSIZE (0 = 5% of screen, negative = % of screen) <~A>: "
                                 (fmt-plain (sysvar "PDSIZE"))))))
           (when (realp s) (setf (sysvar "PDSIZE") (d s)))))))
+
+;;; ---------- picking, snapping and points in the 3D / side views ----------
+;;; In plan view objects are found by their X,Y. In any other view (Front, Right, the isometric
+;;; views ...) everything is measured on the screen instead: an object is picked, window-selected
+;;; or snapped to where it is drawn — at its height, with its thickness — and points you click
+;;; land on a work plane through the base point (the grip being dragged, the MOVE base point ...),
+;;; so dragging in a side view changes heights, and dragging in the plan-like views keeps them.
+
+(defun view-object-height (data)
+  "(values elevation thickness) the 3D views draw DATA with."
+  (values (if (equal (dxf 0 data) "LWPOLYLINE") (d (or (dxf 38 data) 0)) 0d0)
+          (if (member (dxf 0 data) '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal)
+              (d (or (dxf 39 data) 0)) 0d0)))
+
+(defun lift (p z) (pt (px p) (py p) z))
+
+(defun piece-polyline-3d (pc)
+  "World points along piece PC (arcs and circles at the height of their centre)."
+  (case (first pc)
+    ((:seg :gseg) (list (pt3 (second pc)) (pt3 (third pc))))
+    (:circle (arc-points-3d (pt3 (second pc)) (third pc) 0d0 +2pi+ 48))
+    (:arc (destructuring-bind (c r a1 a2) (rest pc) (arc-points-3d (pt3 c) r a1 a2 24)))
+    (:pt (list (pt3 (second pc)) (pt3 (second pc))))
+    (t (loop for sp in (tessellate-piece pc) when (eq (first sp) :seg) append (list (pt3 (second sp)) (pt3 (third sp)))))))
+
+(defun entity-view-segs (e)
+  "E as it is drawn in the current view, as 2D segments in view coordinates."
+  (multiple-value-bind (elev th) (view-object-height (ent-data e))
+    (let ((out nil))
+      (flet ((uv (p dz) (w->uv (pt (px p) (py p) (+ (pz p) elev dz)))))
+        (dolist (pc (entity-pieces e) out)
+          (let ((pts (piece-polyline-3d pc)))
+            (loop for (a b) on pts while b
+                  do (push (list :seg (uv a 0) (uv b 0)) out)
+                     (unless (zerop th) (push (list :seg (uv a th) (uv b th)) out)))
+            (unless (zerop th)
+              (dolist (p (list (first pts) (car (last pts))))
+                (push (list :seg (uv p 0) (uv p th)) out))))))
+      out)))
+
+(defun entity-view-bbox (e)
+  "E's extent in view coordinates (u0 v0 u1 v1), from its plan extent and height."
+  (let ((b (ignore-errors (entity-bbox e))))
+    (when b
+      (multiple-value-bind (elev th) (view-object-height (ent-data e))
+        (let* ((zs (let ((z0 (+ elev (let ((p (dxf 10 (ent-data e)))) (if (and (consp p) (realp (pz p))) (pz p) 0d0)))))
+                     (list z0 (+ z0 th))))
+               (u0 nil) (v0 nil) (u1 nil) (v1 nil))
+          ;; objects with points at several heights (3D lines): use their real points too
+          (dolist (pc (entity-pieces e))
+            (dolist (p (case (first pc) ((:seg :gseg) (list (second pc) (third pc))) (t nil)))
+              (push (+ elev (pz (pt3 p))) zs)))
+          (dolist (x (list (first b) (third b)))
+            (dolist (y (list (second b) (fourth b)))
+              (dolist (z zs)
+                (multiple-value-bind (u v) (view-project (pt x y z))
+                  (setf u0 (if u0 (min u0 u) u) u1 (if u1 (max u1 u) u)
+                        v0 (if v0 (min v0 v) v) v1 (if v1 (max v1 v) v))))))
+          (list u0 v0 u1 v1))))))
+
+(defun view-candidates (q tol)
+  "Visible objects whose view extent is within TOL of view point Q."
+  (loop for e in (live-entities)
+        when (and (layer-visible-p (find-layer (ent-layer e)))
+                  (let ((b (entity-view-bbox e)))
+                    (and b (<= (- (first b) tol) (px q) (+ (third b) tol))
+                         (<= (- (second b) tol) (py q) (+ (fourth b) tol)))))
+          collect e))
+
+(defun view-pick-entity-at (p tol)
+  (let ((q (w->uv p)) (best nil) (bd nil))
+    (dolist (e (view-candidates q tol) best)
+      (dolist (sg (entity-view-segs e))
+        (let ((dd (piece-dist sg q)))
+          (when (and (<= dd tol) (or (null bd) (< dd bd))) (setf best e bd dd)))))))
+
+(defun view-entities-in-window (p1 p2 crossing)
+  (let* ((a (w->uv p1)) (b (w->uv p2))
+         (x0 (min (px a) (px b))) (x1 (max (px a) (px b)))
+         (y0 (min (py a) (py b))) (y1 (max (py a) (py b))))
+    (loop for e in (live-entities)
+          when (and (layer-visible-p (find-layer (ent-layer e)))
+                    (let ((bb (entity-view-bbox e)))
+                      (and bb
+                           (or (and (<= x0 (first bb)) (<= (third bb) x1) (<= y0 (second bb)) (<= (fourth bb) y1))
+                               (and crossing
+                                    (not (or (> (first bb) x1) (< (third bb) x0) (> (second bb) y1) (< (fourth bb) y0)))
+                                    (some (lambda (sg) (piece-crosses-rect-p sg x0 y0 x1 y1)) (entity-view-segs e)))))))
+            collect e)))
+
+(defun view-dist (a b)
+  "Distance on the screen (in drawing units) between world points A and B."
+  (if *view* (dist2d (w->uv a) (w->uv b)) (dist2d a b)))
+
+(defun view-osnap-candidates (p bits tol)
+  "Object snap candidates near P measured on the screen: endpoints, midpoints, centres, nodes,
+quadrants and nearest, at the objects' real heights (tops of thick objects too)."
+  (let ((q (w->uv p)) (cands nil))
+    (flet ((add (w bit) (when (and w (<= (dist2d (w->uv w) q) tol)) (push (cons w bit) cands))))
+      (dolist (e (view-candidates q tol) cands)
+        (when (some (lambda (sg) (<= (piece-dist sg q) tol)) (entity-view-segs e))
+          (multiple-value-bind (elev th) (view-object-height (ent-data e))
+            (dolist (pc (snap-pieces e))
+              (let* ((z0 (+ elev (pz (pt3 (if (member (first pc) '(:seg :pt :circle :arc)) (second pc) (pt 0 0)))))))
+                (dolist (dz (if (zerop th) '(0d0) (list 0d0 th)))
+                  (flet ((up (w z) (lift w (+ z dz))))
+                    (case (first pc)
+                      (:seg (let ((a (pt3 (second pc))) (b (pt3 (third pc))))
+                              (when (logtest bits 1) (add (up a (+ elev (pz a))) 1) (add (up b (+ elev (pz b))) 1))
+                              (when (logtest bits 2) (add (up (midpt a b) (+ elev (/ (+ (pz a) (pz b)) 2))) 2))
+                              (when (logtest bits 512)
+                                (let* ((ua (w->uv (up a (+ elev (pz a))))) (ub (w->uv (up b (+ elev (pz b)))))
+                                       (k (max 0d0 (min 1d0 (seg-param q ua ub)))))
+                                  (add (v+ (up a (+ elev (pz a))) (v* (v- (up b (+ elev (pz b))) (up a (+ elev (pz a)))) k)) 512)))))
+                      (:pt (when (logtest bits 8) (add (up (second pc) z0) 8)))
+                      ((:arc :circle)
+                       (when (logtest bits 1) (dolist (w (piece-ends pc)) (add (up w z0) 1)))
+                       (when (logtest bits 2) (dolist (w (piece-mids pc)) (add (up w z0) 2)))
+                       (when (logtest bits 4) (push (cons (up (second pc) z0) 4) cands))
+                       (when (logtest bits 16) (dolist (w (piece-quads pc)) (add (up w z0) 16)))))))))))))))
+
+(defun view-work-point (sx sy base)
+  "The world point under screen pixel SX,SY in a 3D view, on the work plane through BASE: the
+plane facing you in Front/Back/Left/Right (so dragging up and down changes heights), else the
+level plane at BASE's height."
+  (let* ((q (s->uv sx sy)) (u (px q)) (v (py q))
+         (r (second *view*)) (up (third *view*)) (dir (fourth *view*))
+         (b (v+ (v* r u) (v* up v)))
+         (base (and base (pt3 base))))
+    (cond ((null base) (view-unproject u v))
+          ((> (abs (pz dir)) 1d-9) (v+ b (v* dir (/ (- (pz base) (pz b)) (pz dir)))))
+          (t (v+ b (v* dir (vdot3 base dir)))))))
+
+(defun view-ortho (p base)
+  "Ortho in a 3D view: along the screen's horizontal or vertical through BASE."
+  (let* ((dv (v- (pt3 p) (pt3 base))) (r (second *view*)) (up (third *view*))
+         (du (vdot3 dv r)) (dvv (vdot3 dv up)))
+    (if (> (abs du) (abs dvv)) (v+ (pt3 base) (v* r du)) (v+ (pt3 base) (v* up dvv)))))
+
+(defun view-grid-snap (p ux uy)
+  "Grid snap in a 3D view: round the screen (view) coordinates, keep the depth."
+  (multiple-value-bind (u v) (view-project (pt3 p))
+    (let ((du (- (* ux (fround (/ u ux))) u)) (dv (- (* uy (fround (/ v uy))) v)))
+      (v+ (pt3 p) (v+ (v* (second *view*) du) (v* (third *view*) dv))))))
