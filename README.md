@@ -291,15 +291,28 @@ corners, Bottom underneath). Click "Views" to fold it up; View → Show View Pic
 Top, Bottom, Left, Right, Front, Back and the SW, SE, NE and NW Isometric views, as in AutoCAD
 (`-VIEW`, `PLAN` for Top). Objects can have a height: **THICKNESS** (or the Properties panel)
 extrudes lines, arcs, circles and polylines into walls, and **Elevation** lifts objects off the
-ground plane (`ELEV` sets both for new objects). Text shows as its outline in these views.
+ground plane (`ELEV` sets both for new objects). In the isometric views text shows as its outline.
 
-**Selecting and editing in every view.** Click an object, drag a window, snap to it and use its
-grips in any view — objects are found where they are drawn, at their height. In Front, Back,
-Left and Right, dragging a grip or moving objects up and down changes their height (Z), and left
-and right moves them across; in the isometric views points stay at the height of the grip or
-base point you start from (on the ground plane when there is none). Ortho and grid snap follow
-the screen's horizontal and vertical. A polyline stays flat: moving it up or down changes its
-elevation. The axes icon (bottom left) shows X, Y and Z in the
+**Drawing and editing in every view (working planes).** Front, Back, Left, Right and Bottom each
+work like an AutoCAD UCS: X to the right, Y up, Z toward you. Every command works there just as
+in Top view — LINE, PLINE, RECTANG, CIRCLE, ARC, TEXT, OFFSET, TRIM, FILLET, grips, snaps — and
+what you draw lies in that view's plane (a rectangle drawn in Front view stands upright).
+Points you click are at the depth of the base point or the object you snap to, else in the plane
+through the origin.
+
+Objects drawn in another plane show edge-on (as lines) or slanted. You can select them, snap to
+their corners, erase them, and MOVE, COPY, ROTATE, MIRROR and SCALE them in 3D — rotating is how a
+flat panel is stood up: in the Right view, ROTATE the panel 90 degrees about its bottom edge, and it
+stands facing the Front view. Commands that change an object's shape in its own plane (TRIM,
+EXTEND, OFFSET, FILLET, CHAMFER, BREAK, PEDIT, STRETCH ...) skip objects in other planes and say
+so; switch to a view that faces them.
+
+In the isometric views you see everything in 3D and can draw on the ground plane; points stay at
+the height of the grip or base point you start from. Planes are saved in DXF (group 210, as
+AutoCAD writes them) and read back from AutoCAD drawings. R12 DXF has no planes for most objects,
+so there an object in another plane is saved as its 3D edges.
+
+The axes icon (bottom left) shows X, Y and Z in the
 current view; each drawing tab keeps its own view. Thickness and elevation are saved in DXF.
 
 ### Isometric drafting (View → Isometric Drafting, ISODRAFT)

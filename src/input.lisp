@@ -298,7 +298,7 @@
 (defun find-osnap (p &optional base (bits nil) (tol (aperture-world)))
   "Best snap near P: (values point bit) or NIL."
   (let* ((bits (or bits (osnap-active-bits)))
-         (cands (and bits (plusp bits) (if *view* (view-osnap-candidates p bits tol) (osnap-candidates p bits base tol)))))
+         (cands (and bits (plusp bits) (if (projected-view-p) (view-osnap-candidates p bits tol) (osnap-candidates p bits base tol)))))
     (when cands
       ;; prefer specific snaps over NEArest; then closest to cursor
       (let* ((specific (remove 512 cands :key #'cdr))
@@ -329,7 +329,7 @@
 (defun apply-ortho (p base)
   (cond
     ((not (and base (eql (sysvar "ORTHOMODE") 1))) p)
-    (*view* (view-ortho p base))
+    ((projected-view-p) (view-ortho p base))
     ((iso-mode-p)
      ;; along whichever isoplane axis is closest to the cursor direction
      (let* ((v (v- p base)) (best nil) (bd nil))
@@ -356,7 +356,7 @@
 (defun apply-grid-snap (p)
   (if (eql (sysvar "SNAPMODE") 1)
       (let* ((u (sysvar "SNAPUNIT")) (ux (d (first u))) (uy (d (second u))))
-        (if *view* (return-from apply-grid-snap (view-grid-snap p (max 1d-9 ux) (max 1d-9 uy))))
+        (if (projected-view-p) (return-from apply-grid-snap (view-grid-snap p (max 1d-9 ux) (max 1d-9 uy))))
         (if (iso-mode-p)
             (iso-lattice-point p (max 1d-9 uy))
             (pt (* ux (fround (/ (px p) ux))) (* uy (fround (/ (py p) uy))) (pz p))))
@@ -371,7 +371,7 @@
 ;;; ---------- selection helpers ----------
 
 (defun pick-entity-at (p &optional (tol (pick-tolerance)))
-  (when *view* (return-from pick-entity-at (view-pick-entity-at p tol)))
+  (when (projected-view-p) (return-from pick-entity-at (view-pick-entity-at p tol)))
   (let ((best nil) (bd nil))
     (dolist (e (entities-near p tol) best)
       (dolist (pc (entity-pieces e))
@@ -388,7 +388,7 @@
           (and (<= 0 u 1) (<= 0 v 1)))))))
 
 (defun entities-in-window (p1 p2 crossing)
-  (when *view* (return-from entities-in-window (view-entities-in-window p1 p2 crossing)))
+  (when (projected-view-p) (return-from entities-in-window (view-entities-in-window p1 p2 crossing)))
   (let ((x0 (min (px p1) (px p2))) (x1 (max (px p1) (px p2)))
         (y0 (min (py p1) (py p2))) (y1 (max (py p1) (py p2))))
     (loop for e in (live-entities)
@@ -401,9 +401,20 @@
                                     (some (lambda (pc) (piece-crosses-rect-p pc x0 y0 x1 y1)) (entity-pieces e)))))))
             collect e)))
 
+(defun in-working-plane-p (e) (not (offplane-p (ent-data e))))
+
+(defun note-offplane (n)
+  (when (plusp n)
+    (out (format nil "~D object~:P in another plane skipped: this command works in the plane of the view.~%~
+                      (Use a view that faces ~:*~[them~;it~:;them~], or MOVE/ROTATE/MIRROR it into this plane.)~%" n))))
+
 (defun filter-editable (ents &optional (report t))
   (let* ((ok (remove-if-not #'entity-editable-p ents)) (n (- (length ents) (length ok))))
     (when (and report (plusp n)) (out (format nil "~D ~A on a locked layer.~%" n (if (= n 1) "was" "were"))))
+    (when *planar-only*
+      (let ((flat (remove-if-not #'in-working-plane-p ok)))
+        (when report (note-offplane (- (length ok) (length flat))))
+        (setf ok flat)))
     ok))
 
 (defun window-selection-drag (base)
@@ -474,7 +485,10 @@
 
 (defun sel-entity (sel)
   "Entity from an :entity input result (:pick point [ename])."
-  (and (consp sel) (eq (first sel) :pick) (or (third sel) (pick-entity-at (second sel)))))
+  (let ((e (and (consp sel) (eq (first sel) :pick) (or (third sel) (pick-entity-at (second sel))))))
+    (if (and e *planar-only* (not (in-working-plane-p e)))
+        (progn (note-offplane 1) nil)
+        e)))
 (defun sel-point (sel) (second sel))
 
 (defun take-pickfirst ()

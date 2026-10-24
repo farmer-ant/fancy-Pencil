@@ -131,7 +131,7 @@
 
 (defun view-project (p)
   "View coordinates (u v) of world point P: X,Y in plan view, else along the view's right/up."
-  (if *view*
+  (if (projected-view-p)
       (values (vdot3 p (second *view*)) (vdot3 p (third *view*)))
       (values (px p) (py p))))
 
@@ -154,7 +154,7 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
       (- *vy* (/ (- sy (/ *ch* 2d0)) *vscale*))))
 (defun s->w (sx sy)
   (let ((q (s->uv sx sy)))
-    (if *view* (view-unproject (px q) (py q)) q)))
+    (if (projected-view-p) (view-unproject (px q) (py q)) q)))
 (defun w->uv (p) (multiple-value-bind (u v) (view-project p) (pt u v)))
 (defun gui-pixels->world (n) (/ n *vscale*))
 (defun view-rect (&optional (margin 40))
@@ -171,12 +171,20 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
     (gui-regen)))
 (defun view-extents ()
   "Extents of the drawing in view coordinates (projected, with heights and thickness)."
-  (if (null *view*)
+  (if (not (projected-view-p))
       (drawing-extents)
       (let ((u0 nil) (v0 nil) (u1 nil) (v1 nil))
         (dolist (e (live-entities))
           (when (entity-visible-p e)
             (let ((b (ignore-errors (entity-bbox e))) (data (ent-data e)))
+              ;; an object in another plane: its own 3D edges
+              (when (offplane-p data)
+                (dolist (pc (entity-pieces e))
+                  (dolist (p (case (first pc) ((:seg :gseg) (list (second pc) (third pc))) (:pt (list (second pc)))))
+                    (multiple-value-bind (u v) (view-project (pt3 p))
+                      (setf u0 (if u0 (min u0 u) u) u1 (if u1 (max u1 u) u)
+                            v0 (if v0 (min v0 v) v) v1 (if v1 (max v1 v) v)))))
+                (setf b nil))
               (when b
                 (let* ((z0 (entity-elevation data)) (z1 (+ z0 (d (or (dxf 39 data) 0)))))
                   (dolist (x (list (first b) (third b)))
@@ -296,7 +304,7 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
     (nreverse out)))
 
 (defun piece-visible-p (pc)
-  (when *view* (return-from piece-visible-p t))
+  (when (projected-view-p) (return-from piece-visible-p t))
   (multiple-value-bind (x0 y0 x1 y1) (view-rect 50)
     (let ((b (pieces-bbox (list pc))))
       (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0)))))))
@@ -306,7 +314,7 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
   (let ((z (pz c))) (mapcar (lambda (p) (pt (px p) (py p) z)) (arc-points c r a1 a2 n))))
 
 (defun render-piece (pc color tags &key dash (width 1))
-  (when (and *view* (member (first pc) '(:circle :arc)))
+  (when (and (projected-view-p) (member (first pc) '(:circle :arc)))
     ;; seen at an angle a circle is an ellipse: draw it as a fine polyline
     (return-from render-piece
       (destructuring-bind (c r &optional (a1 0d0) (a2 +2pi+)) (rest pc)
@@ -382,7 +390,7 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
                   "left")))))
 
 (defun render-text (data color tags hl)
-  (when *view*
+  (when (projected-view-p)
     ;; text lies flat on its plane; at an angle it is shown by its outline and baseline
     (return-from render-text
       (let ((c (ignore-errors (text-box data))))
@@ -450,6 +458,13 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
   (let ((type (dxf 0 data)) (color (aci->hex aci)))
     (cond
       ((> depth 8) nil)
+      ;; an object in another plane: drawn by its 3D edges
+      ((offplane-p data)
+       (let ((w (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))))
+         (loop for pc in (data-pieces data)
+               append (loop for q in (if xf (transform-piece pc xf) (list pc))
+                            append (render-piece (if (eq (first q) :gseg) (cons :seg (rest q)) q)
+                                                 color tags :dash hl :width w)))))
       ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
        (render-text (if xf (xform-data data xf) data) color tags hl))
       ((member type '("INSERT" "DIMENSION") :test #'equal)
@@ -476,7 +491,7 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
            (list (format nil ".c create polygon ~{~A~^ ~} -fill ~A -outline ~A -tags {~A}"
                          (mapcar #'fmtn coords) color color tags)))))
       ((equal type "HATCH") (render-hatch data color tags hl xf))
-      ((and *view* (member type '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal))
+      ((and (projected-view-p) (member type '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal))
        (render-3d-object data color tags hl xf (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))))
       (t
        (let* ((pw (if (and (equal type "LWPOLYLINE") (dxf 43 data) (plusp (dxf 43 data)))
@@ -568,10 +583,10 @@ other pieces (arcs, circles) are drawn one by one."
 (defun entity-render-cmds (e)
   "Canvas commands for entity E. Level of detail, as in AutoCAD: objects outside the view are
 skipped, and an object smaller than about a pixel and a half is drawn as one tiny mark."
-  (let* ((data (ename-data e))
+  (let* ((data (ent-data e))
          (tags (format nil "ent h~A" (ename-handle e)))
          (b (ignore-errors (entity-bbox e))))
-    (if (and b (not *view*) (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB" "POINT") :test #'equal)))
+    (if (and b (not (projected-view-p)) (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB" "POINT") :test #'equal)))
         (multiple-value-bind (vx0 vy0 vx1 vy1) (view-rect 50)
           (destructuring-bind (x0 y0 x1 y1) b
             (cond
@@ -610,7 +625,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
         (values x0 y0 x1 y1))))
 
 (defun grid-cmds ()
-  (when (and (eql (sysvar "GRIDMODE") 1) (not *view*))
+  (when (and (eql (sysvar "GRIDMODE") 1) (not (projected-view-p)))
     (when (iso-mode-p) (return-from grid-cmds (iso-grid-cmds)))
     (multiple-value-bind (x0 y0 x1 y1) (grid-area)
       (let* ((g (max 1d-9 (d (first (sysvar "GRIDUNIT"))))) (major 5) (out nil))
@@ -653,7 +668,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
           (format nil ".c create rectangle ~D ~D ~D ~D -outline #8a94a3 -tags ucs" (- x 3) (- y 3) (+ x 3) (+ y 3)))))
 
 (defun entity-in-view-p (e)
-  (when *view* (return-from entity-in-view-p t))
+  (when (projected-view-p) (return-from entity-in-view-p t))
   (let ((b (entity-bbox e)))
     (multiple-value-bind (x0 y0 x1 y1) (view-rect 50)
       (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0)))))))
@@ -738,8 +753,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
 (defun crosshair-screen-angles ()
   "Screen directions (radians, counterclockwise from right) of the two crosshair lines."
   (cond
-    ((and (iso-mode-p) (not *view*)) (isoplane-axes))
-    (*view*
+    ((and (iso-mode-p) (not (projected-view-p))) (isoplane-axes))
+    ((projected-view-p)
      (loop for axis in '((1 0 0) (0 1 0))
            collect (multiple-value-bind (u v) (view-project axis)
                      (if (< (+ (* u u) (* v v)) 1d-9) (/ pi 2) (atan v u)))))
@@ -835,9 +850,12 @@ several), else the current layer. Only shows it; the current layer is not change
   (setf *mouse-sx* sx *mouse-sy* sy *mouse-in* t)
   (let* ((kind (and *req* (inreq-kind *req*)))
          ;; in a 3D view, points land on the work plane through the base point (if there is one)
-         (raw (if (and *view* (member kind '(:point :corner :distance :angle)))
-                  (view-work-point sx sy (inreq-base *req*))
-                  (s->w sx sy))))
+         (raw (cond ((and (projected-view-p) (member kind '(:point :corner :distance :angle)))
+                     (view-work-point sx sy (inreq-base *req*)))
+                    ;; in a working plane, a free point is at the depth of the base point
+                    ((and (ucs) (member kind '(:point :corner :distance :angle)) (pointp (inreq-base *req*)))
+                     (let ((q (s->w sx sy))) (pt (px q) (py q) (pz (pt3 (inreq-base *req*))))))
+                    (t (s->w sx sy)))))
     (cond ((and (member kind '(:point :corner)) (inreq-nosnap *req*))
            (setf *cursor-world* raw *snap-bit* nil))
           ((member kind '(:point :corner :distance :angle))

@@ -66,8 +66,15 @@
               (x (read i nil nil)))
          (and (consp x) (eq (first x) :fancy-pencil-clipboard) (clip-p (third x)) (third x)))))))
 
+(defun ucs-point-to-world (p)
+  "A point picked in the working plane, in world coordinates."
+  (let ((u (ucs))) (if u (destructuring-bind (x y z) u (ocs->w (pt3 p) x y z)) p)))
+
 (defun set-clipboard (ents base)
-  (let ((clip (collect-clip-definitions (mapcar #'ent-data ents))))
+  ;; the clipboard holds world coordinates, so it pastes the same from any view
+  (let* ((base (ucs-point-to-world base))
+         (*ucs-off* t)
+         (clip (collect-clip-definitions (mapcar #'ent-data ents))))
     (setf (clip-base clip) base
           (clip-datas clip) (mapcar (lambda (e) (copy-tree (rem-dxf 5 (ent-data e)))) ents)
           *clipboard* clip)
@@ -115,7 +122,8 @@
 
 (defun paste-datas (clip xf)
   "Add the clipboard's objects to this drawing through transform XF. Returns the new entities."
-  (let ((renames (merge-clip-definitions clip))
+  (let ((*ucs-off* t)
+        (renames (merge-clip-definitions clip))
         (made nil))
     (let ((*keep-dimension-blocks* t))
       (dolist (dd (clip-datas clip))
@@ -127,7 +135,9 @@
     (nreverse made)))
 
 (defun clip-drag (clip base)
-  (lambda (cur) (mapcar (lambda (dd) (list :data (xform-data dd (xf-move (v- cur base))))) (clip-datas clip))))
+  (let ((u (ucs)))
+    (lambda (cur) (mapcar (lambda (dd) (list :data (data-to-ucs (xform-data dd (xf-move (v- (ucs-point-to-world cur) base))) u)))
+                          (clip-datas clip)))))
 
 (defun after-paste (made)
   (out (format nil "~D object~:P pasted.~%" (length made)))
@@ -166,7 +176,7 @@
         (let* ((base (clip-base clip))
                (p (gpoint "Specify insertion point: " :drag (clip-drag clip base))))
           (when (pointp p)
-            (after-paste (paste-datas clip (xf-move (v- p base)))))))))
+            (after-paste (paste-datas clip (xf-move (v- (ucs-point-to-world p) base)))))))))
 
 (defcmd "PASTEORIG" () "Pastes the clipboard at the same coordinates it was copied from."
   (let ((clip (current-clipboard)))
@@ -181,10 +191,11 @@
           (when (pointp p)
             (let ((name (loop for n = (format nil "A$C~8,'0X" (random #xFFFFFFFF)) unless (find-block n) return n)))
               ;; the objects become a block (with their definitions), inserted at P
-              (let ((made (paste-datas clip (xf-move (pt 0 0)))))
-                (push (make-block-def :name name :base base :entities (mapcar (lambda (e) (rem-dxf 5 (copy-tree (ent-data e)))) made))
-                      (drawing-blocks *dwg*))
-                (dolist (e made) (delete-entity e)))
-              (add-entity (list (cons 0 "INSERT") (cons 2 name) (cons 10 p) (cons 41 1d0) (cons 42 1d0) (cons 43 1d0) (cons 50 0d0)))
+              (let ((wp (ucs-point-to-world p)) (*ucs-off* t))
+                (let ((made (paste-datas clip (xf-move (pt 0 0)))))
+                  (push (make-block-def :name name :base base :entities (mapcar (lambda (e) (rem-dxf 5 (copy-tree (ent-data e)))) made))
+                        (drawing-blocks *dwg*))
+                  (dolist (e made) (delete-entity e)))
+                (add-entity (list (cons 0 "INSERT") (cons 2 name) (cons 10 wp) (cons 41 1d0) (cons 42 1d0) (cons 43 1d0) (cons 50 0d0))))
               (out (format nil "Pasted as block ~A.~%" name))
               (when (gui-p) (gui-regen) (refresh-palette))))))))

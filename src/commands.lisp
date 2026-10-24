@@ -8,7 +8,9 @@
 
 (defmacro defcmd (name (&rest aliases) doc &body body)
   `(progn
-     (setf (gethash ,name *commands*) (lambda () (block command-body ,@body))
+     (setf (gethash ,name *commands*)
+           (lambda () (let ((*planar-only* (and (member ,name *planar-commands* :test #'string=) t)))
+                        (block command-body ,@body)))
            (gethash ,name *command-help*) ,doc)
      (dolist (a ',aliases) (setf (gethash a *aliases*) ,name))
      ,name))
