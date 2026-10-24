@@ -160,4 +160,15 @@
 (chk "UCS X 90 is the Front plane" (r3 (third (ucs))) '(0 -1 0))
 (al "(command \"ucs\" \"\")")
 
+;; copy/paste of dimensions between drawings: the picture moves with the dimension
+(al "(command \"new\")")
+(al "(command \"dimlinear\" '(0 0) '(4 0) '(2 -1))") (defvar dm (newest))
+(defvar dm-box (r3 (entity-bbox dm)))
+(al (format nil "(command \"copybase\" '(0 0) (handent ~S) \"\")" (ename-handle dm)))
+(al "(command \"new\")")
+(al "(command \"pasteclip\" '(100 50))")
+(chk "pasted dimension's picture moved with it"
+     (r3 (entity-bbox (newest))) (list (+ (first dm-box) 100) (+ (second dm-box) 50) (+ (third dm-box) 100) (+ (fourth dm-box) 50)))
+(chk "picture matches its points" (dimension-picture-misplaced-p (ent-data (newest))) nil)
+
 (format t "~%View tests: ~D passed, ~D failed.~%" *pass* *fail*)

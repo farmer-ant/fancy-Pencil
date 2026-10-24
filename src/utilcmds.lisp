@@ -535,6 +535,10 @@ a DXF next to it instead and leave the DWG untouched."
   (clrhash *hl*) (clear-geom-cache)
   (setf (drawing-skipped *dwg*) *import-skipped*)
   (out (format nil "Opened ~A (~D object~:P).~%" f n))
+  ;; dimensions whose picture was left at the old place (pasted with 0.3.37 or earlier)
+  (let ((k (ignore-errors (fix-misplaced-dimensions))))
+    (when (and k (plusp k))
+      (out (format nil "~D dimension~:P had ~:*~[~;its~:;their~] picture left at an old position and ~:*~[~;was~:;were~] redrawn in place (save to keep this).~%" k))))
   (when (gui-p) (zoom-extents) (gui-sync))
   (when *import-skipped*
     (tell-user (format nil "~A also contains ~A, which Fancy Pencil can't show or keep yet.~%~%~

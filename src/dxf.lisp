@@ -555,4 +555,4 @@
 
 ;; files always hold world coordinates, whatever view is showing
 (defun dxf-import (path &key (replace t)) (let ((*ucs-off* t)) (%dxf-import path :replace replace)))
-(defun dxf-export (path) (let ((*ucs-off* t)) (%dxf-export path)))
+(defun dxf-export (path) (let ((*ucs-off* t)) (ignore-errors (prune-unused-dimension-blocks)) (%dxf-export path)))
