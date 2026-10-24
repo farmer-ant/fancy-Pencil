@@ -338,21 +338,35 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
                                color width (if dash " -dash {6 3}" "") tags))))
              (screen-line (arc-points c r a1 a2 720) color tags :dash dash :width width)))))))
 
-(defun render-point-glyph (x y color tags)
-  (let* ((x (round x)) (y (round y))(mode (or (sysvar "PDMODE") 0)) (s 5) (base (mod mode 32)) (out nil))
-    (case base
-      (0 (push (format nil ".c create rectangle ~A ~A ~A ~A -outline ~A -fill ~A -tags {~A}"
-                       (fmtn (- x 1)) (fmtn (- y 1)) (fmtn (+ x 1)) (fmtn (+ y 1)) color color tags) out))
-      (1 nil)
-      (2 (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}" (- x s) y (+ x s) y color tags) out)
-         (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}" x (- y s) x (+ y s) color tags) out))
-      (t (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}" (- x s) (- y s) (+ x s) (+ y s) color tags) out)
-         (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}" (- x s) (+ y s) (+ x s) (- y s) color tags) out)))
+(defun point-glyph-half-size ()
+  "Half the size of a point's symbol, in pixels: PDSIZE 0 = 5% of the drawing area's height,
+negative = that percentage of it, positive = drawing units (as in AutoCAD)."
+  (let ((ps (d (or (sysvar "PDSIZE") 0))))
+    (max 2 (min 400 (cond ((zerop ps) (* 0.025 *ch*))
+                          ((minusp ps) (* (/ (- ps) 200) *ch*))
+                          (t (* ps 0.5 *vscale*)))))))
+
+(defun point-glyph-cmds (x y mode s color tags &optional (canvas ".c"))
+  "Canvas commands for a point symbol of PDMODE MODE, half-size S pixels, at X,Y."
+  (let ((base (mod mode 32)) (out nil))
+    (flet ((ln (x1 y1 x2 y2)
+             (push (format nil "~A create line ~,1F ~,1F ~,1F ~,1F -fill ~A -tags {~A}" canvas x1 y1 x2 y2 color tags) out)))
+      (case base
+        (0 (push (format nil "~A create rectangle ~,1F ~,1F ~,1F ~,1F -outline ~A -fill ~A -tags {~A}"
+                         canvas (- x 1) (- y 1) (+ x 1) (+ y 1) color color tags) out))
+        (1 nil)
+        (2 (ln (- x s) y (+ x s) y) (ln x (- y s) x (+ y s)))
+        (3 (ln (- x s) (- y s) (+ x s) (+ y s)) (ln (- x s) (+ y s) (+ x s) (- y s)))
+        (4 (ln x y x (- y s)))
+        (t nil)))
     (when (logtest mode 32)
-      (push (format nil ".c create oval ~A ~A ~A ~A -outline ~A -tags {~A}" (- x s) (- y s) (+ x s) (+ y s) color tags) out))
+      (push (format nil "~A create oval ~,1F ~,1F ~,1F ~,1F -outline ~A -tags {~A}" canvas (- x s) (- y s) (+ x s) (+ y s) color tags) out))
     (when (logtest mode 64)
-      (push (format nil ".c create rectangle ~A ~A ~A ~A -outline ~A -tags {~A}" (- x s) (- y s) (+ x s) (+ y s) color tags) out))
+      (push (format nil "~A create rectangle ~,1F ~,1F ~,1F ~,1F -outline ~A -tags {~A}" canvas (- x s) (- y s) (+ x s) (+ y s) color tags) out))
     out))
+
+(defun render-point-glyph (x y color tags)
+  (point-glyph-cmds (round x) (round y) (or (sysvar "PDMODE") 0) (point-glyph-half-size) color tags))
 
 (defun text-anchor (data)
   (let ((type (dxf 0 data)))
@@ -557,7 +571,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
   (let* ((data (ename-data e))
          (tags (format nil "ent h~A" (ename-handle e)))
          (b (ignore-errors (entity-bbox e))))
-    (if (and b (not *view*) (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)))
+    (if (and b (not *view*) (not (member (dxf 0 data) '("TEXT" "MTEXT" "ATTDEF" "ATTRIB" "POINT") :test #'equal)))
         (multiple-value-bind (vx0 vy0 vx1 vy1) (view-rect 50)
           (destructuring-bind (x0 y0 x1 y1) b
             (cond

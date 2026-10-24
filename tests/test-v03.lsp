@@ -381,5 +381,16 @@
 (check "make object's layer current" (getvar "CLAYER") "LC1")
 (command "close")
 
+;; ---------- point style ----------
+(command "new")
+(command "ddptype" 35 -5)
+(check "point style mode" (getvar "PDMODE") 35)
+(check "point style size" (getvar "PDSIZE") -5.0)
+(command "point" '(3 3))
+(vl-file-delete "/tmp/fp-pts.pdf")
+(command "-plot" "" "Letter" "Landscape" "Extents" "Fit" "No" "/tmp/fp-pts.pdf")
+(check "points plot" (if (findfile "/tmp/fp-pts.pdf") T nil) T)
+(command "close")
+
 (princ (strcat "\nv0.3 tests: " (itoa *pass*) " passed, " (itoa *fail*) " failed.\n"))
 (princ)

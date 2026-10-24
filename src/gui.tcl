@@ -199,7 +199,7 @@ mcmd .mb.format "Dimension Style..." DIMSTYLE
 mcmd .mb.format "Hatch Settings..." HPSET
 mcmd .mb.format "Units..." UNITS
 mcmd .mb.format "Text Size" TEXTSIZE
-mcmd .mb.format "Point Style" PDMODE
+mcmd .mb.format "Point Style..." DDPTYPE
 mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
 menu .mb.tools.alias -tearoff 0
@@ -2044,6 +2044,92 @@ proc cold_typed {} {
 proc cold_done {ok} {
     if {$ok} { set ::cold(result) "OK $::cold(pick)" }
     destroy .cold
+}
+
+# ---------------------------------------------------------------- Point Style (DDPTYPE)
+# Returns "CANCEL" or "OK mode size relative(1/0)".
+set ::pt_modes {0 1 2 3 4 32 33 34 35 36 64 65 66 67 68 96 97 98 99 100}
+proc pt_glyph {c x y mode s col tags} {
+    set base [expr {$mode % 32}]
+    switch -- $base {
+        0 { $c create rectangle [expr {$x-1}] [expr {$y-1}] [expr {$x+1}] [expr {$y+1}] -fill $col -outline $col -tags $tags }
+        2 { $c create line [expr {$x-$s}] $y [expr {$x+$s}] $y -fill $col -tags $tags
+            $c create line $x [expr {$y-$s}] $x [expr {$y+$s}] -fill $col -tags $tags }
+        3 { $c create line [expr {$x-$s}] [expr {$y-$s}] [expr {$x+$s}] [expr {$y+$s}] -fill $col -tags $tags
+            $c create line [expr {$x-$s}] [expr {$y+$s}] [expr {$x+$s}] [expr {$y-$s}] -fill $col -tags $tags }
+        4 { $c create line $x $y $x [expr {$y-$s}] -fill $col -tags $tags }
+    }
+    if {$mode & 32} { $c create oval [expr {$x-$s}] [expr {$y-$s}] [expr {$x+$s}] [expr {$y+$s}] -outline $col -tags $tags }
+    if {$mode & 64} { $c create rectangle [expr {$x-$s}] [expr {$y-$s}] [expr {$x+$s}] [expr {$y+$s}] -outline $col -tags $tags }
+}
+proc ptypedlg {mode size relative} {
+    set w .ptd
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Point Style"
+    wm transient $w .
+    wm resizable $w 0 0
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    set ::ptd(mode) $mode
+    set ::ptd(size) $size
+    set ::ptd(rel) $relative
+    set ::ptd(result) CANCEL
+    set cs 52
+    set c [canvas $f.c -width [expr {5*$cs + 4}] -height [expr {4*$cs + 4}] -background $::panel -highlightthickness 0]
+    pack $c
+    set i 0
+    foreach m $::pt_modes {
+        set col [expr {$i % 5}]; set row [expr {$i / 5}]
+        set x0 [expr {2 + $col*$cs}]; set y0 [expr {2 + $row*$cs}]
+        $c create rectangle [expr {$x0+3}] [expr {$y0+3}] [expr {$x0+$cs-3}] [expr {$y0+$cs-3}] \
+            -fill "#1b1f24" -outline "#3a4049" -width 1 -tags [list m$m cell cell$m]
+        pt_glyph $c [expr {$x0 + $cs/2}] [expr {$y0 + $cs/2}] $m 13 "#e6e9ee" [list m$m]
+        $c bind m$m <Button-1> [list ptd_pick $m]
+        $c bind m$m <Double-Button-1> [list ptd_pick $m 1]
+        incr i
+    }
+    ptd_pick $mode
+    set g [ttk::frame $f.g -padding {0 10 0 0}]
+    ttk::label $g.l -text "Point size:"
+    ttk::entry $g.e -width 10 -textvariable ::ptd(size)
+    ttk::label $g.u -textvariable ::ptd(unit) -style Dim.TLabel
+    grid $g.l -row 0 -column 0 -sticky w
+    grid $g.e -row 0 -column 1 -sticky w -padx 6
+    grid $g.u -row 0 -column 2 -sticky w
+    ttk::radiobutton $g.r1 -text "Set size relative to screen" -value 1 -variable ::ptd(rel) -command ptd_unit
+    ttk::radiobutton $g.r2 -text "Set size in absolute units" -value 0 -variable ::ptd(rel) -command ptd_unit
+    grid $g.r1 -row 1 -column 0 -columnspan 3 -sticky w -pady {6 0}
+    grid $g.r2 -row 2 -column 0 -columnspan 3 -sticky w
+    pack $g -fill x
+    ptd_unit
+    set b [ttk::frame $f.b]
+    ttk::button $b.ok -text OK -command {ptd_done 1}
+    ttk::button $b.no -text Cancel -command {ptd_done 0}
+    pack $b.no $b.ok -side right -padx 3
+    pack $b -fill x -pady {12 0}
+    bind $w <Escape> {ptd_done 0}
+    bind $w <Return> {ptd_done 1}
+    wm geometry $w +[expr {[winfo rootx .] + 240}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    tkwait window $w
+    return $::ptd(result)
+}
+proc ptd_unit {} { set ::ptd(unit) [expr {$::ptd(rel) ? "% of the screen height" : "drawing units"}] }
+proc ptd_pick {m {done 0}} {
+    set c .ptd.f.c
+    foreach id [$c find withtag cell] { $c itemconfigure $id -fill "#1b1f24" -outline "#3a4049" -width 1 }
+    $c itemconfigure cell$m -fill "#2b4a73" -outline "#7fb2e5" -width 2
+    set ::ptd(mode) $m
+    if {$done} { ptd_done 1 }
+}
+proc ptd_done {ok} {
+    if {$ok} {
+        set s [string trim $::ptd(size)]
+        if {$s eq "" || [catch {expr {double($s)}}]} { set s 5 }
+        set ::ptd(result) "OK $::ptd(mode) $s $::ptd(rel)"
+    }
+    destroy .ptd
 }
 
 # ---------------------------------------------------------------- right-click menus on the drawing
