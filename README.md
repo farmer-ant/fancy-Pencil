@@ -291,7 +291,9 @@ corners, Bottom underneath). Click "Views" to fold it up; View → Show View Pic
 Top, Bottom, Left, Right, Front, Back and the SW, SE, NE and NW Isometric views, as in AutoCAD
 (`-VIEW`, `PLAN` for Top). Objects can have a height: **THICKNESS** (or the Properties panel)
 extrudes lines, arcs, circles and polylines into walls, and **Elevation** lifts objects off the
-ground plane (`ELEV` sets both for new objects). In the isometric views text shows as its outline.
+ground plane (`ELEV` sets both for new objects). In the isometric views, and wherever text stands
+in a plane other than the working plane, it is drawn letter by letter in its own plane (with a
+line font made from DejaVu Sans; see support/DejaVu-LICENSE.txt).
 
 **Drawing and editing in every view (working planes).** Front, Back, Left, Right and Bottom each
 work like an AutoCAD UCS: X to the right, Y up, Z toward you. Every command works there just as
@@ -306,6 +308,25 @@ flat panel is stood up: in the Right view, ROTATE the panel 90 degrees about its
 stands facing the Front view. Commands that change an object's shape in its own plane (TRIM,
 EXTEND, OFFSET, FILLET, CHAMFER, BREAK, PEDIT, STRETCH ...) skip objects in other planes and say
 so; switch to a view that faces them.
+
+**Any plane as the working plane (UCS).** View → Working Plane (UCS), or type `UCS`:
+
+* **Object / Face** — pick a panel (polyline, circle, text ...): its plane becomes the working
+  plane, with the origin at its first corner and X along its first edge. This is the way to work
+  on a slanted panel.
+* **3point** — an origin, a point along X, and a point on the plane's +Y side.
+* **Origin** — click a new origin; the directions stay.
+* **X / Y / Z** — turn the working plane about one of its axes (90 degrees by default).
+* **View** — a plane facing the current view. **Previous** — the one before. **World** — back to Top.
+
+The view turns to look straight at the new plane ("UCS" on the view picker), and everything draws
+and edits in it exactly as in the Front view. Choosing a standard view or PLAN leaves it.
+
+**ALIGN in 3D.** ALIGN takes up to three pairs of points anywhere in 3D: one pair moves; two pairs
+also turn the objects so the first source edge lies along the first destination edge (staying in
+the working plane when all the points are in it, with optional scaling as before); three pairs
+also bring the plane of the three source points onto the plane of the three destination points
+- the way to fit a panel against another at any angle.
 
 In the isometric views you see everything in 3D and can draw on the ground plane; points stay at
 the height of the grip or base point you start from. Planes are saved in DXF (group 210, as

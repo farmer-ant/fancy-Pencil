@@ -49,7 +49,7 @@
                              ((ucs)
                               (format nil "~%You are drawing in this view's plane (X right, Y up, Z toward you): every command works~%~
                                            here. Objects in other planes show edge-on; move, copy, rotate or mirror them in 3D."))
-                             (t "  You can draw and edit on the ground plane here; text shows as its outline."))))))))
+                             (t "  You can draw and edit on the ground plane here."))))))))
 
 (defparameter *view-keywords*
   '(("Top" "Top") ("Bottom" "Bottom") ("Left" "Left") ("Right" "Right") ("Front" "Front") ("BAck" "Back")
@@ -325,3 +325,114 @@ level plane at BASE's height."
   (multiple-value-bind (u v) (view-project (pt3 p))
     (let ((du (- (* ux (fround (/ u ux))) u)) (dv (- (* uy (fround (/ v uy))) v)))
       (v+ (pt3 p) (v+ (v* (second *view*) du) (v* (third *view*) dv))))))
+
+;;; ---------- UCS: any plane as the working plane ----------
+;;; UCS sets up a working plane anywhere - on a slanted panel, through three points, on an object -
+;;; and turns the view to look straight at it, so everything draws and edits in that plane as in
+;;; the Front or Top view. UCS World (or PLAN, or a standard view) goes back to the world planes.
+
+(defvar *ucs-history* nil "Earlier working planes, for UCS Previous.")
+
+(defun current-frame ()
+  "(x y z origin) of the working plane in use, in world coordinates (world: the Top view's)."
+  (or (ucs) (list (pt 1 0 0) (pt 0 1 0) (pt 0 0 1) (pt 0 0 0))))
+
+(defun set-ucs-frame (x y z o &optional (name "UCS"))
+  "Make the plane through O with axes X, Y (Z toward you) the working plane, and look at it."
+  (push *view* *ucs-history*)
+  (when (> (length *ucs-history*) 10) (setf *ucs-history* (subseq *ucs-history* 0 10)))
+  (setf *view* (if (and (< (dist (pt3 x) (pt 1 0 0)) 1d-9) (< (dist (pt3 y) (pt 0 1 0)) 1d-9)
+                        (< (dist (pt3 o) (pt 0 0 0)) 1d-9))
+                   nil
+                   (list name (unit3 x) (unit3 y) (unit3 z) :ucs (pt3 o))))
+  (after-view-change)
+  (out (format nil "~:[World coordinates (Top view).~;Working plane set: origin ~A, Z axis ~A. Everything you draw or edit lies in this plane.~]~%"
+               *view*
+               (and *view* (format nil "~{~A~^,~}" (mapcar #'fmt-num (pt3 o))))
+               (and *view* (format nil "~{~A~^,~}" (mapcar #'fmt-num (unit3 z)))))))
+
+(defun after-view-change ()
+  (setf *view-history* nil)
+  (clear-geom-cache)
+  (when (gui-p) (zoom-extents) (refresh-grips) (gui-sync)))
+
+(defun frame-from-x-and-z (o x z)
+  "A right-handed frame at O with X along X (made square to Z) and Z along Z."
+  (let* ((z (unit3 z))
+         (x (v- x (v* z (vdot3 x z))))
+         (x (if (< (vdot3 x x) 1d-18) (any-perpendicular z) (unit3 x))))
+    (list x (unit3 (cross3 z x)) z o)))
+
+(defun object-frame (e)
+  "The working plane of object E: its own plane, origin at its first point, X along its first edge."
+  (let* ((w (let ((*ucs-off* t)) (ent-data e)))
+         (type (dxf 0 w)))
+    (cond
+      ((equal type "LINE")
+       (let* ((a (pt3 (dxf 10 w))) (b (pt3 (dxf 11 w)))
+              (zv (third (current-frame))))
+         (frame-from-x-and-z a (v- b a) (let ((d (unit3 (v- b a))))
+                                         (if (> (abs (vdot3 d zv)) 0.999d0) (any-perpendicular d) zv)))))
+      ((wcs-type-p type) (let ((f (current-frame))) (list (first f) (second f) (third f) (pt3 (dxf 10 w)))))
+      (t
+       (multiple-value-bind (ax ay az) (ocs-axes (entity-normal w))
+         (flet ((wp (p) (ocs->w (pt3 p) ax ay az)))
+           (cond
+             ((equal type "LWPOLYLINE")
+              (let* ((el (d (or (dxf 38 w) 0)))
+                     (vs (mapcar (lambda (v) (wp (pt (px (first v)) (py (first v)) el))) (lwpoly-vertices w))))
+                (frame-from-x-and-z (first vs) (if (second vs) (v- (second vs) (first vs)) ax) az)))
+             (t
+              (let* ((o (wp (or (dxf 10 w) (pt 0 0))))
+                     (a (if (member type '("TEXT" "MTEXT" "INSERT" "ATTDEF" "ATTRIB") :test #'equal) (d (or (dxf 50 w) 0)) 0d0)))
+                (frame-from-x-and-z o (v+ (v* ax (cos a)) (v* ay (sin a))) az))))))))))
+
+(defun rotate-about (v k a)
+  "Vector V turned by angle A about unit axis K (right-hand rule)."
+  (let ((c (cos a)) (s (sin a)))
+    (v+ (v+ (v* v c) (v* (cross3 k v) s)) (v* k (* (vdot3 k v) (- 1 c))))))
+
+(defcmd "UCS" ("WORKPLANE" "WP") "Sets the working plane: through three points, on an object's plane, at an origin, turned about an axis, facing the view, or back to World."
+  (let ((r (gpoint "Specify origin of UCS or [3point/OBject/Face/View/X/Y/Z/Previous/World] <World>: "
+                   :keywords '("3point" "OBject" "Face" "View" "X" "Y" "Z" "Previous" "World"))))
+    (cond
+      ((or (null r) (equal r "World"))
+       (push *view* *ucs-history*) (setf *view* nil) (after-view-change)
+       (out (format nil "World coordinates (Top view).~%")))
+      ((pointp r)
+       ;; a new origin: same directions
+       (destructuring-bind (x y z o) (current-frame)
+         (declare (ignore o))
+         (set-ucs-frame x y z (ucs-point-to-world r))))
+      ((equal r "3point")
+       (let* ((o (gpoint "Specify new origin point <0,0,0>: "))
+              (o (if (pointp o) o (pt 0 0 0)))
+              (px (gpoint "Specify point on positive portion of X-axis: " :base o))
+              (py (and (pointp px) (gpoint "Specify point on positive-Y portion of the UCS XY plane: " :base o))))
+         (when (pointp py)
+           (let* ((wo (ucs-point-to-world o)) (wx (v- (ucs-point-to-world px) wo)) (wy (v- (ucs-point-to-world py) wo))
+                  (z (cross3 wx wy)))
+             (if (< (vdot3 z z) 1d-18)
+                 (out (format nil "The three points are in a line: no plane.~%"))
+                 (destructuring-bind (x y z o) (frame-from-x-and-z wo wx z)
+                   (set-ucs-frame x y z o)))))))
+      ((member r '("OBject" "Face") :test #'equal)
+       (let ((e (sel-entity (get-user-input :entity :prompt "Select object (its plane becomes the working plane): "))))
+         (when e (destructuring-bind (x y z o) (object-frame e) (set-ucs-frame x y z o)))))
+      ((equal r "View")
+       (destructuring-bind (x y z o) (current-frame)
+         (declare (ignore x y z))
+         (if *view*
+             (set-ucs-frame (second *view*) (third *view*) (unit3 (cross3 (second *view*) (third *view*))) o)
+             (set-ucs-frame (pt 1 0 0) (pt 0 1 0) (pt 0 0 1) o))))
+      ((member r '("X" "Y" "Z") :test #'equal)
+       (let ((a (gangle (format nil "Specify rotation angle about ~A axis <90>: " r))))
+         (destructuring-bind (x y z o) (current-frame)
+           (let* ((a (or a (/ pi 2)))
+                  (k (cond ((equal r "X") x) ((equal r "Y") y) (t z))))
+             (set-ucs-frame (rotate-about x k a) (rotate-about y k a) (rotate-about z k a) o)))))
+      ((equal r "Previous")
+       (if (null *ucs-history*)
+           (out (format nil "No previous working plane.~%"))
+           (progn (setf *view* (pop *ucs-history*)) (after-view-change)
+                  (out (format nil "~A.~%" (if *view* (first *view*) "World coordinates (Top view)")))))))))

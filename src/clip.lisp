@@ -66,10 +66,6 @@
               (x (read i nil nil)))
          (and (consp x) (eq (first x) :fancy-pencil-clipboard) (clip-p (third x)) (third x)))))))
 
-(defun ucs-point-to-world (p)
-  "A point picked in the working plane, in world coordinates."
-  (let ((u (ucs))) (if u (destructuring-bind (x y z) u (ocs->w (pt3 p) x y z)) p)))
-
 (defun set-clipboard (ents base)
   ;; the clipboard holds world coordinates, so it pastes the same from any view
   (let* ((base (ucs-point-to-world base))

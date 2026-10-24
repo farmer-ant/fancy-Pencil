@@ -28,7 +28,7 @@
 
 ;; Right view: X right = world Y, Y up = world Z, Z toward you = world X
 (al "(command \"-view\" \"right\")")
-(chk "right view is a working plane" (r3 (ucs)) '((0 1 0) (0 0 1) (1 0 0)))
+(chk "right view is a working plane" (r3 (ucs)) '((0 1 0) (0 0 1) (1 0 0) (0 0 0)))
 (chk "a Top-view circle is edge-on here" (offplane-p (ent-data ci)) t)
 (chk "pick the circle edge-on" (eq (pick-at (pt 6.8 0)) ci) t)
 (chk "pick the raised rectangle" (eq (pick-at (pt 1 3)) rc) t)
@@ -52,7 +52,7 @@
 
 ;; Front view: stand the raised rectangle up by rotating it 90 degrees about its edge
 (al "(command \"-view\" \"front\")")
-(chk "front view frame" (r3 (ucs)) '((1 0 0) (0 0 1) (0 -1 0)))
+(chk "front view frame" (r3 (ucs)) '((1 0 0) (0 0 1) (0 -1 0) (0 0 0)))
 (let ((*planar-only* nil))
   (set-entity-data rc (xform-data (ent-data rc) (xf-rotate (pt 0 3) (/ pi 2)))))
 (chk "standing panel seen from the top is a line" (top-bbox rc) '(0 0 0 2))
@@ -114,5 +114,50 @@
 (let ((r (find "LWPOLYLINE" (live-entities) :key #'ent-type :test #'equal)))
   (chk "in Front view the reopened rectangle is flat again" (r3 (entity-bbox r)) '(0 0 4 2)))
 (al "(command \"plan\")")
+
+;; ALIGN in 3D: stand a flat panel up against the plane x = 5 with three point pairs
+(al "(command \"new\")")
+(al "(command \"rectang\" '(0 0) '(2 1))") (defvar pa (newest))
+(al (format nil "(command \"align\" (handent ~S) \"\" '(0 0 0) '(5 0 0) '(2 0 0) '(5 2 0) '(0 1 0) '(5 0 1))" (ename-handle pa)))
+(chk "3-pair align stands the panel in the plane x = 5" (top-bbox pa) '(5 0 5 2))
+(chk "its plane faces along X" (r3 (mapcar #'abs (entity-normal (world pa)))) '(1 0 0))
+(al "(command \"-view\" \"right\")")
+(chk "seen from the right it is 2 wide, 1 high" (r3 (entity-bbox pa)) '(0 0 2 1))
+(al "(command \"plan\")")
+;; 2-pair align in the plane still works the flat way, with scaling
+(al "(command \"line\" '(0 0) '(1 0) \"\")") (defvar al1 (newest))
+(al (format nil "(command \"align\" (handent ~S) \"\" '(0 0) '(10 10) '(1 0) '(10 12) \"\" \"Yes\")" (ename-handle al1)))
+(chk "2-pair align turns and scales in the plane" (r3 (list (pt3 (dxf 10 (world al1))) (pt3 (dxf 11 (world al1))))) '((10 10 0) (10 12 0)))
+
+;; text changes planes and draws with letters in its plane
+(al "(command \"text\" '(0 5) 0.5 0 \"HI\" \"\")") (defvar t3 (newest))
+(al "(command \"-view\" \"right\")")
+(al (format nil "(command \"rotate\" (handent ~S) \"\" '(5 0) 90)" (ename-handle t3)))
+(chk "rotated text now faces Front" (r3 (entity-normal (world t3))) '(0 -1 0))
+(al "(command \"plan\")")
+(al "(command \"text\" '(0 8) 0.5 0 \"OFF\" \"\")") (defvar t4 (newest))
+(al "(command \"-view\" \"right\")")
+(al (format nil "(command \"rotate\" (handent ~S) \"\" '(5 0) 90)" (ename-handle t4)))
+(chk "text turned about a distant axis stands at y = 5" (let ((b (top-bbox t4))) (list (second b) (fourth b))) '(5 5))
+(chk "text letters exist as strokes" (> (length (text-stroke-pieces (ent-data t3))) 10) t)
+(al "(command \"plan\")")
+
+;; UCS: a slanted working plane through three points (tilted 45 degrees about X)
+(al "(command \"ucs\" \"3point\" '(0 0 0) '(1 0 0) '(0 1 1))")
+(chk "slanted working plane" (r3 (ucs)) (list '(1 0 0) (list 0 (r3 (sqrt 0.5d0)) (r3 (sqrt 0.5d0))) (list 0 (r3 (- (sqrt 0.5d0))) (r3 (sqrt 0.5d0))) '(0 0 0)))
+(al "(command \"circle\" '(1 1) 0.5)") (defvar sc (newest))
+(chk "circle drawn on the slanted plane" (offplane-p (ent-data sc)) nil)
+(chk "its world plane is tilted" (r3 (entity-normal (world sc))) (list 0 (r3 (- (sqrt 0.5d0))) (r3 (sqrt 0.5d0))))
+(al "(command \"ucs\" \"world\")")
+(chk "UCS World" (ucs) nil)
+(al (format nil "(command \"ucs\" \"object\" (handent ~S))" (ename-handle sc)))
+(chk "UCS Object: the circle's plane" (r3 (third (ucs))) (list 0 (r3 (- (sqrt 0.5d0))) (r3 (sqrt 0.5d0))))
+(chk "UCS Object: origin at its centre" (r3 (fourth (ucs))) (list 1 (r3 (sqrt 0.5d0)) (r3 (sqrt 0.5d0))))
+(chk "circle centred at the new origin" (r3 (pt3 (dxf 10 (ent-data sc)))) '(0 0 0))
+(al "(command \"ucs\" \"previous\")")
+(chk "UCS Previous" (ucs) nil)
+(al "(command \"ucs\" \"x\" 90)")
+(chk "UCS X 90 is the Front plane" (r3 (third (ucs))) '(0 -1 0))
+(al "(command \"ucs\" \"\")")
 
 (format t "~%View tests: ~D passed, ~D failed.~%" *pass* *fail*)

@@ -391,14 +391,10 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
 
 (defun render-text (data color tags hl)
   (when (projected-view-p)
-    ;; text lies flat on its plane; at an angle it is shown by its outline and baseline
+    ;; seen at an angle, text is drawn with line strokes lying in its plane
     (return-from render-text
-      (let ((c (ignore-errors (text-box data))))
-        (when (and c (= (length c) 4))
-          (let* ((z (let ((p (dxf 10 data))) (if (consp p) (pz p) 0d0)))
-                 (c (mapcar (lambda (p) (pt (px p) (py p) z)) c)))
-            (append (screen-line (append c (list (first c))) (if hl "#8fc4ff" color) tags :dash t)
-                    (screen-line (list (first c) (second c)) (if hl "#8fc4ff" color) tags)))))))
+      (loop for pc in (ignore-errors (text-stroke-pieces data))
+            append (render-piece (cons :seg (rest pc)) (if hl "#8fc4ff" color) tags))))
   (let* ((h (text-effective-height data))
          (px-size (round (/ (* h *vscale*) 0.72d0)))
          (p (text-insertion data))
@@ -461,7 +457,10 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
       ;; an object in another plane: drawn by its 3D edges
       ((offplane-p data)
        (let ((w (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))))
-         (loop for pc in (data-pieces data)
+         (loop for pc in (if (member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
+                             ;; text in another plane: its letters, drawn in that plane
+                             (offplane-pieces data (ignore-errors (text-stroke-pieces (rem-dxf 210 data))))
+                             (data-pieces data))
                append (loop for q in (if xf (transform-piece pc xf) (list pc))
                             append (render-piece (if (eq (first q) :gseg) (cons :seg (rest q)) q)
                                                  color tags :dash hl :width w)))))

@@ -93,9 +93,10 @@ mirror or uniform scale in any direction. The object moves into the transformed 
 
 ;;; ---------- pieces of an object in another plane ----------
 
-(defun offplane-pieces (data)
+(defun offplane-pieces (data &optional flat-pieces)
   "DATA's outline as 3D pieces in the coordinates in use: straight edges as :seg (they snap),
-curves and text as :gseg, with the elevation and thickness of the object."
+curves and text as :gseg, with the elevation and thickness of the object. FLAT-PIECES, when
+given, are used instead of DATA's own pieces (in its plane's coordinates)."
   (multiple-value-bind (ax ay az) (ocs-axes (entity-normal data))
     (let* ((type (dxf 0 data))
            (flat (rem-dxf 210 data))
@@ -103,7 +104,7 @@ curves and text as :gseg, with the elevation and thickness of the object."
            (th (if (member type '("CIRCLE" "ARC" "LWPOLYLINE") :test #'equal) (d (or (dxf 39 data) 0)) 0d0))
            (out nil))
       (flet ((m (p dz) (ocs->w (pt (px p) (py p) (+ (pz (pt3 p)) elev dz)) ax ay az)))
-        (dolist (pc (data-pieces flat))
+        (dolist (pc (or flat-pieces (data-pieces flat)))
           (let* ((kind (case (first pc) ((:seg :pt) (first pc)) (t :gseg)))
                  (pts (case (first pc)
                         ((:seg :gseg) (list (pt3 (second pc)) (pt3 (third pc))))
@@ -141,9 +142,10 @@ curves and text as :gseg, with the elevation and thickness of the object."
 (defvar *ucs-cache* nil)
 
 (defun facing-view-p (v)
-  "A view looking straight along an axis (not the isometric ones)."
-  (let ((dir (fourth v)))
-    (= 2 (count-if (lambda (c) (< (abs c) 1d-9)) (list (px dir) (py dir) (pz dir))))))
+  "A view looking straight along an axis (not the isometric ones), or one set up by UCS."
+  (or (eq (fifth v) :ucs)
+      (let ((dir (fourth v)))
+        (= 2 (count-if (lambda (c) (< (abs c) 1d-9)) (list (px dir) (py dir) (pz dir)))))))
 
 (defun ucs ()
   "The working plane in use: (x y z) axes in world coordinates, or NIL for world (Top view and
@@ -154,7 +156,8 @@ the isometric views)."
         (t (setf *ucs-cache-view* *view*
                  *ucs-cache* (and (facing-view-p *view*)
                                   (list (pt3 (second *view*)) (pt3 (third *view*))
-                                        (unit3 (cross3 (second *view*) (third *view*)))))))))
+                                        (unit3 (cross3 (second *view*) (third *view*)))
+                                        (if (eq (fifth *view*) :ucs) (pt3 (sixth *view*)) (pt 0 0 0))))))))
 
 (defun projected-view-p ()
   "A 3D view drawn by projection (the isometric views); the facing views are drawn flat in
@@ -162,11 +165,17 @@ their working plane."
   (and *view* (not (ucs))))
 
 (defun ucs-xf (u &optional to-world)
-  "World -> working-plane coordinates for frame U (or back with TO-WORLD)."
-  (destructuring-bind (x y z) u
+  "World -> working-plane coordinates for frame U = (x y z origin) (or back with TO-WORLD)."
+  (destructuring-bind (x y z &optional (o (pt 0 0 0))) u
     (make-xf :fn (if to-world
-                     (lambda (p) (ocs->w (pt3 p) x y z))
-                     (lambda (p) (w->ocs (pt3 p) x y z))))))
+                     (lambda (p) (v+ (ocs->w (pt3 p) x y z) o))
+                     (lambda (p) (w->ocs (v- (pt3 p) o) x y z))))))
+
+(defun ucs-point-to-world (p)
+  "A point picked in the working plane, in world coordinates."
+  (let ((u (ucs))) (if u (funcall (xf-fn (ucs-xf u t)) p) p)))
+(defun ucs-vector-to-world (v)
+  (let ((u (ucs))) (if u (destructuring-bind (x y z &rest r) u (declare (ignore r)) (ocs->w (pt3 v) x y z)) (pt3 v))))
 
 (defun data-to-ucs (data u) (if u (normalize-down-normal (xform-any data (ucs-xf u))) data))
 (defun data-from-ucs (data u) (if u (xform-any data (ucs-xf u t)) data))

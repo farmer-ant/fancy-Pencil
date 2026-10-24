@@ -140,6 +140,19 @@ foreach {label kw} {Top Top Bottom Bottom Left Left Right Right Front Front Back
 }
 set ::viewname Top
 .mb.view add command -label "Plan View (Top)" -command {menucmd PLAN}
+menu .mb.view.ucs -tearoff 0
+.mb.view add cascade -label "Working Plane (UCS)" -menu .mb.view.ucs
+mcmd .mb.view.ucs "World" "UCS World"
+mcmd .mb.view.ucs "Object / Face (pick a panel)" "UCS OBject"
+mcmd .mb.view.ucs "3 Point" "UCS 3point"
+mcmd .mb.view.ucs "Origin" "UCS"
+mcmd .mb.view.ucs "Facing the View" "UCS View"
+.mb.view.ucs add separator
+mcmd .mb.view.ucs "Rotate About X" "UCS X"
+mcmd .mb.view.ucs "Rotate About Y" "UCS Y"
+mcmd .mb.view.ucs "Rotate About Z" "UCS Z"
+.mb.view.ucs add separator
+mcmd .mb.view.ucs "Previous" "UCS Previous"
 .mb.view add checkbutton -label "Show View Picker" -variable ::vc_shown -command {viewcube_show $::vc_shown}
 .mb.view add separator
 menu .mb.view.iso -tearoff 0
