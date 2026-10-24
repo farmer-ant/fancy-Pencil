@@ -20,7 +20,10 @@
                    (list (cons (polar c a1 r) :start) (cons (polar c a2 r) :end)
                          (cons (polar c (+ a1 (/ (arc-sweep a1 a2) 2)) r) :mid) (cons c :center))))
                 ((equal type "LWPOLYLINE")
-                 (let ((vs (lwpoly-vertices data)) (closed (lwpoly-closed-p data)))
+                 ;; grips sit at the polyline's elevation (where the 3D views draw it)
+                 (let* ((el (d (or (dxf 38 data) 0)))
+                        (vs (mapcar (lambda (v) (cons (pt (px (first v)) (py (first v)) el) (rest v))) (lwpoly-vertices data)))
+                        (closed (lwpoly-closed-p data)))
                    (append (loop for (p) in vs for i from 0 collect (cons p (list :vertex i)))
                            ;; segment midpoint grips (move the segment)
                            (loop for i from 0 below (if closed (length vs) (1- (length vs)))
@@ -86,9 +89,10 @@
               (new (case id (:start (arc-3p to m e)) (:end (arc-3p s m to)) (:mid (arc-3p s to e)))))
          (if new (append (rem-dxf 10 (rem-dxf 40 (rem-dxf 50 (rem-dxf 51 data)))) (rest new)) data)))
       ((and (equal type "LWPOLYLINE") (consp id) (eq (first id) :vertex))
-       (set-nth-code data 10 (second id) to))
+       ;; a polyline is flat: a vertex moves across, never up or down on its own
+       (set-nth-code data 10 (second id) (pt (px to) (py to))))
       ((and (equal type "LWPOLYLINE") (consp id) (eq (first id) :segment))
-       (let* ((i (second id)) (n (length (lwpoly-vertices data))))
+       (let* ((i (second id)) (n (length (lwpoly-vertices data))) (dv (pt (px dv) (py dv))))
          (set-nth-code (set-nth-code data 10 i (v+ (first (nth i (lwpoly-vertices data))) dv))
                        10 (mod (1+ i) n) (v+ (first (nth (mod (1+ i) n) (lwpoly-vertices data))) dv))))
       ((equal type "ELLIPSE")
@@ -137,7 +141,7 @@
   "The grip point within pick distance of P, if any."
   (let ((tol (gui-pixels->world (+ (grip-pixel-size) 2))) (best nil) (bd nil))
     (dolist (g *grip-points* best)
-      (let ((dd (dist2d (first g) p)))
+      (let ((dd (view-dist (first g) p)))
         (when (and (<= dd tol) (or (null bd) (< dd bd))) (setf best (first g) bd dd))))))
 
 (defun grip-hover-cmds ()

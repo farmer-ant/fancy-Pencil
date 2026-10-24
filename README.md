@@ -291,9 +291,15 @@ corners, Bottom underneath). Click "Views" to fold it up; View → Show View Pic
 Top, Bottom, Left, Right, Front, Back and the SW, SE, NE and NW Isometric views, as in AutoCAD
 (`-VIEW`, `PLAN` for Top). Objects can have a height: **THICKNESS** (or the Properties panel)
 extrudes lines, arcs, circles and polylines into walls, and **Elevation** lifts objects off the
-ground plane (`ELEV` sets both for new objects). In the isometric views you can draw and edit —
-points land on the ground plane — and text shows as its outline. Front, Back, Left and Right see
-the ground plane edge-on and are for looking. The axes icon (bottom left) shows X, Y and Z in the
+ground plane (`ELEV` sets both for new objects). Text shows as its outline in these views.
+
+**Selecting and editing in every view.** Click an object, drag a window, snap to it and use its
+grips in any view — objects are found where they are drawn, at their height. In Front, Back,
+Left and Right, dragging a grip or moving objects up and down changes their height (Z), and left
+and right moves them across; in the isometric views points stay at the height of the grip or
+base point you start from (on the ground plane when there is none). Ortho and grid snap follow
+the screen's horizontal and vertical. A polyline stays flat: moving it up or down changes its
+elevation. The axes icon (bottom left) shows X, Y and Z in the
 current view; each drawing tab keeps its own view. Thickness and elevation are saved in DXF.
 
 ### Isometric drafting (View → Isometric Drafting, ISODRAFT)
