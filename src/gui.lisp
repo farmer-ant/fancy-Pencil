@@ -601,17 +601,29 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
               do (seg (pt (* k g c) y0) (pt (* k g c) y1) (if (zerop (mod k 5)) (grid-color :major) (grid-color :minor)))))
       out)))
 
+(defun grid-area ()
+  "Where the grid is drawn: the view, or only inside the drawing limits (GRIDDISPLAY 0)."
+  (multiple-value-bind (x0 y0 x1 y1) (view-rect 0)
+    (if (eql (sysvar "GRIDDISPLAY") 0)
+        (let ((lo (sysvar "LIMMIN")) (hi (sysvar "LIMMAX")))
+          (values (max x0 (px lo)) (max y0 (py lo)) (min x1 (px hi)) (min y1 (py hi))))
+        (values x0 y0 x1 y1))))
+
 (defun grid-cmds ()
   (when (and (eql (sysvar "GRIDMODE") 1) (not *view*))
     (when (iso-mode-p) (return-from grid-cmds (iso-grid-cmds)))
-    (multiple-value-bind (x0 y0 x1 y1) (view-rect 0)
+    (multiple-value-bind (x0 y0 x1 y1) (grid-area)
       (let* ((g (max 1d-9 (d (first (sysvar "GRIDUNIT"))))) (major 5) (out nil))
         (loop while (< (* g *vscale*) 8) do (setf g (* g 5)))
         (loop while (> (* g *vscale*) 200) do (setf g (/ g 5)))
-        (flet ((vline (x col) (multiple-value-bind (sx) (w->s (pt x 0))
-                                (push (format nil ".c create line ~A 0 ~A ~D -fill ~A -tags grid" (fmtn sx) (fmtn sx) *ch* col) out)))
-               (hline (y col) (multiple-value-bind (sx sy) (w->s (pt 0 y)) (declare (ignore sx))
-                                (push (format nil ".c create line 0 ~A ~D ~A -fill ~A -tags grid" (fmtn sy) *cw* (fmtn sy) col) out))))
+        (flet ((vline (x col) (when (<= (- x0 1d-9) x (+ x1 1d-9)) (multiple-value-bind (sx sy0) (w->s (pt x y0))
+                                (multiple-value-bind (sx1 sy1) (w->s (pt x y1)) (declare (ignore sx1))
+                                  (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags grid"
+                                                (fmtn sx) (fmtn (max -2 sy1)) (fmtn sx) (fmtn (min (+ *ch* 2) sy0)) col) out)))))
+               (hline (y col) (when (<= (- y0 1d-9) y (+ y1 1d-9)) (multiple-value-bind (sx0 sy) (w->s (pt x0 y))
+                                (multiple-value-bind (sx1) (w->s (pt x1 y))
+                                  (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags grid"
+                                                (fmtn (max -2 sx0)) (fmtn sy) (fmtn (min (+ *cw* 2) sx1)) (fmtn sy) col) out))))))
           (loop for i from (floor x0 g) to (ceiling x1 g)
                 do (vline (* i g) (cond ((zerop i) (grid-color :x-axis)) ((zerop (mod i major)) (grid-color :major)) (t (grid-color :minor)))))
           (loop for i from (floor y0 g) to (ceiling y1 g)
@@ -874,6 +886,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
       ((string= ty "H") (destructuring-bind (x y) (event-ints ev) (handle-rollover x y)) t)
       ((string= ty "TCLERR") (out (format nil "; window error: ~A~%" (event-rest ev))) t)
       ((string= ty "PALETTE") (setf *palette-shown* (string= (event-rest ev) "1")) (refresh-palette) t)
+      ((string= ty "PALTYPE") (set-palette-type (event-rest ev)) t)
+      ((string= ty "QPCLOSE") (setf *quick-shown* nil) t)
       ((string= ty "CURPROP") (apply-current-prop (event-rest ev)) t)
       (t nil))))
 

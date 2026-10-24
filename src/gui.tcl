@@ -198,9 +198,11 @@ mcmd .mb.format "Text Style..." STYLE
 mcmd .mb.format "Dimension Style..." DIMSTYLE
 mcmd .mb.format "Hatch Settings..." HPSET
 mcmd .mb.format "Units..." UNITS
+mcmd .mb.format "Drawing Limits..." LIMITS
 mcmd .mb.format "Text Size" TEXTSIZE
 mcmd .mb.format "Point Style..." DDPTYPE
 mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
+mcmd .mb.tools "Quick Properties" QUICKPROPERTIES
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
 menu .mb.tools.alias -tearoff 0
 .mb.tools add cascade -label "Command Aliases" -menu .mb.tools.alias
@@ -317,38 +319,91 @@ proc palette_toggle {} {
     if {$::palshown} { pack forget .pal; set ::palshown 0 } else { pack .pal -in .main -side right -fill y -before .c; set ::palshown 1 }
     emit PALETTE $::palshown
 }
-proc palette_set {what rows} {
-    .pal.what configure -text $what
-    foreach w [winfo children .pal.rows] { destroy $w }
+# rows: {key label value kind choices}; edits are sent as PROP key value
+proc fillrows {fr rows} {
+    foreach w [winfo children $fr] { destroy $w }
     set i 0
     foreach r $rows {
         lassign $r key label value kind choices
         if {$kind eq "head"} {
-            label .pal.rows.h$i -text $label -background $::panel -foreground $::dim -anchor w -font {Helvetica 8 bold}
-            grid .pal.rows.h$i -row $i -column 0 -columnspan 2 -sticky ew -pady {6 1}
+            label $fr.h$i -text $label -background $::panel -foreground $::dim -anchor w -font {Helvetica 8 bold}
+            grid $fr.h$i -row $i -column 0 -columnspan 2 -sticky ew -pady {6 1}
             incr i; continue
         }
-        label .pal.rows.l$i -text $label -background $::panel -foreground $::fg -anchor w -font {Helvetica 9}
+        label $fr.l$i -text $label -background $::panel -foreground $::fg -anchor w -font {Helvetica 9}
         switch -- $kind {
-            ro { label .pal.rows.v$i -text $value -background $::panel -foreground $::dim -anchor w -font {Helvetica 9} }
+            ro { label $fr.v$i -text $value -background $::panel -foreground $::dim -anchor w -font {Helvetica 9} }
             combo {
-                ttk::combobox .pal.rows.v$i -values $choices -width 16 -state readonly -takefocus 0
-                .pal.rows.v$i set $value
-                bind .pal.rows.v$i <<ComboboxSelected>> [list palemit $key .pal.rows.v$i]
+                ttk::combobox $fr.v$i -values $choices -width 16 -state readonly -takefocus 0
+                $fr.v$i set $value
+                bind $fr.v$i <<ComboboxSelected>> [list palemit $key $fr.v$i]
             }
             default {
-                entry .pal.rows.v$i -background $::panel2 -foreground $::fg -insertbackground $::fg -relief flat -width 16 -font {Helvetica 9}
-                .pal.rows.v$i insert 0 $value
-                bind .pal.rows.v$i <Return> [list palemit $key .pal.rows.v$i]
-                bind .pal.rows.v$i <KP_Enter> [list palemit $key .pal.rows.v$i]
+                entry $fr.v$i -background $::panel2 -foreground $::fg -insertbackground $::fg -relief flat -width 16 -font {Helvetica 9}
+                $fr.v$i insert 0 $value
+                bind $fr.v$i <Return> [list palemit $key $fr.v$i]
+                bind $fr.v$i <KP_Enter> [list palemit $key $fr.v$i]
             }
         }
-        grid .pal.rows.l$i -row $i -column 0 -sticky ew -padx {4 6} -pady 1
-        grid .pal.rows.v$i -row $i -column 1 -sticky ew -pady 1
+        grid $fr.l$i -row $i -column 0 -sticky ew -padx {4 6} -pady 1
+        grid $fr.v$i -row $i -column 1 -sticky ew -pady 1
         incr i
     }
-    grid columnconfigure .pal.rows 1 -weight 1
+    grid columnconfigure $fr 1 -weight 1
 }
+# the object-type list at the top ("All (15)", "Line (10)" ...): pick one to see and edit only those
+proc settypes {cb types current} {
+    set labels {}; set cur ""
+    foreach t $types { lappend labels [lindex $t 1]; if {[lindex $t 0] eq $current} { set cur [lindex $t 1] } }
+    $cb configure -values $labels
+    $cb set $cur
+    set ::typemap($cb) $types
+}
+proc typepicked {cb} {
+    foreach t $::typemap($cb) { if {[lindex $t 1] eq [$cb get]} { emit PALTYPE [lindex $t 0] } }
+    focus .cmd.e
+}
+proc palette_set {what rows {types {}} {current ALL}} {
+    if {[llength $types] > 0} {
+        pack forget .pal.what
+        pack .pal.type -side top -fill x -padx 6 -pady 3 -after .pal.title
+        settypes .pal.type $types $current
+    } else {
+        pack forget .pal.type
+        pack .pal.what -side top -fill x -after .pal.title
+        .pal.what configure -text $what
+    }
+    fillrows .pal.rows $rows
+}
+ttk::combobox .pal.type -state readonly -takefocus 0
+bind .pal.type <<ComboboxSelected>> {typepicked .pal.type}
+
+# ---- Quick Properties: a small panel by the cursor with the main properties of the selection ----
+proc qpanel_set {rows types current} {
+    set w .qp
+    if {![winfo exists $w]} {
+        toplevel $w -background $::panel
+        wm title $w "Quick Properties"
+        wm transient $w .
+        wm resizable $w 0 0
+        ttk::combobox $w.type -state readonly -takefocus 0 -width 26
+        bind $w.type <<ComboboxSelected>> {typepicked .qp.type}
+        frame $w.rows -background $::panel
+        ttk::button $w.close -text "Close" -command qpanel_close
+        pack $w.type -side top -fill x -padx 6 -pady {6 3}
+        pack $w.rows -side top -fill both -expand 1 -padx 4
+        pack $w.close -side bottom -anchor e -padx 6 -pady 6
+        bind $w <Escape> qpanel_close
+        wm protocol $w WM_DELETE_WINDOW qpanel_close
+        lassign [winfo pointerxy .] px py
+        wm geometry $w +[expr {$px + 24}]+[expr {$py + 16}]
+    }
+    settypes $w.type $types $current
+    fillrows $w.rows $rows
+    raise $w
+}
+proc qpanel_close {} { catch {destroy .qp}; emit QPCLOSE; focus .cmd.e }
+proc qpanel_hide {} { catch {destroy .qp} }
 proc palemit {key w} { emit PROP $key [$w get]; focus .cmd.e }
 bind all <Control-Key-1> {palette_toggle; break}
 
@@ -2130,6 +2185,72 @@ proc ptd_done {ok} {
         set ::ptd(result) "OK $::ptd(mode) $s $::ptd(rel)"
     }
     destroy .ptd
+}
+
+# ---------------------------------------------------------------- Drawing Limits (LIMITS)
+# Returns "CANCEL", "OK x0 y0 x1 y1 gridinside check" or "SHEET x0 y0 x1 y1 paper scale landscape gridinside check"
+# (fields separated by \x1f); SHEET asks the program for the area a sheet covers at a scale.
+proc limitsdlg {x0 y0 x1 y1 papers scales gridin check paper scale land} {
+    set w .lim
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Drawing Limits"
+    wm transient $w .
+    wm resizable $w 0 0
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    array unset ::lim
+    set ::lim(result) CANCEL
+    set ::lim(gridin) $gridin; set ::lim(check) $check; set ::lim(land) $land
+    ttk::label $f.h -style Dim.TLabel -wraplength 380 -justify left \
+        -text "The drawing's size: the rectangle ZOOM All shows, Plot > Limits prints, and (optionally) the grid fills."
+    pack $f.h -anchor w -pady {0 8}
+    ttk::labelframe $f.c -text " Corners " -padding 8
+    foreach {k label v} [list x0 "Lower left  X" $x0 y0 "Y" $y0 x1 "Upper right  X" $x1 y1 "Y" $y1] {
+        ttk::label $f.c.l$k -text $label
+        ttk::entry $f.c.e$k -width 14
+        $f.c.e$k insert 0 $v
+    }
+    grid $f.c.lx0 $f.c.ex0 $f.c.ly0 $f.c.ey0 -padx 3 -pady 2 -sticky w
+    grid $f.c.lx1 $f.c.ex1 $f.c.ly1 $f.c.ey1 -padx 3 -pady 2 -sticky w
+    pack $f.c -fill x
+    ttk::labelframe $f.s -text " From a sheet size and scale " -padding 8
+    ttk::label $f.s.pl -text "Sheet:"
+    ttk::combobox $f.s.p -state readonly -width 26 -values $papers
+    $f.s.p set $paper
+    ttk::label $f.s.sl -text "Scale:"
+    ttk::combobox $f.s.s -state readonly -width 26 -values $scales
+    $f.s.s set $scale
+    ttk::checkbutton $f.s.land -text "Landscape" -variable ::lim(land)
+    ttk::button $f.s.go -text "Use sheet" -command {lim_done SHEET}
+    grid $f.s.pl $f.s.p -sticky w -padx 3 -pady 2
+    grid $f.s.sl $f.s.s -sticky w -padx 3 -pady 2
+    grid $f.s.land $f.s.go -sticky w -padx 3 -pady {6 0}
+    pack $f.s -fill x -pady {10 0}
+    ttk::checkbutton $f.g -text "Show the grid only inside the limits" -variable ::lim(gridin)
+    ttk::checkbutton $f.k -text "Don't accept points outside the limits (LIMCHECK)" -variable ::lim(check)
+    pack $f.g $f.k -anchor w -pady {8 0}
+    set b [ttk::frame $f.b]
+    ttk::button $b.ok -text OK -command {lim_done OK}
+    ttk::button $b.no -text Cancel -command {lim_done CANCEL}
+    pack $b.no $b.ok -side right -padx 3
+    pack $b -fill x -pady {12 0}
+    bind $w <Escape> {lim_done CANCEL}
+    bind $w <Return> {lim_done OK}
+    wm geometry $w +[expr {[winfo rootx .] + 220}]+[expr {[winfo rooty .] + 120}]
+    safegrab $w
+    tkwait window $w
+    return $::lim(result)
+}
+proc lim_done {act} {
+    set f .lim.f
+    set c [list [$f.c.ex0 get] [$f.c.ey0 get] [$f.c.ex1 get] [$f.c.ey1 get]]
+    switch -- $act {
+        OK { set ::lim(result) "OK [join [concat $c [list $::lim(gridin) $::lim(check)]] \x1f]" }
+        SHEET { set ::lim(result) "SHEET [join [concat $c [list [$f.s.p get] [$f.s.s get] $::lim(land) $::lim(gridin) $::lim(check)]] \x1f]" }
+        default { set ::lim(result) CANCEL }
+    }
+    destroy .lim
 }
 
 # ---------------------------------------------------------------- right-click menus on the drawing

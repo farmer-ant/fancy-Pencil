@@ -207,6 +207,21 @@ base point (or type X and Y), **Select objects**, and choose whether the objects
 converted to the block, or deleted. Objects selected before you start are used automatically.
 `-BLOCK` does the same at the command line. Insert copies with INSERT.
 
+### Properties and Quick Properties
+
+**Properties** (Ctrl+1, Tools → Properties) is the panel docked at the right: every property of the
+selected objects. **Quick Properties** (right-click a selection → Quick Properties, or `QP`) is a
+small panel that opens next to the cursor with just the main ones (color, layer, linetype, and the
+key sizes: length, radius, text, scale...). Both have a list at the top — "All (15)", "Line (10)",
+"Circle (2)"... — to look at and change only one kind of object in a mixed selection.
+
+### Drawing Limits (LIMITS, Format → Drawing Limits...)
+
+The drawing's size: the rectangle that ZOOM All shows and Plot → Limits prints. Type the corners,
+or pick a sheet size and scale (e.g. ARCH D at 1/4" = 1'-0" gives 144'-0" × 96'-0") and click Use
+sheet. Options: show the grid only inside the limits, and refuse points picked outside them
+(LIMCHECK). The limits are saved in the drawing.
+
 ### Point Style (DDPTYPE, Format → Point Style...)
 
 The Point Style dialog shows the 20 point symbols (dot, none, plus, X, tick, and each with a

@@ -494,7 +494,7 @@
   '(("LUNITS" :int) ("LUPREC" :int) ("AUNITS" :int) ("AUPREC" :int) ("INSUNITS" :int)
     ("MEASUREMENT" :int) ("LTSCALE" :real) ("CELTSCALE" :real) ("TEXTSIZE" :real)
     ("PDMODE" :int) ("PDSIZE" :real) ("FILLETRAD" :real) ("ANGBASE" :angle) ("ANGDIR" :int)
-    ("PLINEWID" :real))
+    ("PLINEWID" :real) ("LIMCHECK" :int) ("LIMMIN" :point) ("LIMMAX" :point))
   "Drawing settings read from and written to the DXF HEADER section.")
 
 (defun import-header-vars (hdr)
@@ -509,7 +509,8 @@
                   (let ((val (ecase (second spec)
                                (:int (if (realp v) (round v) (parse-integer (string-trim " " v))))
                                (:real (d (if (realp v) v (parse-number-text v))))
-                               (:angle (* (d (if (realp v) v (parse-number-text v))) (/ pi 180))))))
+                               (:angle (* (d (if (realp v) v (parse-number-text v))) (/ pi 180)))
+                               (:point (let ((y (cdr (second rest)))) (list (d v) (d y)))))))
                     (when (and (eq (second spec) :real) (string-equal name "LTSCALE") (<= val 0)) (setf val 1d0))
                     (setf (sysvar (string-upcase name)) val)))))))
 
@@ -517,7 +518,7 @@
   "(name code value) for writing the header."
   (loop for (name kind) in *header-vars*
         for v = (sysvar name)
-        when (realp v)
+        when (and (realp v) (not (eq kind :point)))
           collect (list (concatenate 'string "$" name)
                         (if (eq kind :int) 70 (if (string-equal name "LWDISPLAY") 290 40))
                         (case kind (:int (round v)) (:angle (* (d v) (/ 180 pi))) (t (d v))))))

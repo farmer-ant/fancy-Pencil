@@ -917,7 +917,7 @@ a DXF next to it instead and leave the DWG untouched."
          (setf (sysvar "CLAYER") (layer-name l))))
       ((member n '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "CMDECHO" "LUPREC" "AUPREC" "LUNITS" "AUNITS"
                    "PICKBOX" "APERTURE" "PDMODE" "HIGHLIGHT" "BLIPMODE" "PICKFIRST" "MIRRTEXT" "FILEDIA"
-                   "EXPERT" "ANGDIR" "SNAPSTYL" "SNAPISOPAIR" "ROLLOVERTIPS" "AUTOSNAPSIZE" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
+                   "EXPERT" "ANGDIR" "LIMCHECK" "GRIDDISPLAY" "SNAPSTYL" "SNAPISOPAIR" "ROLLOVERTIPS" "AUTOSNAPSIZE" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
                    "GRIPSIZE" "DIMDEC" "DIMTAD" "DIMCLRD" "DIMCLRE" "DIMCLRT" "DIMTIH" "DIMADEC" "PLINEGEN")
                :test #'string=)
        (unless (integerp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
