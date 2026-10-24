@@ -209,7 +209,7 @@ mcmd .mb.tools.alias "Open Alias File (fancypencil.pgp)" ALIASFILE
 mcmd .mb.tools.alias "Open Alias Folder" ALIASFOLDER
 mcmd .mb.tools.alias "Reload Aliases" REINIT
 mcmd .mb.tools "Object Snap Settings..." OSNAP
-mcmd .mb.tools "Cursor & Selection..." OPTIONS
+mcmd .mb.tools "Cursor, Selection & Background..." OPTIONS
 mcmd .mb.tools "Spelling..." SPELL
 mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
@@ -1774,7 +1774,7 @@ proc bd_done {act} {
 
 # ---------------------------------------------------------------- Cursor & Selection settings (OPTIONS)
 # colors: list of {name #rrggbb}. Returns "CANCEL" or "OK size color pickbox aperture snapsize gripsize rollover".
-proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors} {
+proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {bg "#212830"} {bgs {}}} {
     set w .cud
     catch {destroy $w}
     toplevel $w -background $::panel
@@ -1786,6 +1786,7 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors} {
     set ::cud(size) $size; set ::cud(pick) $pickbox; set ::cud(ap) $aperture
     set ::cud(snap) $snapsize; set ::cud(grip) $gripsize; set ::cud(roll) $rollover
     set ::cud(color) $color; set ::cud(colors) $colors
+    set ::cud(bg) $bg; set ::cud(bgs) $bgs
     ttk::labelframe $f.ch -text " Crosshairs " -padding 8
     ttk::label $f.ch.sl -text "Size (% of the screen):"
     ttk::scale $f.ch.s -from 1 -to 100 -orient horizontal -length 200 -variable ::cud(size) \
@@ -1811,21 +1812,33 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors} {
         grid $f.sz.e$key -row $r -column 1 -sticky w -pady 2
         incr r
     }
-    canvas $f.pv -width 150 -height 150 -background "#1f2329" -highlightthickness 1 -highlightbackground "#3a4049"
+    canvas $f.pv -width 150 -height 150 -background $bg -highlightthickness 1 -highlightbackground "#3a4049"
+    ttk::labelframe $f.bgf -text " Drawing background " -padding 8
+    set bnames {}; set bcur ""
+    foreach c $bgs { lappend bnames [lindex $c 0]; if {[string equal -nocase [lindex $c 1] $bg]} { set bcur [lindex $c 0] } }
+    lappend bnames "Custom..."
+    ttk::combobox $f.bgf.c -state readonly -width 20 -values $bnames
+    $f.bgf.c set [expr {$bcur ne "" ? $bcur : "Custom..."}]
+    canvas $f.bgf.sw -width 40 -height 20 -highlightthickness 1 -highlightbackground "#5a626e" -background $bg
+    pack $f.bgf.c $f.bgf.sw -side left -padx 3
+    bind $f.bgf.c <<ComboboxSelected>> cud_bgpick
     ttk::checkbutton $f.roll -text "Show object sizes when the cursor rests on an object (rollover tips)" -variable ::cud(roll)
     grid $f.ch -row 0 -column 0 -sticky nsew -padx {0 8}
     grid $f.pv -row 0 -column 1 -rowspan 2 -sticky n
     grid $f.sz -row 1 -column 0 -sticky nsew -pady {8 0} -padx {0 8}
-    grid $f.roll -row 2 -column 0 -columnspan 2 -sticky w -pady {10 0}
+    grid $f.bgf -row 2 -column 0 -columnspan 2 -sticky ew -pady {8 0}
+    grid $f.roll -row 3 -column 0 -columnspan 2 -sticky w -pady {10 0}
     set b [ttk::frame $f.b]
     ttk::button $b.def -text "Defaults" -command {
         set ::cud(size) 100; set ::cud(pick) 5; set ::cud(ap) 10; set ::cud(snap) 6; set ::cud(grip) 5; set ::cud(roll) 1
+        set ::cud(bg) "#212830"; .cud.f.bgf.c set [lindex [lindex $::cud(bgs) 0] 0]
+        .cud.f.bgf.sw configure -background $::cud(bg); .cud.f.pv configure -background $::cud(bg)
         .cud.f.ch.c set [lindex [lindex $::cud(colors) 0] 0]; cud_preview }
     ttk::button $b.ok -text OK -command {cud_done 1}
     ttk::button $b.no -text Cancel -command {cud_done 0}
     pack $b.def -side left
     pack $b.no $b.ok -side right -padx 3
-    grid $b -row 3 -column 0 -columnspan 2 -sticky ew -pady {12 0}
+    grid $b -row 4 -column 0 -columnspan 2 -sticky ew -pady {12 0}
     foreach key {size pick ap snap grip} { trace add variable ::cud($key) write {apply {args cud_preview}} }
     cud_preview
     bind $w <Escape> {cud_done 0}
@@ -1835,6 +1848,19 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors} {
     tkwait window $w
     foreach key {size pick ap snap grip} { catch {trace remove variable ::cud($key) write {apply {args cud_preview}}} }
     return $::cud(result)
+}
+proc cud_bgpick {} {
+    set n [.cud.f.bgf.c get]
+    if {$n eq "Custom..."} {
+        set c [tk_chooseColor -parent .cud -initialcolor $::cud(bg) -title "Drawing background"]
+        if {$c eq ""} return
+        set ::cud(bg) $c
+    } else {
+        foreach c $::cud(bgs) { if {[lindex $c 0] eq $n} { set ::cud(bg) [lindex $c 1] } }
+    }
+    .cud.f.bgf.sw configure -background $::cud(bg)
+    .cud.f.pv configure -background $::cud(bg)
+    cud_preview
 }
 proc cud_color {} {
     set n [.cud.f.ch.c get]
@@ -1850,6 +1876,12 @@ proc cud_preview {} {
     if {![winfo exists $c]} return
     $c delete all
     set col [cud_color]
+    # as on the drawing: a light crosshair on a light background is shown dark
+    lassign [winfo rgb . $::cud(bg)] br bgg bb
+    lassign [winfo rgb . $col] cr cg cb
+    set blum [expr {(0.299*$br + 0.587*$bgg + 0.114*$bb) / 257.0}]
+    set clum [expr {(0.299*$cr + 0.587*$cg + 0.114*$cb) / 257.0}]
+    if {$blum > 140 && $clum > 170} { set col "#30363d" } elseif {$blum <= 140 && $clum < 60} { set col "#c9ced6" }
     set s [cud_int size 1 100]; set pb [cud_int pick 0 50]; set sn [cud_int snap 1 20]; set gp [cud_int grip 1 20]
     # the preview box stands for the screen: 100% reaches its edges
     set len [expr {$s >= 100 ? 100 : max($pb + 3, round($s / 100.0 * 75))}]
@@ -1867,7 +1899,7 @@ proc cud_preview {} {
 proc cud_done {ok} {
     if {$ok} {
         set ::cud(result) [join [list OK [cud_int size 1 100] [cud_color] [cud_int pick 0 50] [cud_int ap 1 50] \
-                                     [cud_int snap 1 20] [cud_int grip 1 20] [expr {$::cud(roll) ? 1 : 0}]] " "]
+                                     [cud_int snap 1 20] [cud_int grip 1 20] [expr {$::cud(roll) ? 1 : 0}] $::cud(bg)] " "]
     }
     destroy .cud
 }
