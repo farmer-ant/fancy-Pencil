@@ -798,10 +798,9 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
 
 (defun gui-sync ()
   "Refresh layer combo, toggles and title."
-  (let* ((names (mapcar #'layer-name (drawing-layers *dwg*)))
-         (cur (sysvar "CLAYER"))
-         (l (find-layer cur)))
-    (tk "setlayers {~{~A~^ ~}} ~A ~A" (mapcar #'tq names) (tq cur) (aci->hex (if l (abs (layer-color l)) 7)))
+  (let* ((names (mapcar #'layer-name (drawing-layers *dwg*))))
+    (multiple-value-bind (shown color) (layer-box-display)
+      (tk "setlayers {~{~A~^ ~}} ~A ~A" (mapcar #'tq names) (tq shown) color))
     (tk "settoggles ~D ~D ~D ~D ~D ~D ~A" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
         (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0))
         (sysvar "LWDISPLAY") (if (iso-mode-p) 1 0)
@@ -810,6 +809,22 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
     (sync-current-props)
     (tk "settitle ~A" (tq (format nil "Fancy Pencil — ~A~A" (drawing-display-name)
                                   (if (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)) " *" ""))))))
+
+(defun layer-box-display ()
+  "What the layer drop-down shows: with objects selected, their layer (\"VARIES\" when they are on
+several), else the current layer. Only shows it; the current layer is not changed."
+  (let* ((sel (remove-if-not #'ent-live-p *pickfirst*))
+         (layers (and sel (remove-duplicates (mapcar #'ent-layer sel) :test #'string-equal))))
+    (cond ((and layers (rest layers)) (values "VARIES" "#8b949e"))
+          (t (let* ((name (if layers (first layers) (sysvar "CLAYER")))
+                    (l (find-layer name)))
+               (values (if l (layer-name l) name) (aci->hex (if l (abs (layer-color l)) 7))))))))
+
+(defun refresh-layer-box ()
+  "Show the selection's layer in the layer drop-down (called whenever the selection changes)."
+  (when (eq *ui* :gui)
+    (multiple-value-bind (shown color) (layer-box-display)
+      (tk "setlayerbox ~A ~A" (tq shown) color))))
 
 (defun drawing-display-name ()
   (let ((f (drawing-filename *dwg*))) (if f (file-namestring f) (untitled-name))))

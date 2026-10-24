@@ -278,6 +278,10 @@ that shows each layer's color; double-click a layer or pick it and press OK. As 
 choosing a layer in the layer drop-down while objects are selected also moves them to that
 layer (with nothing selected it sets the current layer, as before).
 
+The layer drop-down also shows the layer of whatever you select: one object's layer (with its
+color), or **VARIES** when the selection is on more than one layer. Selecting only shows it — the
+current layer stays the same. Clear the selection (Esc) and it shows the current layer again.
+
 ### Views (View → 3D Views, or the view picker)
 
 The **view picker** at the top right of the drawing shows a small cube for each standard view:

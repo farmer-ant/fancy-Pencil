@@ -638,7 +638,11 @@ proc setviewname {name} {
 }
 proc setlayers {names current color} {
     .tb.layers.r.cb configure -values $names
-    .tb.layers.r.cb set $current
+    setlayerbox $current $color
+}
+# the drop-down shows the selected objects' layer (or VARIES) without changing the current layer
+proc setlayerbox {shown color} {
+    .tb.layers.r.cb set $shown
     .tb.layers.r.sw itemconfigure sw -fill $color
 }
 proc settitle {s} { wm title . $s }
