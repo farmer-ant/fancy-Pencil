@@ -3,6 +3,12 @@
 (in-package :fancy-pencil)
 
 (defun fmt-num (x) (if (realp x) (fmt-len x) ""))
+(defun fmt-factor (x)
+  "A scale factor: a plain number (never feet and inches), with as many decimals as it needs."
+  (if (realp x)
+      (let ((s (string-right-trim "." (string-right-trim "0" (format nil "~,6F" (d x))))))
+        (if (string= s "") "0" s))
+      ""))
 (defun fmt-deg (a) (if (realp a) (fmt-decimal (deg a) (max 0 (or (sysvar "AUPREC") 0))) ""))
 
 (defun type-display-name (type)
@@ -94,7 +100,7 @@
              (list "CX" "Center X" (v (lambda (d) (fmt-num (px (dxf 10 d))))) :entry)
              (list "CY" "Center Y" (v (lambda (d) (fmt-num (py (dxf 10 d))))) :entry)
              (list "" "Major radius" (v (lambda (d) (fmt-num (dist2d (pt 0 0) (dxf 11 d))))) :ro)
-             (list "RATIO" "Radius ratio" (v (lambda (d) (fmt-num (or (dxf 40 d) 1d0)))) :entry)))
+             (list "RATIO" "Radius ratio" (v (lambda (d) (fmt-factor (or (dxf 40 d) 1d0)))) :entry)))
       (t nil))))
 
 (defun palette-rows (sel)
@@ -104,9 +110,9 @@
               (list "COLOR" "Color" (color-label (sysvar "CECOLOR")) :combo *color-choices*)
               (list "LAYER" "Layer" (sysvar "CLAYER") :combo layers)
               (list "LTYPE" "Linetype" (ltype-label (sysvar "CELTYPE")) :combo (ltype-choices))
-              (list "LTSCALE" "Linetype scale" (fmt-num (sysvar "CELTSCALE")) :entry)
+              (list "LTSCALE" "Linetype scale" (fmt-factor (sysvar "CELTSCALE")) :entry)
               (list "LWEIGHT" "Lineweight" (lineweight-label (sysvar "CELWEIGHT")) :combo (lweight-choices))
-              (list "GLTSCALE" "Global LT scale" (fmt-num (sysvar "LTSCALE")) :entry)
+              (list "GLTSCALE" "Global LT scale" (fmt-factor (sysvar "LTSCALE")) :entry)
               (list "TEXTSIZE" "Text height" (fmt-num (sysvar "TEXTSIZE")) :entry)
               (list "THICK" "Thickness" (fmt-num (or (sysvar "THICKNESS") 0d0)) :entry)
               (list "ELEV" "Elevation" (fmt-num (or (sysvar "ELEVATION") 0d0)) :entry))
@@ -117,7 +123,7 @@
                  (list "COLOR" "Color" (common-value sel (lambda (d) (color-label (or (dxf 62 d) 256)))) :combo *color-choices*)
                  (list "LAYER" "Layer" (common-value sel (lambda (d) (dxf 8 d))) :combo layers)
                  (list "LTYPE" "Linetype" (common-value sel (lambda (d) (ltype-label (dxf 6 d)))) :combo (ltype-choices))
-                 (list "LTSCALE" "Linetype scale" (common-value sel (lambda (d) (fmt-num (or (dxf 48 d) 1d0)))) :entry)
+                 (list "LTSCALE" "Linetype scale" (common-value sel (lambda (d) (fmt-factor (or (dxf 48 d) 1d0)))) :entry)
                  (list "LWEIGHT" "Lineweight" (common-value sel (lambda (d) (lineweight-label (or (dxf 370 d) -1)))) :combo (lweight-choices))
                  (list "ELEV" "Elevation" (common-value sel (lambda (d) (fmt-num (entity-elevation d)))) :entry))
            (when (every (lambda (e) (member (ent-type e) '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal)) sel)
@@ -216,7 +222,32 @@
                                                 (when ds (setf nd (set-dxf :dimvars (dimstyle-vars ds) (set-dxf 3 (dimstyle-name ds) nd))))))
                       ((and (string= key "RATIO") num (< 0 num 1.0000001)) (setf nd (set-dxf 40 (d num) nd)))))
                   (unless (eq nd d0) (set-entity-data e nd)))))))
+    (when (member key '("LTSCALE" "GLTSCALE" "LTYPE") :test #'string=)
+      (linetype-visibility-note (if sel (remove-if-not #'ent-live-p sel) nil)))
     (gui-sync)))
+
+(defun nice-number (x)
+  "X rounded up to 1, 2 or 5 times a power of ten."
+  (let* ((p (expt 10d0 (floor (log (max x 1d-12) 10)))) (m (/ x p)))
+    (* p (cond ((<= m 1) 1) ((<= m 2) 2) ((<= m 5) 5) (t 10)))))
+
+(defun linetype-visibility-note (ents)
+  "Say so when a dashed linetype's pattern is too small (or too big) to see at the current zoom:
+it is then drawn solid, which otherwise looks as if the linetype scale did nothing."
+  (when (gui-p)
+    (let ((notes nil))
+      (dolist (e (or ents (list nil)))
+        (let* ((data (and e (ent-data e)))
+               (name (if data (entity-ltype-name data) (sysvar "CELTYPE")))
+               (pattern (and name (ltype-pattern-for name)))
+               (scale (if data (ltype-scale-for data) (* (d (or (sysvar "LTSCALE") 1)) (d (or (sysvar "CELTSCALE") 1)))))
+               (period (and pattern (* scale (reduce #'+ (mapcar #'abs pattern))))))
+          (when (and period (< (* period *vscale*) 3) (not (member name notes :test #'string-equal)))
+            (push name notes)
+            (out (format nil "Note: ~A at this scale repeats every ~A, which is under 3 pixels at this zoom, so it is ~
+                              drawn solid.~%  Zoom in to see the dashes, or raise the linetype scale (about ~A for this zoom), ~
+                              or the Global LT scale (LTSCALE) for the whole drawing.~%"
+                         name (fmt-len period) (fmt-factor (nice-number (/ (* 6 scale) (* period *vscale*))))))))))))
 
 (defcmd "PROPERTIES" ("PR" "PROPS" "CH" "MO" "DDCHPROP" "DDMODIFY") "Shows the Properties palette."
   (if (gui-p) (tk "palette_toggle") (out (format nil "The Properties palette needs the graphical interface.~%"))))
