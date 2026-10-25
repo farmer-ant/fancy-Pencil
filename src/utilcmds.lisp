@@ -639,6 +639,7 @@ a DXF next to it instead and leave the DWG untouched."
                                  :keywords '("ON" "OFF"))))
     (cond ((equal r "ON") (setf (sysvar "GRIDMODE") 1)) ((equal r "OFF") (setf (sysvar "GRIDMODE") 0))
           ((realp r) (setf (sysvar "GRIDUNIT") (list r r) (sysvar "GRIDMODE") 1)))
+    (ignore-errors (save-prefs))
     (when (gui-p) (gui-regen) (gui-sync))))
 (defcmd "SNAP" ("SN") "Sets snap spacing or turns snap on/off."
   (let ((r (get-user-input :real :prompt (format nil "Specify snap spacing or [ON/OFF] <~A>: " (fmt-len (first (sysvar "SNAPUNIT"))))
