@@ -457,6 +457,14 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
       ;; an object in another plane: drawn by its 3D edges
       ((offplane-p data)
        (let ((w (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))))
+         (when (member type '("CIRCLE" "ARC" "LWPOLYLINE" "ELLIPSE" "SPLINE") :test #'equal)
+           ;; outlines with a linetype: dashed along each edge, in its own plane
+           (return-from render-data
+             (let ((pattern (ltype-pattern-for (entity-ltype-name data parent-lt)))
+                   (scale (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1))))
+               (loop for poly in (offplane-polylines data)
+                     append (screen-line-typed (if xf (mapcar (lambda (p) (xf-point xf p)) poly) poly)
+                                               pattern scale color tags hl w)))))
          (loop for pc in (if (member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
                              ;; text in another plane: its letters, drawn in that plane
                              (offplane-pieces data (ignore-errors (text-stroke-pieces (rem-dxf 210 data))))
@@ -491,7 +499,9 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
                          (mapcar #'fmtn coords) color color tags)))))
       ((equal type "HATCH") (render-hatch data color tags hl xf))
       ((and (projected-view-p) (member type '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal))
-       (render-3d-object data color tags hl xf (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))))
+       (render-3d-object data color tags hl xf (max 1 (lineweight-pixels (entity-lineweight data parent-lw)))
+                         (ltype-pattern-for (entity-ltype-name data parent-lt))
+                         (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1))))
       (t
        (let* ((pw (if (and (equal type "LWPOLYLINE") (dxf 43 data) (plusp (dxf 43 data)))
                       (max 1 (round (* (dxf 43 data) *vscale* (if xf (xf-scale xf) 1))))
@@ -513,7 +523,17 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
                                            (render-linetyped tp pattern scale color tags hl width)
                                            (render-piece tp color tags :dash hl :width width))))))))))
 
-(defun render-3d-object (data color tags hl xf width)
+(defun screen-line-typed (poly pattern scale color tags hl width)
+  "3D polyline POLY with linetype PATTERN (at SCALE), or solid when there is none or the dashes
+would be too small or too many to see."
+  (let ((period (and pattern (* scale (reduce #'+ (mapcar #'abs pattern))))))
+    (if (or (null pattern) (< (* period *vscale*) 3)
+            (> (/ (polyline-length poly) (max period 1d-12)) 4000))
+        (screen-line poly color tags :dash hl :width width)
+        (loop for run in (dash-runs poly pattern scale)
+              append (screen-line run color tags :dash hl :width width)))))
+
+(defun render-3d-object (data color tags hl xf width &optional pattern (scale 1d0))
   "A line, arc, circle or polyline in a 3D view, at its elevation and extruded by its thickness
 (as AutoCAD draws walls made with THICKNESS)."
   (let* ((elev (if (equal (dxf 0 data) "LWPOLYLINE") (d (or (dxf 38 data) 0)) 0d0))
@@ -524,21 +544,21 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
                         collect (mapcar (lambda (p) (pt (px p) (py p) (+ (pz p) elev)))
                                         (case (first pc)
                                           (:seg (list (second pc) (third pc)))
-                                          (:circle (arc-points-3d (second pc) (third pc) 0d0 +2pi+ 72))
+                                          (:circle (arc-points-3d (second pc) (third pc) 0d0 +2pi+ (max 72 (min 720 (ceiling (* (third pc) *vscale* 0.6))))))
                                           (:arc (destructuring-bind (c r a1 a2) (rest pc) (arc-points-3d c r a1 a2 36)))))))
          (out nil))
     (dolist (pc pieces)
       (when (eq (first pc) :pt) (setf out (nconc out (render-piece pc color tags)))))
     (dolist (poly polys)
-      (setf out (nconc out (screen-line poly color tags :dash hl :width width)))
+      (setf out (nconc out (screen-line-typed poly pattern scale color tags hl width)))
       (unless (zerop th)
         (let ((top (mapcar (lambda (p) (v+ p (pt 0 0 th))) poly)))
-          (setf out (nconc out (screen-line top color tags :dash hl :width width)))
+          (setf out (nconc out (screen-line-typed top pattern scale color tags hl width)))
           ;; vertical edges: at the ends, and around curves every eighth of a turn
           (let ((n (length poly)))
             (loop for p in poly for i from 0
                   when (or (= i 0) (= i (1- n)) (and (> n 3) (zerop (mod i (max 1 (floor n 8))))))
-                    do (setf out (nconc out (screen-line (list p (v+ p (pt 0 0 th))) color tags :dash hl :width width))))))))
+                    do (setf out (nconc out (screen-line-typed (list p (v+ p (pt 0 0 th))) pattern scale color tags hl width))))))))
     out))
 
 (defun render-chained (pieces color tags hl width)
