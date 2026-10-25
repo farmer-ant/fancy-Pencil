@@ -1185,9 +1185,22 @@ several), else the current layer. Only shows it; the current layer is not change
       (let ((l (find-layer arg)))
         (setf act "color"
               color (and l (color-dialog (abs (layer-color l)) nil)))))
+    (when (string= act "rename")             ; "old<US>new" from the name cell
+      (let* ((us (position (code-char 31) arg))
+             (old (if us (subseq arg 0 us) arg)) (new (if us (subseq arg (1+ us)) "")))
+        (let ((msg (rename-object "Layer" old new)))
+          (if msg (tell-user msg) (out (format nil "Layer ~A renamed to ~A.~%" old new))))
+        (touch) (show-layer-dialog) (gui-regen) (gui-sync)
+        (return-from layer-dialog-action nil)))
     (let ((l (find-layer arg)))
       (cond
-        ((string= act "new") (ensure-layer (unique-layer-name)))
+        ((string= act "new")
+         ;; a new layer opens with its name ready to type over, as in AutoCAD
+         (let ((n (unique-layer-name)))
+           (ensure-layer n)
+           (touch) (show-layer-dialog) (gui-sync)
+           (tk "ld_edit_named ~A" (tq n))
+           (return-from layer-dialog-action nil)))
         ((null l) nil)
         ((string= act "current")
          (if (layer-frozen l) (out (format nil "Cannot set a frozen layer current.~%"))

@@ -399,6 +399,22 @@
 (check "points plot" (if (findfile "/tmp/fp-pts.pdf") T nil) T)
 (command "close")
 
+;; ---------- renaming a layer (objects inside blocks follow) ----------
+(command "new")
+(command "-layer" "m" "OLDL" "")
+(command "line" '(0 0) '(1 0) "")
+(command "-block" "RLB" '(0 0) (entlast) "")
+(command "line" '(5 5) '(6 5) "")
+(command "-layer" "s" "0" "")
+(command "rename" "layer" "OLDL" "NEWL")
+(check "renamed layer exists" (if (tblsearch "LAYER" "NEWL") T nil) T)
+(check "old name gone" (tblsearch "LAYER" "OLDL") nil)
+(check "object on renamed layer" (g (entlast) 8) "NEWL")
+(command "-insert" "RLB" '(10 10) 1 1 0)
+(command "explode" (entlast) "")
+(check "object inside the block follows" (g (entlast) 8) "NEWL")
+(command "close")
+
 ;; ---------- leaders ----------
 (defun entbefore (e / x prev) (setq x (entnext)) (while (and x (not (eq x e))) (setq prev x x (entnext x))) prev)
 (command "new")
