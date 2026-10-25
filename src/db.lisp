@@ -55,7 +55,7 @@
   (clrhash *sysvars*)
   (loop for (k v) on
         (list "CLAYER" "0" "CECOLOR" "BYLAYER" "OSMODE" 4133 "ORTHOMODE" 0
-              "SNAPMODE" 0 "GRIDMODE" 1 "SNAPUNIT" (list 0.5d0 0.5d0) "GRIDUNIT" (list 0.5d0 0.5d0)
+              "SNAPMODE" 0 "GRIDMODE" 0 "SNAPUNIT" (list 0.5d0 0.5d0) "GRIDUNIT" (list 0.5d0 0.5d0)
               "TEXTSIZE" 0.2d0 "ROLLOVERTIPS" 1 "SNAPSTYL" 0 "SNAPISOPAIR" 1 "THICKNESS" 0d0 "ELEVATION" 0d0 "CURSORCOLOR" "#c9ced6" "BKGCOLOR" "#212830" "AUTOSNAPSIZE" 6 "LUPREC" 4 "AUPREC" 0 "LUNITS" 2 "AUNITS" 0
               "CMDECHO" 1 "PICKBOX" 5 "APERTURE" 10 "PDMODE" 0 "PDSIZE" 0d0
               "FILLETRAD" 0d0 "OFFSETDIST" -1d0 "ANGBASE" 0d0 "ANGDIR" 0

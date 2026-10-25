@@ -265,6 +265,11 @@ dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LE
   text together). Each new leader keeps that size, as an override on that leader only.
 * For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
 
+### Grid
+
+The grid starts off. F7, the GRID button on the status bar and the GRID command turn it on and
+off, and Fancy Pencil remembers your choice the next time it starts.
+
 ### Dimensions in copy/paste, DIMREGEN
 
 Copying dimensions to another drawing brings their pictures along to wherever they are pasted.

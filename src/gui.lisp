@@ -880,7 +880,7 @@ several), else the current layer. Only shows it; the current layer is not change
              (when (zerop (logand (sysvar "OSMODE") 16383)) (setf (sysvar "OSMODE") 4133))
              (out (format nil "<Osnap ~A>~%" (if (logtest (sysvar "OSMODE") 16384) "off" "on")))
              (ignore-errors (save-prefs))))
-          ((string= k "F7") (flip "GRIDMODE" "Grid") (gui-regen))
+          ((string= k "F7") (flip "GRIDMODE" "Grid") (ignore-errors (save-prefs)) (gui-regen))
           ((string= k "F8") (flip "ORTHOMODE" "Ortho"))
           ((string= k "F9") (flip "SNAPMODE" "Snap"))
           ((string= k "F5") (cycle-isoplane))
