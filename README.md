@@ -278,6 +278,14 @@ version 0.3.37 or earlier), they are redrawn in place and the command line says 
 the repair. **DIMREGEN** redraws every dimension from its points and current style. Saving drops
 dimension pictures no dimension uses any more, which keeps files small.
 
+### Naming layers
+
+In the Layer Properties Manager, **New Layer** adds a layer with its name ready to type over.
+To rename a layer, double-click its name, select it and press F2, or use **Rename**; Enter keeps
+the new name and Esc leaves the old one. Objects on the layer, including those inside blocks,
+move to the new name. Layer 0 and Defpoints can't be renamed, and a name can't contain
+< > / \ " : ; ? * | , = or `. The RENAME command does the same from the command line.
+
 ### Layer controls
 
 The Layers panel has **Make Current** (click an object: its layer becomes the current layer —

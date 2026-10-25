@@ -2671,7 +2671,7 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         wm geometry $w 790x420+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
         wm transient $w .
         ttk::frame $w.tb -padding 6
-        foreach {lbl act} {"New Layer" new "Delete" delete "Set Current" current} {
+        foreach {lbl act} {"New Layer" new "Rename" rename "Delete" delete "Set Current" current} {
             ttk::button $w.tb.[string map {" " ""} [string tolower $lbl]] -text $lbl -command [list layeract $act]
             pack $w.tb.[string map {" " ""} [string tolower $lbl]] -side left -padx 2
         }
@@ -2693,13 +2693,14 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
             $w.t column $c -width $wd -anchor [expr {$c eq "name" ? "w" : "center"}]
         }
         pack $w.t -side top -fill both -expand 1 -padx 6
-        ttk::label $w.hint -style Dim.TLabel -padding 6 \
-            -text "Click On / Freeze / Lock / Plot cells to toggle, the Color cell to choose a color (a No Plot layer shows on screen but is left out of plots). Double-click a layer to make it current."
+        ttk::label $w.hint -style Dim.TLabel -padding 6 -wraplength 760 \
+            -text "Click On / Freeze / Lock / Plot cells to toggle, the Color cell to choose a color (a No Plot layer shows on screen but is left out of plots). Double-click a name (or press F2, or Rename) to rename it; double-click elsewhere in the row to make the layer current."
         pack $w.hint -side top -fill x
         ttk::button $w.close -text Close -command {destroy .ld; focus .cmd.e}
         pack $w.close -side bottom -anchor e -padx 6 -pady 6
         bind $w.t <ButtonRelease-1> {layerclick %x %y}
-        bind $w.t <Double-Button-1> {layeract current}
+        bind $w.t <Double-Button-1> {layerdbl %x %y}
+        bind $w.t <F2> {ld_edit_name [.ld.t selection]}
         bind $w <Escape> {destroy .ld; focus .cmd.e; break}
     }
     $w.tb2.lt configure -values $ltypes
@@ -2738,7 +2739,50 @@ proc layerclick {x y} {
         "#7" { emit LAYERACT pickcolor $name }
     }
 }
+proc layerdbl {x y} {
+    set row [.ld.t identify row $x $y]
+    if {$row eq ""} return
+    if {[.ld.t identify column $x $y] eq "#2"} { ld_edit_name $row } else { layeract current }
+}
+# rename in place: an entry over the Name cell; Enter keeps the new name, Esc leaves it
+proc ld_edit_name {item} {
+    if {$item eq "" || ![winfo exists .ld.t]} return
+    catch {destroy .ld.t.ed}
+    .ld.t see $item
+    update idletasks
+    set bb [.ld.t bbox $item name]
+    if {$bb eq ""} return
+    lassign $bb x y wd ht
+    set old [lindex [.ld.t item $item -values] 1]
+    set ::ld_old $old
+    set ::ld_new $old
+    entry .ld.t.ed -textvariable ::ld_new -relief solid -borderwidth 1 \
+        -background $::panel2 -foreground $::fg -insertbackground $::fg
+    place .ld.t.ed -x $x -y $y -width [expr {max($wd, 120)}] -height $ht
+    .ld.t.ed selection range 0 end
+    .ld.t.ed icursor end
+    focus .ld.t.ed
+    bind .ld.t.ed <Return> {ld_edit_done 1; break}
+    bind .ld.t.ed <KP_Enter> {ld_edit_done 1; break}
+    bind .ld.t.ed <Escape> {ld_edit_done 0; break}
+    bind .ld.t.ed <FocusOut> {ld_edit_done 1}
+}
+proc ld_edit_done {keep} {
+    if {![winfo exists .ld.t.ed]} return
+    set new [string trim $::ld_new]
+    destroy .ld.t.ed
+    focus .ld.t
+    if {$keep && $new ne "" && $new ne $::ld_old} {
+        emit LAYERACT rename "$::ld_old\x1f$new"
+    }
+}
+proc ld_edit_named {name} {
+    foreach id [.ld.t children {}] {
+        if {[lindex [.ld.t item $id -values] 1] eq $name} { .ld.t selection set $id; ld_edit_name $id; return }
+    }
+}
 proc layeract {act {arg ""}} {
+    if {$act eq "rename"} { ld_edit_name [.ld.t selection]; return }
     if {$act in {ltype lweight}} {
         if {$arg ne ""} { emit LAYERACT $act [string map {" " "_"} $arg] [layersel] }
     } elseif {$act eq "color"} {
