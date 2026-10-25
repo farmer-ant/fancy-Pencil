@@ -119,12 +119,13 @@
 
 ;;; ---------- dash generation ----------
 
-(defun polyline-length (pts) (loop for (a b) on pts while b sum (dist2d a b)))
+;; lengths along the object itself (3D), so dashes keep their size on sloped and standing objects
+(defun polyline-length (pts) (loop for (a b) on pts while b sum (dist (pt3 a) (pt3 b))))
 
 (defun point-along (pts dist)
   "The point DIST along the polyline PTS (clamped to its ends)."
   (loop for (a b) on pts while b
-        for len = (dist2d a b)
+        for len = (dist (pt3 a) (pt3 b))
         do (if (<= dist len)
                (return-from point-along (if (< len 1d-15) a (at-param a b (/ dist len))))
                (decf dist len)))
@@ -141,7 +142,7 @@ so the visible line reaches its real endpoints."
          (k 0) (remaining (abs (first pat))) (on (>= (first pat) 0))
          (dotlen (/ 0.75d0 *vscale*))
          (total (if pts (polyline-length pts) 0d0))
-         (closed (and pts (cdr pts) (< (dist2d (first pts) (car (last pts))) 1d-9))))
+         (closed (and pts (cdr pts) (< (dist (pt3 (first pts)) (pt3 (car (last pts)))) 1d-9))))
     (when (or (< period 1d-12) (null pts)) (return-from dash-runs (list pts)))
     (flet ((advance ()
              (setf k (mod (1+ k) (length pat)))
@@ -154,13 +155,13 @@ so the visible line reaches its real endpoints."
                        (progn (decf phase remaining) (advance))
                        (progn (decf remaining phase) (setf phase 0d0))))))
       (loop for (a b) on pts while b
-            do (let ((seglen (dist2d a b)) (pos 0d0))
+            do (let ((seglen (dist (pt3 a) (pt3 b))) (pos 0d0))
                  (loop while (< pos seglen) do
                    (if (and on (zerop (nth k pat)))
                        ;; a dot
                        (let ((p (at-param a b (/ pos (max seglen 1d-15)))))
                          (when cur (push (nreverse cur) runs) (setf cur nil))
-                         (push (list p (polar p (ang a b) dotlen)) runs)
+                         (push (list p (v+ (pt3 p) (v* (unit3 (v- (pt3 b) (pt3 a))) dotlen))) runs)
                          (advance))
                        (let* ((step (min remaining (- seglen pos)))
                               (p0 (at-param a b (/ pos seglen)))
@@ -179,9 +180,9 @@ so the visible line reaches its real endpoints."
       (unless closed
         (let ((stub (min (/ (abs (first pat)) 2) (/ total 4)))
               (start (first pts)) (end (car (last pts))))
-          (when (and (> stub 1d-12) (not (and runs (< (dist2d (first (first runs)) start) 1d-9))))
+          (when (and (> stub 1d-12) (not (and runs (< (dist (pt3 (first (first runs))) (pt3 start)) 1d-9))))
             (push (list start (point-along pts stub)) runs))
-          (when (and (> stub 1d-12) (not (and runs (< (dist2d (car (last (car (last runs)))) end) 1d-9))))
+          (when (and (> stub 1d-12) (not (and runs (< (dist (pt3 (car (last (car (last runs))))) (pt3 end)) 1d-9))))
             (setf runs (append runs (list (list (point-along pts (- total stub)) end)))))))
       runs)))
 

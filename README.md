@@ -322,6 +322,10 @@ stands facing the Front view. Commands that change an object's shape in its own 
 EXTEND, OFFSET, FILLET, CHAMFER, BREAK, PEDIT, STRETCH ...) skip objects in other planes and say
 so; switch to a view that faces them.
 
+Linetypes (hidden, center, phantom, dashed ...) show in every view: in the isometric views and on
+objects standing in other planes the dashes are laid out along the object itself, at the same
+size as in plan.
+
 **Any plane as the working plane (UCS).** View → Working Plane (UCS), or type `UCS`:
 
 * **Object / Face** — pick a panel (polyline, circle, text ...): its plane becomes the working
