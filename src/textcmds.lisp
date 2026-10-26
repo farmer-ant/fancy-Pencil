@@ -256,7 +256,7 @@
 ;;; ---------- STYLE ----------
 
 (defun style-in-use-p (name)
-  (or (some (lambda (e) (equalp (dxf 7 (ename-data e)) name)) (live-entities))
+  (or (some (lambda (e) (equalp (dxf 7 (ename-data e)) name)) (all-live-entities))
       (some (lambda (b) (some (lambda (dd) (equalp (dxf 7 dd) name)) (block-def-entities b))) (drawing-blocks *dwg*))))
 
 (defun style-dialog ()

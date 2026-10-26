@@ -98,7 +98,7 @@ proc mcmd {m label cmd {accel ""}} {
 }
 proc menucmd {cmd} { emit MENU $cmd; focus .cmd.e }
 
-foreach {name label} {file File edit Edit view View draw Draw solid Solids dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
+foreach {name label} {file File edit Edit view View layout Layout draw Draw solid Solids dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
     menu .mb.$name
     .mb add cascade -label $label -menu .mb.$name
 }
@@ -130,6 +130,26 @@ mcmd .mb.edit "Create Block from Selection..." BLOCK
 .mb.edit add separator
 mcmd .mb.edit "Erase" ERASE Del
 mcmd .mb.edit "Select All" SELECTALL Ctrl+A
+
+# Layout: paper space sheets and their viewports
+mcmd .mb.layout "Model Tab" MODEL
+mcmd .mb.layout "New Layout" LAYOUTNEW
+mcmd .mb.layout "Page Setup (paper size)..." PAGESETUP
+mcmd .mb.layout "Layout Options (copy, rename, delete...)" LAYOUT
+.mb.layout add separator
+mcmd .mb.layout "Viewport: Two Corners" MVIEW
+mcmd .mb.layout "Viewport: Fill the Sheet" "MVIEW Fit"
+mcmd .mb.layout "2 Viewports" "MVIEW 2"
+mcmd .mb.layout "3 Viewports" "MVIEW 3"
+mcmd .mb.layout "4 Viewports (Top, Front, Right, Iso)" "MVIEW 4 Standard"
+.mb.layout add separator
+mcmd .mb.layout "Viewport Scale..." VPSCALE
+mcmd .mb.layout "Lock Viewport Scale" "MVIEW Lock ON"
+mcmd .mb.layout "Unlock Viewport Scale" "MVIEW Lock OFF"
+.mb.layout add separator
+mcmd .mb.layout "Work in Viewport (MSPACE)" MSPACE
+mcmd .mb.layout "Back to the Sheet (PSPACE)" PSPACE
+mcmd .mb.layout "Plot Layout..." PLOT
 
 menu .mb.view.v3 -tearoff 0
 .mb.view add cascade -label "3D Views" -menu .mb.view.v3
@@ -511,7 +531,49 @@ bind .st.osnap <ButtonRelease-3> {emit MENU 'OSNAP}
 pack .st -in .bottom -side bottom -fill x
 pack .cmd -in .bottom -side bottom -fill x
 pack .h -in .bottom -side bottom -fill x
-raise .h; raise .cmd; raise .st
+# layout tabs: Model, Layout1 ... (paper space sheets), as under AutoCAD's drawing area
+frame .ltabs -background "#1b2027"
+pack .ltabs -in .bottom -side bottom -fill x
+raise .h; raise .cmd; raise .st; raise .ltabs
+bind .st.model <Button-1> {emit MENU MSPACETOGGLE}
+.st.model configure -cursor hand2
+proc setlayouttabs {names current status} {
+    foreach w [winfo children .ltabs] { destroy $w }
+    set i 0
+    foreach name $names {
+        set on [expr {$i == $current}]
+        set bg [expr {$on ? "#3b4452" : "#232932"}]
+        set fg [expr {$on ? "#ffffff" : "#aab3bf"}]
+        label .ltabs.t$i -text $name -background $bg -foreground $fg -font {Helvetica 9} -padx 10 -pady 2
+        bind .ltabs.t$i <Button-1> [list emit MENU "LAYOUTTAB $i"]
+        if {$i > 0} {
+            bind .ltabs.t$i <Button-3> [list layouttabmenu $i %X %Y]
+            bind .ltabs.t$i <Double-Button-1> [list emit MENU "LAYOUTRENAME $i"]
+        }
+        pack .ltabs.t$i -side left -padx {0 1} -pady {1 1}
+        incr i
+    }
+    label .ltabs.plus -text "+" -background "#1b2027" -foreground "#aab3bf" -font {Helvetica 11} -padx 8
+    bind .ltabs.plus <Button-1> {emit MENU LAYOUTNEW}
+    pack .ltabs.plus -side left
+    set ::spacestatus $status
+    .st.model configure -text $status
+    if {$status ne "PAPER" && [info exists ::viewname]} { setviewname $::viewname }
+}
+proc layouttabmenu {i x y} {
+    catch {destroy .ltm}
+    menu .ltm -tearoff 0
+    .ltm add command -label "Page Setup..." -command [list emit MENU "LAYOUTPAGESETUP $i"]
+    .ltm add command -label "Rename" -command [list emit MENU "LAYOUTRENAME $i"]
+    .ltm add command -label "Copy" -command [list emit MENU "LAYOUTCOPY $i"]
+    .ltm add command -label "Delete" -command [list emit MENU "LAYOUTDELETE $i"]
+    .ltm add separator
+    .ltm add command -label "Move Left" -command [list emit MENU "LAYOUTMOVE $i -1"]
+    .ltm add command -label "Move Right" -command [list emit MENU "LAYOUTMOVE $i 1"]
+    .ltm add separator
+    .ltm add command -label "New Layout" -command {emit MENU LAYOUTNEW}
+    tk_popup .ltm $x $y
+}
 
 bind .cmd.e <Return> {cmdsubmit; break}
 bind .cmd.e <KP_Enter> {cmdsubmit; break}
@@ -661,7 +723,9 @@ proc viewcube_highlight {} {
 proc setviewname {name} {
     set ::viewname $name
     viewcube_highlight
-    .st.model configure -text [expr {$name eq "Top" ? "MODEL" : "MODEL - [string toupper $name]"}]
+    if {[info exists ::spacestatus] && $::spacestatus eq "PAPER"} { .st.model configure -text PAPER; return }
+    set pre [expr {[info exists ::spacestatus] && $::spacestatus ne "MODEL" ? $::spacestatus : "MODEL"}]
+    .st.model configure -text [expr {$name eq "Top" ? $pre : "$pre - [string toupper $name]"}]
 }
 proc setlayers {names current color} {
     .tb.layers.r.cb configure -values $names

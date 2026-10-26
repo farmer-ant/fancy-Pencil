@@ -17,8 +17,18 @@
 
 (defstruct block-def name (base (pt 0 0)) (entities nil))
 
+(defstruct layout
+  name
+  (paper "Tabloid / ANSI B (11 x 17 in)") (landscape t)
+  (units nil)         ; :in or :mm (NIL = from the drawing's units, the first time it is needed)
+  pview)              ; the paper view last used on this tab: (vx vy vscale)
+
 (defstruct drawing
   (entities (make-array 64 :adjustable t :fill-pointer 0))
+  (layouts (list (make-layout :name "Layout1")))   ; paper space layouts, in tab order
+  (ctab nil)             ; the layout tab showing (NIL = Model)
+  (active-vp nil)        ; the viewport being worked in from a layout (MSPACE), or NIL
+  (model-view nil)       ; the Model tab's view while a layout is showing
   (next-handle #x30)
   (layers (list (make-layer :name "0")))
   (blocks nil)
@@ -119,6 +129,9 @@ and is only redrawn by Fancy Pencil once it is edited.")
          ;; made in a side view: from the working plane's coordinates into world coordinates
          (data (if u (data-from-ucs (normalize-entity-data data) u) data))
          (data (normalize-entity-data data))
+         ;; it goes into the space being worked in
+         (data (let ((d (rem-dxf :layout data)) (sp (current-space)))
+                 (if sp (append d (list (cons :layout sp))) d)))
          (h (new-handle))
          (data (cons (assoc 0 data) (cons (cons 5 h) (rem-dxf 0 (rem-dxf 5 data)))))
          (data (if (and (equal (dxf 0 data) "DIMENSION")
@@ -137,7 +150,23 @@ and is only redrawn by Fancy Pencil once it is edited.")
 (defun ent-layer (e) (dxf 8 (ename-data e)))
 (defun ent-live-p (e) (and (ename-p e) (not (ename-deleted e))))
 
+(defvar *space-override* :none "Bound to NIL (model space) or a layout name to list that space's objects.")
+(defun current-space ()
+  "The space being drawn in: NIL for model space (the Model tab, or inside a viewport), else the layout's name."
+  (if (eq *space-override* :none)
+      (and (drawing-ctab *dwg*) (not (drawing-active-vp *dwg*)) (drawing-ctab *dwg*))
+      *space-override*))
+(defun paper-space-p () (and (current-space) t))
+(defun entity-space (data) (cdr (assoc :layout data)))
 (defun live-entities ()
+  "The objects in the space being worked in."
+  (let ((sp (current-space)))
+    (loop for e across (drawing-entities *dwg*)
+          unless (or (ename-deleted e)
+                     (let ((l (entity-space (ename-data e)))) (if sp (not (and l (string-equal l sp))) l)))
+            collect e)))
+(defun all-live-entities ()
+  "Every object in the drawing: model space and every layout."
   (loop for e across (drawing-entities *dwg*) unless (ename-deleted e) collect e))
 (defun last-entity ()
   (loop for i from (1- (length (drawing-entities *dwg*))) downto 0
@@ -348,6 +377,11 @@ and is only redrawn by Fancy Pencil once it is edited.")
       ((equal type "SOLID")
        (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
          (loop for (a b) on (append c (list (first c))) while b collect (list :seg (pt3 a) (pt3 b)))))
+      ((equal type "VIEWPORT")                ; a layout's window onto model space: its border
+       (let* ((c (pt3 (dxf 10 data))) (hw (/ (d (or (dxf 40 data) 1)) 2)) (hh (/ (d (or (dxf 41 data) 1)) 2))
+              (q (list (pt (- (px c) hw) (- (py c) hh)) (pt (+ (px c) hw) (- (py c) hh))
+                       (pt (+ (px c) hw) (+ (py c) hh)) (pt (- (px c) hw) (+ (py c) hh)))))
+         (loop for (a b) on (append q (list (first q))) while b collect (list :seg a b))))
       (t nil))))
 
 (defun insert-xf (data base)
@@ -509,6 +543,8 @@ and is only redrawn by Fancy Pencil once it is edited.")
        (let ((d1 (map-points data '(10 11 13 14 15 16) fp)))
          (if (dxf 50 data) (set-dxf 50 (funcall fa (dxf 50 data)) d1) d1)))
       ((equal type "SOLID") (map-points data '(10 11 12 13) fp))
+      ;; a viewport moves and grows on the sheet; it keeps its scale, so it shows more of the model
+      ((equal type "VIEWPORT") (map-codes (map-points data '(10) fp) '(40 41 45) (lambda (x) (* (abs x) s))))
       ((equal type "HATCH") (xform-hatch data xf))
       ((equal type "SPLINE") (map-points data '(10 11 12 13) fp))
       ((equal type "LEADER") (xform-leader data xf))

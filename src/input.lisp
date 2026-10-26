@@ -538,7 +538,9 @@
        (case kind
          ((:point :corner :select-point)
           (let ((p (parse-point-text s (and (not (eq kind :select-point)) (inreq-base req)))))
-            (if p (values p t) (values nil nil))))
+            (cond (p (values p t))
+                  ((logtest (or (inreq-flags req) 0) 128) (values s t))   ; any text allowed
+                  (t (values nil nil)))))
          (:distance
           (let ((n (parse-number-text s)))
             (cond (n (values (d n) t))

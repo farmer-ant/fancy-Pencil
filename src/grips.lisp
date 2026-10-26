@@ -56,6 +56,8 @@
                 ((equal type "DIMENSION")
                  (list (g 13 :d13) (g 14 :d14) (g 10 :d10) (g 11 :d11) (g 15 :d15) (g 16 :d16)))
                 ((equal type "SOLID") (list (g 10 :d10) (g 11 :d11) (g 12 :d12) (g 13 :d13)))
+                ((equal type "VIEWPORT")
+                 (loop for pc in (data-pieces data) for i from 0 collect (cons (second pc) (list :vpcorner i))))
                 ((equal type "HATCH")
                  (let ((b (entity-pieces-bbox data)))
                    (and b (list (cons (pt (/ (+ (first b) (third b)) 2) (/ (+ (second b) (fourth b)) 2)) :move)))))
@@ -114,6 +116,13 @@
              ;; dragging linear dimension text moves the dimension line with it
              (set-dxf 10 (v+ (pt3 (dxf 10 data)) dv) (set-dxf 11 to data))
              (set-dxf code to data))))
+      ((and (consp id) (eq (first id) :vpcorner))
+       ;; the opposite corner stays put; the scale stays, so more or less of the model shows
+       (let* ((pcs (data-pieces data)) (opp (second (nth (mod (+ (second id) 2) 4) pcs)))
+              (w (max 1d-6 (abs (- (px to) (px opp))))) (h (max 1d-6 (abs (- (py to) (py opp)))))
+              (k (/ h (d (or (dxf 41 data) h)))))
+         (set-dxf 45 (* (d (or (dxf 45 data) (dxf 41 data) h)) k)
+                  (set-dxf 41 h (set-dxf 40 w (set-dxf 10 (pt (/ (+ (px to) (px opp)) 2) (/ (+ (py to) (py opp)) 2) 0) data))))))
       ((and (consp id) (eq (first id) :ctrl))
        (let ((target (second id)))
          (loop for p in data for j from 0 collect (if (= j target) (cons 10 (pt3 to)) p))))

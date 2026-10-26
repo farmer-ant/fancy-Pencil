@@ -171,6 +171,8 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
     (gui-regen)))
 (defun view-extents ()
   "Extents of the drawing in view coordinates (projected, with heights and thickness)."
+  (when (and (paper-space-p) (fboundp 'layout-extents))
+    (return-from view-extents (funcall 'layout-extents)))
   (if (not (projected-view-p))
       (drawing-extents)
       (let ((u0 nil) (v0 nil) (u1 nil) (v1 nil))
@@ -216,7 +218,7 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
           *vy* (+ (py w) (/ (- sy (/ *ch* 2d0)) *vscale*)))
     (if quick
         ;; instant feedback: scale what is on the canvas; exact regen follows on IDLE
-        (progn (tk-send-string (format nil "foreach tg {ent grd grid} {.c scale $tg ~D ~D ~,5F ~,5F}" sx sy factor factor))
+        (progn (tk-send-string (format nil "foreach tg {~A} {.c scale $tg ~D ~D ~,5F ~,5F}" (quick-tags) sx sy factor factor))
                (setf *regen-pending* t)
                (draw-temp))
         (gui-regen))))
@@ -240,6 +242,8 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
 (defun rgb-hex (r g b) (format nil "#~2,'0X~2,'0X~2,'0X" (round r) (round g) (round b)))
 
 (defun background-color ()
+  ;; on a layout tab everything is drawn on white paper
+  (when (drawing-ctab *dwg*) (return-from background-color "#ffffff"))
   (let ((c (sysvar "BKGCOLOR"))) (if (and (stringp c) (= (length c) 7)) c "#212830")))
 
 (defun light-background-p ()
@@ -665,6 +669,14 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
         out))))
 
 (defun ucs-icon-cmds ()
+  (when (paper-space-p)
+    ;; paper space: AutoCAD's triangle
+    (return-from ucs-icon-cmds
+      (let ((x 30) (y (- *ch* 28)))
+        (list (format nil ".c create polygon ~D ~D ~D ~D ~D ~D -fill {} -outline #30363d -width 2 -tags ucs" x y (+ x 40) y x (- y 40))
+              (format nil ".c create text ~D ~D -text X -fill #30363d -font {Helvetica 9 bold} -tags ucs" (+ x 48) y)
+              (format nil ".c create text ~D ~D -text Y -fill #30363d -font {Helvetica 9 bold} -tags ucs" x (- y 49))
+              (format nil ".c create text ~D ~D -anchor sw -text PAPER -fill #30363d -font {Helvetica 10 bold} -tags ucs" 70 (- *ch* 6))))))
   (when *view*
     ;; the world axes as they point in this view, with the view's name
     (return-from ucs-icon-cmds
@@ -692,15 +704,37 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
     (multiple-value-bind (x0 y0 x1 y1) (view-rect 50)
       (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0)))))))
 
+(defun model-body-cmds ()
+  "Canvas commands for the grid and the objects of the space being worked in."
+  (let ((cmds (grid-cmds)))
+    (if (and (fboundp 'visual-style) (not (equal (funcall 'visual-style) "Wireframe")))
+        (setf cmds (nconc cmds (funcall 'visual-style-cmds)))
+        (dolist (e (live-entities))
+          (when (and (entity-visible-p e) (entity-in-view-p e))
+            (setf cmds (nconc cmds (entity-render-cmds e))))))
+    cmds))
+
+(defvar *canvas-bg-shown* nil)
+(defun canvas-bg ()
+  "The canvas color: the drawing background, or the gray around the sheet on a layout tab."
+  (if (drawing-ctab *dwg*) "#5a616c" (background-color)))
+
+(defun quick-tags ()
+  "Canvas tags moved or scaled at once while panning and zooming (before the exact redraw)."
+  (cond ((null (drawing-ctab *dwg*)) "ent grd grid")
+        ((drawing-active-vp *dwg*) "ent grd grid")
+        (t "ent grd grid sheet vpc")))
+
 (defun gui-regen ()
   (when (eq *ui* :gui)
+    (when (and (drawing-ctab *dwg*) (fboundp 'layout-prepare)) (funcall 'layout-prepare))
+    (unless (equal *canvas-bg-shown* (canvas-bg))
+      (setf *canvas-bg-shown* (canvas-bg))
+      (tk ".c configure -background ~A" (canvas-bg)))
     (let ((cmds (list ".c delete all")))
-      (setf cmds (nconc cmds (grid-cmds)))
-      (if (and (fboundp 'visual-style) (not (equal (funcall 'visual-style) "Wireframe")))
-          (setf cmds (nconc cmds (funcall 'visual-style-cmds)))
-          (dolist (e (live-entities))
-            (when (and (entity-visible-p e) (entity-in-view-p e))
-              (setf cmds (nconc cmds (entity-render-cmds e))))))
+      (setf cmds (nconc cmds (if (and (drawing-ctab *dwg*) (fboundp 'layout-body-cmds))
+                                 (funcall 'layout-body-cmds)
+                                 (model-body-cmds))))
       (dolist (g *grdraw-items*)
         (destructuring-bind (a b aci) g
           (setf cmds (nconc cmds (screen-line (list a b) (aci->hex aci) "grd")))))
@@ -709,10 +743,11 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
       (tk-send-string (format nil "~{~A~%~}" cmds))
       (refresh-grips)
       (setf *drawn-modcount* (drawing-modcount *dwg*))
+      (when (fboundp 'refresh-layout-tabs) (funcall 'refresh-layout-tabs))
       (draw-temp))))
 
 (defun rerender-entity (e)
-  (tk-send-string (format nil ".c delete h~A~%~{~A~%~}.c raise tmp"
+  (tk-send-string (format nil ".c delete h~A~%~{~A~%~}.c raise pover~%.c raise grip~%.c raise tmp"
                           (ename-handle e)
                           (and (entity-visible-p e) (entity-render-cmds e)))))
 
@@ -927,7 +962,7 @@ several), else the current layer. Only shows it; the current layer is not change
                                 (setf *vx* (- vx (/ (- x x0) *vscale*)) *vy* (+ vy (/ (- y y0) *vscale*)))
                                 (setf *mouse-sx* x *mouse-sy* y)
                                 ;; move existing items now; regen when the button is released
-                                (tk-send-string (format nil "foreach tg {ent grd grid} {.c move $tg ~D ~D}" (- x ox) (- y oy)))
+                                (tk-send-string (format nil "foreach tg {~A} {.c move $tg ~D ~D}" (quick-tags) (- x ox) (- y oy)))
                                 (draw-temp)))))
                         t)
       ((string= ty "Q") (setf *pan-start* nil) (gui-regen) t)
@@ -977,10 +1012,16 @@ several), else the current layer. Only shows it; the current layer is not change
            (echo-input "") (setf *acq-result* (list :point *cursor-world*)))
          (setf *press-pos* nil)))
       ((string= ty "DBL")
-       ;; double-click on text at the Command: prompt edits it in place, as in AutoCAD
+       ;; double-click on text at the Command: prompt edits it in place, as in AutoCAD; on a layout,
+       ;; double-click inside a viewport works in it, outside goes back to the sheet
        (when (eq kind :command)
          (destructuring-bind (x y) (event-ints ev)
-           (let ((e (pick-entity-at (s->w x y))))
+           (let* ((e (pick-entity-at (s->w x y)))
+                  (vcmd (and (drawing-ctab *dwg*) (fboundp 'viewport-dblclick) (funcall 'viewport-dblclick x y e))))
+             (when vcmd
+               (take-pickfirst) (sweep-highlights) (refresh-grips) (refresh-palette)
+               (setf *acq-result* (list :text vcmd))
+               (setf e nil))
              (when (and e (member (ent-type e) '("TEXT" "MTEXT" "ATTDEF") :test #'equal))
                (take-pickfirst) (sweep-highlights) (refresh-grips) (refresh-palette)
                (setf *edit-target* e
@@ -1221,7 +1262,7 @@ several), else the current layer. Only shows it; the current layer is not change
         ((string= act "delete")
          (cond ((string-equal (layer-name l) "0") (out (format nil "Layer 0 cannot be deleted.~%")))
                ((string-equal (layer-name l) (sysvar "CLAYER")) (out (format nil "The current layer cannot be deleted.~%")))
-               ((some (lambda (e) (string-equal (ent-layer e) (layer-name l))) (live-entities))
+               ((some (lambda (e) (string-equal (ent-layer e) (layer-name l))) (all-live-entities))
                 (out (format nil "Layer ~A has objects on it and cannot be deleted.~%" (layer-name l))))
                (t (setf (drawing-layers *dwg*) (remove l (drawing-layers *dwg*))))))))
     (touch)

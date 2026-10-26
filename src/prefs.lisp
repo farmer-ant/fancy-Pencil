@@ -61,7 +61,8 @@
 (defun apply-background ()
   "Show the drawing on the BKGCOLOR background (white objects turn black on light ones)."
   (when (gui-p)
-    (tk ".c configure -background ~A" (background-color))
+    (setf *canvas-bg-shown* (canvas-bg))
+    (tk ".c configure -background ~A" (canvas-bg))
     (gui-regen)))
 
 (defun cursor-dialog ()

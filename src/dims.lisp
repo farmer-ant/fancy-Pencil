@@ -610,13 +610,13 @@ behind when the dimension was moved without redrawing it (pasted with an older v
 (defun fix-misplaced-dimensions ()
   "Redraw dimensions whose picture was left behind; returns how many."
   (let ((n 0))
-    (dolist (e (live-entities) n)
+    (dolist (e (all-live-entities) n)
       (when (and (equal (ent-type e) "DIMENSION") (dimension-picture-misplaced-p (ent-data e)))
         (regen-dimension e) (incf n)))))
 
 (defcmd "DIMREGEN" () "Redraws every dimension's picture from its points and current style."
   (let ((n 0))
-    (dolist (e (live-entities))
+    (dolist (e (all-live-entities))
       (when (equal (ent-type e) "DIMENSION") (regen-dimension e) (incf n)))
     (out (format nil "~D dimension~:P redrawn.~%" n))
     (when (gui-p) (gui-regen))))
@@ -630,7 +630,7 @@ behind when the dimension was moved without redrawing it (pasted with an older v
                             (not (gethash n used)))
                    (setf (gethash n used) t)
                    (let ((b (find-block n))) (when b (mapc #'note (block-def-entities b))))))))
-      (dolist (e (live-entities)) (note (ename-data e)))
+      (dolist (e (all-live-entities)) (note (ename-data e)))
       ;; blocks drawn inside other (named) blocks count too
       (dolist (b (drawing-blocks *dwg*))
         (unless (anonymous-block-name-p (block-def-name b)) (mapc #'note (block-def-entities b)))))
