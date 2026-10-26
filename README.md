@@ -369,6 +369,22 @@ so there an object in another plane is saved as its 3D edges.
 The axes icon (bottom left) shows X, Y and Z in the
 current view; each drawing tab keeps its own view. Thickness and elevation are saved in DXF.
 
+### Orbit and visual styles (View menu)
+
+**3DORBIT** (View → Orbit, `ORBIT`, `3DO`): press and drag on the drawing to turn the view around it
+- left-right turns it about the vertical, up-down tilts it - then release; drag again or press
+Enter to finish. The view stays "Custom" until you pick a standard view.
+
+**VSCURRENT** (View → Visual Styles, `VS`; `HIDE` for Hidden):
+
+* **Wireframe** - every edge (as before).
+* **Hidden** - solids hide what is behind them; curved solids show their outline.
+* **Shaded** - solids filled and lit, no edges.
+* **Shaded with Edges** - shaded, with the edges drawn.
+
+Faces are painted far to near, so very large faces crossing others can occasionally overlap
+wrongly. Plots follow the visual style (hidden-line and shaded PDFs).
+
 ### 3D solids (Solids menu)
 
 Solids are built in the working plane (Top, a side view, or a UCS), so a box drawn in the Front

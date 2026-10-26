@@ -276,6 +276,12 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
 
 (defun collect-plot-prims (x0 y0 x1 y1)
   "Primitives for every visible entity touching the window."
+  (when (and (fboundp 'visual-style) (not (equal (funcall 'visual-style) "Wireframe")))
+    (let ((*plotting* t))
+      ;; (joining reverses the list once more: the result is far to near, as painted)
+      (let ((*plot-prims* (funcall 'styled-plot-prims x0 y0 x1 y1)))
+        (join-poly-prims)
+        (return-from collect-plot-prims *plot-prims*))))
   (let ((*plot-prims* nil) (*plotting* t))
     (dolist (e (live-entities))
       (let ((b (ignore-errors (if (projected-view-p) (entity-view-bbox e) (entity-bbox e)))))

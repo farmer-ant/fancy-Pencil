@@ -144,8 +144,9 @@ given, are used instead of DATA's own pieces (in its plane's coordinates)."
 (defun facing-view-p (v)
   "A view looking straight along an axis (not the isometric ones), or one set up by UCS."
   (or (eq (fifth v) :ucs)
-      (let ((dir (fourth v)))
-        (= 2 (count-if (lambda (c) (< (abs c) 1d-9)) (list (px dir) (py dir) (pz dir)))))))
+      (and (not (eq (fifth v) :orbit))
+       (let ((dir (fourth v)))
+        (= 2 (count-if (lambda (c) (< (abs c) 1d-9)) (list (px dir) (py dir) (pz dir))))))))
 
 (defun ucs ()
   "The working plane in use: (x y z) axes in world coordinates, or NIL for world (Top view and

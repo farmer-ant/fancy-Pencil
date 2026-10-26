@@ -98,22 +98,22 @@
 
 (defun weld-key (p) (list (round (px p) 1d-7) (round (py p) 1d-7) (round (pz p) 1d-7)))
 
-(defun mesh-polygons (data)
-  "Faces of mesh DATA as outward-facing polygons (orientation made consistent across the mesh)."
+(defun mesh-orientation (data)
+  "Outward orientation of each face of mesh DATA: (values faces flips positions closed-p), where
+FACES are the faces as canonical point indices (NIL for a degenerate face), FLIPS says which must
+be turned over, and CLOSED-P is true for a closed solid."
   (let* ((vs (coerce (mesh-verts data) 'vector))
          (canon (make-hash-table :test #'equal))
          (cidx (map 'vector (lambda (p) (or (gethash (weld-key p) canon) (setf (gethash (weld-key p) canon) (hash-table-count canon)))) vs))
-         ;; faces as lists of canonical indices, with repeated points removed
-         (faces (remove-if (lambda (f) (< (length f) 3))
-                           (mapcar (lambda (f) (let ((ix (mapcar (lambda (i) (aref cidx (1- (abs i)))) f)) (out nil))
-                                                 (dolist (i ix) (unless (eql i (first out)) (push i out)))
-                                                 (when (and (cdr out) (eql (first out) (car (last out)))) (pop out))
-                                                 (nreverse out)))
-                                   (mesh-faces data))))
+         (fv (coerce (mapcar (lambda (f) (let ((ix (mapcar (lambda (i) (aref cidx (1- (abs i)))) f)) (out nil))
+                                           (dolist (i ix) (unless (eql i (first out)) (push i out)))
+                                           (when (and (cdr out) (eql (first out) (car (last out)))) (pop out))
+                                           (and (>= (length out) 3) (nreverse out))))
+                             (mesh-faces data))
+                     'vector))
          (pos (let ((v (make-array (hash-table-count canon))))
                 (loop for p across vs for c across cidx do (setf (aref v c) (pt3 p)))
                 v))
-         (fv (coerce faces 'vector))
          (nf (length fv))
          (edge-faces (make-hash-table :test #'equal))
          (flip (make-array nf :initial-element nil))
@@ -121,12 +121,12 @@
          (comp (make-array nf :initial-element -1)))
     (flet ((edges (f) (loop for (a b) on (append f (list (first f))) while b collect (cons a b))))
       (dotimes (i nf)
-        (dolist (e (edges (aref fv i)))
+        (dolist (e (and (aref fv i) (edges (aref fv i))))
           (push i (gethash (if (< (car e) (cdr e)) e (cons (cdr e) (car e))) edge-faces))))
       ;; make neighbours agree: a shared edge runs opposite ways in the two faces
       (let ((ncomp 0))
         (dotimes (s nf)
-          (unless (aref seen s)
+          (unless (or (aref seen s) (null (aref fv s)))
             (setf (aref seen s) t (aref comp s) ncomp)
             (let ((queue (list s)))
               (loop while queue do
@@ -136,7 +136,6 @@
                     (dolist (j (gethash (if (< (car e) (cdr e)) e (cons (cdr e) (car e))) edge-faces))
                       (unless (aref seen j)
                         (setf (aref seen j) t (aref comp j) ncomp)
-                        ;; same direction in J as in I: J must be turned over
                         (when (member e (edges (aref fv j)) :test #'equal) (setf (aref flip j) t))
                         (push j queue)))))))
             (incf ncomp)))
@@ -148,17 +147,51 @@
                                        sum (vdot3 (first ps) (cross3 (nth k ps) (nth (1+ k) ps))))))))
             (when (minusp vol)
               (dotimes (i nf) (when (= (aref comp i) c) (setf (aref flip i) (not (aref flip i))))))))))
+    (values fv flip pos
+            (let ((closed t)) (maphash (lambda (k v) (declare (ignore k)) (unless (= (length v) 2) (setf closed nil))) edge-faces) closed))))
+
+(defun mesh-polygons (data)
+  "Faces of mesh DATA as outward-facing polygons (orientation made consistent across the mesh)."
+  (multiple-value-bind (fv flip pos) (mesh-orientation data)
     ;; polygons; non-flat quads become two triangles
-    (loop for i below nf
-          for f = (if (aref flip i) (reverse (aref fv i)) (aref fv i))
-          for ps = (mapcar (lambda (k) (aref pos k)) f)
-          append (if (and (= (length ps) 4)
-                          (let ((n (newell-normal ps)))
-                            (or (null n) (> (abs (- (vdot3 n (fourth ps)) (vdot3 n (first ps)))) 1d-9)
-                                (> (abs (- (vdot3 n (third ps)) (vdot3 n (first ps)))) 1d-9))))
-                     (remove nil (list (make-cpoly (list (first ps) (second ps) (third ps)))
-                                       (make-cpoly (list (first ps) (third ps) (fourth ps)))))
-                     (let ((p (make-cpoly ps))) (and p (list p)))))))
+    (loop for i below (length fv)
+          for f0 = (aref fv i)
+          when f0
+            append (let* ((f (if (aref flip i) (reverse f0) f0))
+                          (ps (mapcar (lambda (k) (aref pos k)) f)))
+                     (if (and (= (length ps) 4)
+                              (let ((n (newell-normal ps)))
+                                (or (null n) (> (abs (- (vdot3 n (fourth ps)) (vdot3 n (first ps)))) 1d-9)
+                                    (> (abs (- (vdot3 n (third ps)) (vdot3 n (first ps)))) 1d-9))))
+                         (remove nil (list (make-cpoly (list (first ps) (second ps) (third ps)))
+                                           (make-cpoly (list (first ps) (third ps) (fourth ps)))))
+                         (let ((p (make-cpoly ps))) (and p (list p))))))))
+
+(defvar *display-faces-cache* (make-hash-table :test #'eq :weakness :key))
+
+(defun mesh-display-faces (data)
+  "For drawing: ((points outward-normal edge-visible-flags) ...) and whether the mesh is closed."
+  (let ((c (gethash data *display-faces-cache*)))
+    (if c (values (car c) (cdr c))
+        (multiple-value-bind (fv flip pos closed) (mesh-orientation data)
+          (declare (ignore pos))
+          (let* ((vs (coerce (mesh-verts data) 'vector))
+                 ;; an edge shows if any face says so (each face draws it when it faces the viewer)
+                 (shown (make-hash-table :test #'equal))
+                 (key (lambda (a b) (let ((ka (weld-key (aref vs (1- (abs a))))) (kb (weld-key (aref vs (1- (abs b))))))
+                                      (if (string< (prin1-to-string ka) (prin1-to-string kb)) (list ka kb) (list kb ka))))))
+            (dolist (f (mesh-faces data))
+              (loop for (a b) on (append f (list (first f))) while b
+                    do (when (plusp a) (setf (gethash (funcall key a b) shown) t))))
+            (let ((out (loop for f in (mesh-faces data) for i from 0
+                             when (aref fv i)
+                               collect (let* ((ps (mapcar (lambda (k) (aref vs (1- (abs k)))) f))
+                                              (vis (loop for (a b) on (append f (list (first f))) while b
+                                                         collect (gethash (funcall key a b) shown)))
+                                              (n (newell-normal ps)))
+                                         (list ps (if (and n (aref flip i)) (v* n -1d0) n) vis)))))
+            (setf (gethash data *display-faces-cache*) (cons out closed))
+            (values out closed)))))))
 
 ;;; ---------- polygons -> a clean mesh ----------
 
