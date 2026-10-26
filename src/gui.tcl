@@ -98,7 +98,7 @@ proc mcmd {m label cmd {accel ""}} {
 }
 proc menucmd {cmd} { emit MENU $cmd; focus .cmd.e }
 
-foreach {name label} {file File edit Edit view View draw Draw dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
+foreach {name label} {file File edit Edit view View draw Draw solid Solids dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
     menu .mb.$name
     .mb add cascade -label $label -menu .mb.$name
 }
@@ -171,6 +171,11 @@ mcmd .mb.view "Pan" PAN
 .mb.view add separator
 mcmd .mb.view "Regen" REGEN
 
+foreach {l c} {Box BOX Wedge WEDGE Cylinder CYLINDER Cone CONE Sphere SPHERE Torus TORUS} { mcmd .mb.solid $l $c }
+.mb.solid add separator
+foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull PRESSPULL} { mcmd .mb.solid $l $c }
+.mb.solid add separator
+mcmd .mb.solid "Working Plane on a Face (UCS)" "UCS Face"
 mcmd .mb.draw "Line" LINE
 mcmd .mb.draw "Polyline" PLINE
 mcmd .mb.draw "Rectangle" RECTANG

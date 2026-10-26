@@ -369,6 +369,29 @@ so there an object in another plane is saved as its 3D edges.
 The axes icon (bottom left) shows X, Y and Z in the
 current view; each drawing tab keeps its own view. Thickness and elevation are saved in DXF.
 
+### 3D solids (Solids menu)
+
+Solids are built in the working plane (Top, a side view, or a UCS), so a box drawn in the Front
+view stands upright. They are meshes - flat facets - shown as AutoCAD shows solids in wireframe:
+outlines, sharp edges and a few lines (isolines) along curved sides.
+
+* **BOX** (corners, [Center], [Cube], [Length] then height), **WEDGE**, **CYLINDER**, **CONE**
+  (with [Top radius] for a cut-off cone), **SPHERE**, **TORUS**. Heights may be negative.
+* **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
+  ones into surfaces: by a height, a [Direction], or along a [Path].
+* **REVOLVE** shapes about an axis (two points, X, Y, Z, or a line) by any angle.
+* **SWEEP** shapes along a path - line, arc, polyline (corners are mitred), spline.
+* **LOFT** through cross sections picked in order (a circle to a square, say).
+* **PRESSPULL**: click inside a closed area, or on a flat face of a solid (in any view), and give
+  the height. Pulling into a solid will come with the boolean tools.
+* **UCS Face** on a solid puts the working plane on the face you click, to draw on it.
+
+The shapes used are removed afterwards (set DELOBJ to 0 to keep them). Properties and the
+hover tip show a solid's volume. Solids are saved as AutoCAD polyface meshes, which AutoCAD opens
+and shows exactly (there they are meshes, not ACIS solids); polyface meshes, polygon meshes and
+3D faces in AutoCAD drawings open as solids/meshes here too. Union, subtract, intersect and solid
+editing come next.
+
 ### Isometric drafting (View → Isometric Drafting, ISODRAFT)
 
 AutoCAD's 2D isometric mode for drawing isometric pictures: the grid becomes an isometric grid,

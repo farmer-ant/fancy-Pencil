@@ -7,6 +7,8 @@
 (defun entity-grips (data)
   "List of (point . id) grips for DATA."
   (when (offplane-p data) (return-from entity-grips (offplane-grips data)))
+  ;; a solid: one grip in its middle moves it
+  (when (equal (dxf 0 data) "POLYFACE") (return-from entity-grips (list (cons (mesh-centroid data) :offplane))))
   (let ((type (dxf 0 data)))
     (flet ((g (code id) (let ((p (dxf code data))) (and p (cons (pt3 p) id)))))
       (remove nil

@@ -14,6 +14,7 @@
 (defun type-display-name (type)
   (cond ((equal type "LWPOLYLINE") "Polyline") ((equal type "INSERT") "Block Reference")
         ((equal type "MTEXT") "MText") ((equal type "DIMENSION") "Dimension") ((equal type "LEADER") "Leader")
+        ((equal type "POLYFACE") "3D Solid (mesh)")
         (t (string-capitalize type))))
 
 (defun common-value (sel fn)
@@ -91,6 +92,10 @@
              (list "" "Measurement" (v (lambda (d) (fmt-num (or (dxf 42 d) 0d0)))) :ro)
              (list "DIMTEXT" "Text override" (v (lambda (d) (or (dxf 1 d) ""))) :entry)
              (list "DIMSTY" "Dim style" (v (lambda (d) (or (dxf 3 d) "Standard"))) :combo (mapcar #'dimstyle-name (all-dimstyles)))))
+      ((equal type "POLYFACE")
+       (list '("" "Solid (mesh)" "" :head)
+             (list "" "Volume" (v (lambda (d) (let ((vol (mesh-volume d))) (if (> vol 1d-12) (fmt-num vol) "open surface")))) :ro)
+             (list "" "Faces" (v (lambda (d) (princ-to-string (length (mesh-faces d))))) :ro)))
       ((equal type "LEADER")
        (list '("" "Leader" "" :head)
              (list "LDRASZ" "Arrow size" (v (lambda (d) (fmt-num (getf (leader-arrow-vars d) :dimasz)))) :entry)

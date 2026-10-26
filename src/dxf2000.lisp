@@ -116,6 +116,7 @@
         ((equal type "HATCH") (common) (write-hatch-body out data))
         ((equal type "DIMENSION") (common) (write-dimension-body out data))
         ((equal type "LEADER") (common) (write-leader-2000 out data))
+        ((equal type "POLYFACE") (write-mesh-2000 out data handle owner))
         (t nil)))))
 
 (defun write-hatch-body (out data)
