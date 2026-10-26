@@ -385,6 +385,24 @@ Enter to finish. The view stays "Custom" until you pick a standard view.
 Faces are painted far to near, so very large faces crossing others can occasionally overlap
 wrongly. Plots follow the visual style (hidden-line and shaded PDFs).
 
+### Mass properties (MASSPROP; Tools or Solids → Mass Properties)
+
+Select closed flat objects - closed polylines (arcs included), circles, ellipses, closed splines -
+and/or 3D solids. Regions report area, perimeter, bounding box, centroid, moments and product of
+inertia, radii of gyration and the principal moments with their directions about the centroid.
+Several regions are added together, and a closed object lying inside another selected one counts
+as a hole (select a plate and its holes together). Solids report mass (density 1, so it equals the
+volume), volume, bounding box, centroid, moments and products of inertia, radii of gyration and
+principal moments. Values are in the working plane's coordinates. The report opens in its own
+window (Copy puts it on the clipboard) and can be written to an .mpr file.
+
+### Quick Properties (QP)
+
+The Quick Properties window stays open until you press its Close button, beside the drawing at
+the top right (move it anywhere; it comes back there next time). Keep working in the drawing while
+it is up: it follows whatever you select, and with nothing selected it shows the current settings
+that new objects get. Esc clears the selection without closing it.
+
 ### Layouts, paper space and viewports (Layout menu)
 
 Under the drawing are tabs: **Model** and **Layout1** (add more with **+**; right-click a layout
@@ -641,6 +659,7 @@ or splines. Express Tools that depend on external references (XREF tools) are no
 ./fancypencil --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp tests/test-v03.lsp < /dev/null
 sbcl --non-interactive --load load.lisp --load tests/test-views.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-layouts.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-massprop.lisp
 ```
 
 ## Layout
@@ -655,6 +674,7 @@ src/db.lisp        drawing database (entities are DXF association lists, like en
 src/ltype.lisp     linetypes (.lin), dashes, lineweights
 src/hatch.lisp     hatch patterns, rendering, boundary detection
 src/dxf.lisp       DXF reader and R12 writer
+src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
 src/dxf2000.lisp   AutoCAD 2000 DXF writer
 src/alisp.lisp     AutoLISP reader, printer, evaluator and core functions

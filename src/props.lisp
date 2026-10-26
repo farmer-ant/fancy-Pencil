@@ -208,9 +208,11 @@
       (when *palette-shown*
         (multiple-value-bind (types cur) (types-tcl)
           (tk "palette_set ~A ~A ~A ~A" (tq (palette-title sel)) (rows-tcl (palette-rows sel)) types cur)))
+      ;; Quick Properties stays open until its Close button: with nothing selected it shows the
+      ;; current settings (what new objects get)
       (when *quick-shown*
         (if (null sel)
-            (progn (setf *quick-shown* nil) (tk "qpanel_hide"))
+            (tk "qpanel_set ~A {} ALL" (rows-tcl (quick-rows nil)))
             (multiple-value-bind (types cur) (types-tcl)
               (tk "qpanel_set ~A ~A ~A" (rows-tcl (quick-rows sel)) types cur)))))))
 
@@ -223,7 +225,7 @@
     (unless sel
       (setf sel (get-selection "Select objects: "))
       (when sel (setf *pickfirst* sel) (when (gui-p) (ui-highlight sel t) (refresh-grips))))
-    (when (and sel (gui-p))
+    (when (gui-p)
       (setf *quick-shown* t)
       (refresh-palette))))
 
