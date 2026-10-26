@@ -449,6 +449,11 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
 * **LOFT** through cross sections picked in order (a circle to a square, say).
 * **PRESSPULL**: click inside a closed area, or on a flat face of a solid (in any view), and give
   the height. On a solid's face, a positive height adds to the solid, a negative one cuts into it.
+  As you move the mouse, the face a click would take lights up in orange: the face in front at the
+  cursor. While you give the height, the pulled shape is previewed; move the mouse along the face's
+  direction (back for negative) and click, or type the height. **Edge**: pick an edge of the solid
+  (it lights up), then Next/Accept between the faces that meet there - handy when the face you want
+  is seen edge-on or behind another.
 * **UNION** joins solids, **SUBTRACT** removes solids from others (pick what to keep, Enter, then
   what to remove), **INTERSECT** keeps only the shared part, and **SLICE** cuts solids with a plane
   (two points square to the working plane, XY/YZ/ZX through a point, or 3 points), keeping one side

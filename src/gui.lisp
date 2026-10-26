@@ -800,6 +800,13 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
                                (if (eq style :crossing) " -dash {4 3}" "")))))))
     (:data (destructuring-bind (data) (rest item)
              (render-data data (entity-aci data) "tmp" nil)))
+    ;; a solid's face (PRESSPULL ...): shaded orange with a heavy outline
+    (:face (let ((xy (loop for p in (second item) append (multiple-value-bind (x y) (w->s p) (list (fmtn x) (fmtn y))))))
+             (when (>= (length xy) 6)
+               (list (format nil ".c create polygon ~{~A~^ ~} -fill #ff9f1a -stipple gray25 -outline #ff9f1a -width 3 -tags tmp" xy)))))
+    (:edge (multiple-value-bind (x1 y1) (w->s (second item))
+             (multiple-value-bind (x2 y2) (w->s (third item))
+               (list (format nil ".c create line ~A ~A ~A ~A -fill #ff9f1a -width 4 -tags tmp" (fmtn x1) (fmtn y1) (fmtn x2) (fmtn y2))))))
     (:hotgrip (multiple-value-bind (x y) (w->s (second item))
                 (let ((s (grip-pixel-size)))
                   (list (format nil ".c create rectangle ~D ~D ~D ~D -fill #ff2a2a -outline #6b0000 -tags tmp"

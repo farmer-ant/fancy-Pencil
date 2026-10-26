@@ -524,68 +524,231 @@ it, with mitred corners."
   "How near point P is to the viewer (bigger = nearer)."
   (if (projected-view-p) (vdot3 (pt3 p) (fourth *view*)) (pz (pt3 p))))
 
-(defun face-under (e pick)
-  "The face of solid E under the cursor PICK (nearest the viewer): its corner points, or NIL."
-  (let* ((data (ent-data e)) (q (if (projected-view-p) (w->uv pick) (pt3 pick))) (best nil) (bd nil))
-    (dolist (f (mesh-faces data) best)
-      (let* ((ps (mesh-face-points data f))
-             (flat (mapcar (lambda (p) (if (projected-view-p) (w->uv p) (pt (px p) (py p)))) ps)))
-        (when (point-in-polygon-p q flat)
-          (let ((dz (/ (reduce #'+ (mapcar #'view-depth ps)) (length ps))))
-            (when (or (null bd) (> dz bd)) (setf bd dz best ps))))))))
+(defun view-frame ()
+  "(right up toward-viewer) for the view: the screen directions in the coordinates objects are
+seen in (world for the isometric views, the working plane's otherwise)."
+  (if (projected-view-p)
+      (list (pt3 (second *view*)) (pt3 (third *view*)) (pt3 (fourth *view*)))
+      (list (pt 1 0 0) (pt 0 1 0) (pt 0 0 1))))
+
+(defun screen-uv (p frame) (pt (vdot3 (pt3 p) (first frame)) (vdot3 (pt3 p) (second frame))))
+
+(defun oriented-faces (data)
+  "Faces of solid DATA as (points outward-normal), the points running counterclockwise seen from
+outside. Second value: whether the solid is closed."
+  (multiple-value-bind (faces closed) (mesh-display-faces data)
+    (values (loop for (ps n) in faces
+                  when n collect (let ((nn (newell-normal ps)))
+                                   (list (if (and nn (minusp (vdot3 nn n))) (reverse ps) ps) (unit3 n))))
+            closed)))
+
+(defun face-hit (e pick)
+  "The face of solid E under screen point PICK: (values points outward-normal depth) for the
+nearest face turned toward the viewer, or NIL."
+  (let* ((data (ent-data e)) (frame (view-frame)) (dir (third frame))
+         (q (screen-uv pick frame)) (best nil) (bn nil) (bd nil))
+    (multiple-value-bind (faces closed) (oriented-faces data)
+      (dolist (f faces)
+        (destructuring-bind (ps n) f
+          (let ((facing (vdot3 n dir)))
+            (when (and (> (abs facing) 1d-9) (or (not closed) (plusp facing))
+                       (point-in-polygon-p q (mapcar (lambda (p) (screen-uv p frame)) ps)))
+              ;; how near the face is at the cursor: where the line of sight meets its plane
+              (let* ((base (v+ (v* (first frame) (px q)) (v* (second frame) (py q))))
+                     (depth (/ (- (vdot3 n (first ps)) (vdot3 n base)) facing)))
+                (when (or (null bd) (> depth bd)) (setf best ps bn n bd depth)))))))
+      (and best (values best bn bd)))))
+
+(defun face-under (e pick) (face-hit e pick))
+
+(defun edge-key (a b)
+  (let ((ka (weld-key a)) (kb (weld-key b)))
+    (if (string< (prin1-to-string ka) (prin1-to-string kb)) (list ka kb) (list kb ka))))
+
+(defun flat-face-group (data seed n)
+  "The faces of solid DATA in the plane of face SEED (outward normal N) and joined to it by edges."
+  (let* ((d0 (vdot3 n (first seed)))
+         (coplanar (remove-if-not (lambda (f) (and (> (vdot3 (second f) n) 0.9999d0)
+                                                   (< (abs (- (vdot3 n (first (first f))) d0)) 1d-6)))
+                                  (oriented-faces data)))
+         (edge-faces (make-hash-table :test #'equal))
+         (seed-keys (mapcar #'weld-key seed)))
+    (dolist (f coplanar)
+      (loop for (a b) on (append (first f) (list (first (first f)))) while b
+            do (push f (gethash (edge-key a b) edge-faces))))
+    (let* ((start (or (find-if (lambda (f) (every (lambda (p) (member (weld-key p) seed-keys :test #'equal)) (first f))) coplanar)
+                      (first coplanar)))
+           (group (and start (list start))) (todo group))
+      ;; spread from the seed across shared edges
+      (loop while todo
+            do (let ((f (pop todo)))
+                 (loop for (a b) on (append (first f) (list (first (first f)))) while b
+                       do (dolist (g (gethash (edge-key a b) edge-faces))
+                            (unless (member g group :test #'eq) (push g group) (push g todo))))))
+      group)))
+
+(defun face-outline (group)
+  "The outer boundary of a group of coplanar faces, counterclockwise seen from outside."
+  (let ((dir (make-hash-table :test #'equal)) (pts (make-hash-table :test #'equal)))
+    (dolist (f group)
+      (loop for (a b) on (append (first f) (list (first (first f)))) while b
+            do (let ((ka (weld-key a)) (kb (weld-key b)))
+                 (setf (gethash ka pts) a (gethash kb pts) b)
+                 (push kb (gethash ka dir)))))
+    ;; boundary edges: no other face of the group runs back along them
+    (let ((next (make-hash-table :test #'equal)) (loops nil) (used (make-hash-table :test #'equal)))
+      (maphash (lambda (ka kbs)
+                 (dolist (kb kbs) (unless (member ka (gethash kb dir) :test #'equal) (setf (gethash ka next) kb))))
+               dir)
+      (maphash (lambda (k v) (declare (ignore v))
+                 (unless (gethash k used)
+                   (let ((lp nil) (cur k))
+                     (loop while (and cur (not (gethash cur used)) (< (length lp) 10000))
+                           do (setf (gethash cur used) t) (push (gethash cur pts) lp) (setf cur (gethash cur next)))
+                     (when (>= (length lp) 3) (push (nreverse lp) loops)))))
+               next)
+      ;; the outer loop is the longest one (the others go round holes)
+      (first (sort loops #'> :key (lambda (lp) (loop for (a b) on (append lp (list (first lp))) while b sum (dist a b))))))))
+
+(defun simplify-loop (pts)
+  "Drop points lying on a straight line between their neighbours."
+  (let ((n (length pts)))
+    (if (< n 4)
+        pts
+        (or (loop for i below n
+                  for a = (nth (mod (1- i) n) pts) for b = (nth i pts) for c = (nth (mod (1+ i) n) pts)
+                  unless (< (dist (cross3 (v- b a) (v- c b)) (pt 0 0 0)) (* 1d-9 (max 1d0 (expt (dist a c) 2))))
+                    collect b)
+            pts))))
+
+(defun whole-face (e ps n)
+  (let ((outline (face-outline (flat-face-group (ent-data e) ps n))))
+    (list e (simplify-loop (or outline ps)) n)))
+
+(defun solid-face-at (pick)
+  "The flat face under screen point PICK on any solid, nearest the viewer: (solid outline normal)."
+  (let ((best nil) (bd nil))
+    (dolist (e (live-entities))
+      (when (and (equal (ent-type e) "POLYFACE") (entity-visible-p e))
+        (multiple-value-bind (ps n depth) (face-hit e pick)
+          (when (and ps (or (null bd) (> depth bd))) (setf best (list e ps n) bd depth)))))
+    (and best (apply #'whole-face best))))
 
 (defun face-loop (e pick)
-  "The whole flat face of solid E under PICK: the outline of all faces lying in that face's plane
-and touching it (a box side is two triangles or one quad; a cap is many triangles)."
-  (let* ((data (ent-data e)) (seed (face-under e pick)))
-    (when seed
-      (let* ((n (newell-normal seed)) (d0 (vdot3 n (first seed)))
-             (coplanar (remove-if-not (lambda (f) (let* ((ps (mesh-face-points data f)) (fn (newell-normal ps)))
-                                                     (and fn (> (vdot3 fn n) 0.9999d0) (< (abs (- (vdot3 n (first ps)) d0)) 1d-6))))
-                                      (mesh-faces data)))
-             ;; boundary edges: used by one coplanar face only
-             (count (make-hash-table :test #'equal)) (dir (make-hash-table :test #'equal)))
-        (dolist (f coplanar)
-          (loop for (a b) on (append f (list (first f))) while b
-                do (let* ((ia (abs a)) (ib (abs b)) (key (if (< ia ib) (cons ia ib) (cons ib ia))))
-                     (incf (gethash key count 0)) (setf (gethash (cons ia ib) dir) t))))
-        ;; walk the outline
-        (let* ((vs (mesh-verts data))
-               (edges (loop for k being the hash-keys of count using (hash-value c) when (= c 1) collect k))
-               (next (make-hash-table)))
-          (dolist (k edges)
-            (let ((a (car k)) (b (cdr k)))
-              (if (gethash (cons a b) dir) (setf (gethash a next) b) (setf (gethash b next) a))))
-          (when edges
-            (let* ((start (car (first edges))) (loop-ix (list start)))
-              (loop for nx = (gethash (car loop-ix) next)
-                    while (and nx (/= nx start) (< (length loop-ix) 10000))
-                    do (push nx loop-ix))
-              (values (mapcar (lambda (i) (nth (1- i) vs)) (nreverse loop-ix)) n))))))))
+  "The whole flat face of solid E under PICK: (values outline outward-normal)."
+  (multiple-value-bind (ps n) (face-hit e pick)
+    (when ps (values-list (rest (whole-face e ps n))))))
 
-(defcmd "PRESSPULL" ("PRESS") "Click inside a closed area (or on a flat face of a solid) and pull it into a solid."
-  (let ((p (gpoint "Click inside bounded areas or on a face of a solid: ")))
-    (when (pointp p)
-      (let* ((solid (find-if (lambda (e) (and (equal (ent-type e) "POLYFACE") (face-under e p)))
-                             (sort (remove-if-not (lambda (e) (equal (ent-type e) "POLYFACE")) (live-entities))
-                                   #'> :key (lambda (e) (let ((f (face-under e p))) (if f (reduce #'max (mapcar #'view-depth f)) -1d300))))))
-             (shape (and (not solid) (let ((loops (ignore-errors (detect-boundary p))))
-                                       (and loops (mapcar (lambda (p2) (pt (px p2) (py p2) (pz (pt3 p))))
-                                                          (loop-polygon-directed (first loops) 24)))))))
-        (multiple-value-bind (pts normal) (if solid (face-loop solid p) (values shape (pt 0 0 1)))
-          (cond
-            ((null pts) (out (format nil "No closed area or solid face there.~%")))
-            (t
-             (let ((h (ask-height "Specify extrusion height (negative pushes in)" p *last-solid-height*)))
-               (when h
-                 (setf *last-solid-height* h)
-                 (let* ((pts (if (< (dist (first pts) (car (last pts))) 1d-9) (butlast pts) pts))
-                        (prism (extrude-mesh pts t (v* (unit3 normal) h))))
-                   (if solid
-                       ;; on a solid's face: pulling out adds to it, pushing in cuts into it
-                       (replace-with-result (list solid)
-                                            (boolean-meshes (if (minusp h) :subtract :union) (list (ent-data solid)) (list prism))
-                                            (if (minusp h) "Push" "Pull"))
-                       (add prism)))
-                 (out (format nil "Pulled ~A ~A.~%" (if solid "the face" "the area") (fmt-len h)))
-                 (when (gui-p) (gui-regen)))))))))))
+;;; picking an edge, then one of the faces that meet there
+
+(defun dist-point-segment-2d (p a b)
+  (let* ((ab (v- b a)) (l2 (+ (expt (px ab) 2) (expt (py ab) 2)))
+         (tt (if (< l2 1d-24) 0d0 (max 0d0 (min 1d0 (/ (+ (* (- (px p) (px a)) (px ab)) (* (- (py p) (py a)) (py ab))) l2))))))
+    (dist2d p (pt (+ (px a) (* tt (px ab))) (+ (py a) (* tt (py ab)))))))
+
+(defun solid-edge-at (pick)
+  "The solid edge nearest screen point PICK, within the pick box: (solid a b)."
+  (let* ((frame (view-frame)) (q (screen-uv pick frame))
+         (tol (gui-pixels->world (+ 3 (or (sysvar "PICKBOX") 5)))) (best nil) (bd nil))
+    (dolist (e (live-entities) best)
+      (when (and (equal (ent-type e) "POLYFACE") (entity-visible-p e))
+        (dolist (f (mesh-display-faces (ent-data e)))
+          (destructuring-bind (ps n vis) f
+            (declare (ignore n))
+            (loop for (a b) on (append ps (list (first ps))) while b for v in vis
+                  when v do (let ((dd (dist-point-segment-2d q (screen-uv a frame) (screen-uv b frame))))
+                              (when (and (< dd tol) (or (null bd) (< dd bd))) (setf best (list e a b) bd dd))))))))))
+
+(defun faces-at-edge (e a b)
+  "The flat faces (solid outline normal) of solid E that edge AB borders, the one facing the viewer first."
+  (let ((ka (weld-key a)) (kb (weld-key b)) (out nil) (dir (third (view-frame))))
+    (dolist (f (oriented-faces (ent-data e)))
+      (let ((keys (mapcar #'weld-key (first f))))
+        (when (and (member ka keys :test #'equal) (member kb keys :test #'equal)
+                   (notany (lambda (o) (> (vdot3 (third o) (second f)) 0.9999d0)) out))
+          (push (whole-face e (first f) (second f)) out))))
+    (sort out #'> :key (lambda (o) (vdot3 (third o) dir)))))
+
+(defun outline-pieces (pts) (loop for (a b) on (append pts (list (first pts))) while b collect (list :seg (pt3 a) (pt3 b))))
+
+(defvar *pp-face-choice* nil "The face shown while choosing among the faces at an edge.")
+
+(defun pick-face-by-edge ()
+  "Edge: pick an edge of a solid, then choose between the faces that meet there (solid outline normal)."
+  (let ((r (gpoint "Select an edge of a solid: "
+                   :drag (lambda (cur) (let ((ed (solid-edge-at cur)))
+                                         (and ed (list (list :edge (second ed) (third ed)))))))))
+    (when (pointp r)
+      (let* ((ed (solid-edge-at r)) (faces (and ed (faces-at-edge (first ed) (second ed) (third ed)))))
+        (if (null faces)
+            (progn (out (format nil "No solid edge there.~%")) nil)
+            (let ((i 0))
+              (loop
+                (setf *pp-face-choice* (nth i faces))
+                (let ((k (get-user-input :keyword
+                                         :prompt (format nil "Face ~D of ~D highlighted. [Next/Accept] <Accept>: " (1+ i) (length faces))
+                                         :keywords '("Next" "Accept")
+                                         :drag (lambda (cur) (declare (ignore cur)) (list (list :face (second *pp-face-choice*)))))))
+                  (if (equal k "Next")
+                      (setf i (mod (1+ i) (length faces)))
+                      (return (nth i faces)))))))))))
+
+(defvar *pp-drag-h* nil)
+
+(defun signed-height (base normal cur)
+  "The height along NORMAL from BASE that the cursor shows: how far it is along the normal's
+direction on the screen (straight distance when the normal points at the viewer)."
+  (let* ((frame (view-frame)) (nuv (screen-uv normal frame)) (l2 (+ (expt (px nuv) 2) (expt (py nuv) 2)))
+         (dv (v- (screen-uv cur frame) (screen-uv base frame))))
+    (if (< l2 0.04d0)
+        (* (if (minusp (vdot3 normal (third frame))) -1 1) (dist2d (pt 0 0) dv))
+        (/ (+ (* (px dv) (px nuv)) (* (py dv) (py nuv))) l2))))
+
+(defun prism-preview (pts normal h)
+  (let* ((off (v* (unit3 normal) h)) (top (mapcar (lambda (p) (v+ (pt3 p) off)) pts)))
+    (append (outline-pieces top) (loop for p in pts for q in top collect (list :seg (pt3 p) q)))))
+
+(defcmd "PRESSPULL" ("PRESS") "Click inside a closed area or on a flat face of a solid (or pick an Edge) and pull it into a solid."
+  (setf *pp-drag-h* nil)
+  (let* ((p (gpoint "Click inside bounded areas or on a face of a solid or [Edge]: " :keywords '("Edge")
+                    ;; the face that a click would take lights up under the cursor
+                    :drag (lambda (cur) (let ((f (ignore-errors (solid-face-at cur))))
+                                          (and f (list (list :face (second f))))))))
+         (picked (cond ((equal p "Edge") (pick-face-by-edge))
+                       ((pointp p) (solid-face-at p)))))
+    (when (or (pointp p) picked)
+      (let* ((solid (first picked))
+             (shape (and (not picked) (pointp p)
+                         (let ((loops (ignore-errors (detect-boundary p))))
+                           (and loops (mapcar (lambda (p2) (pt (px p2) (py p2) (pz (pt3 p))))
+                                              (loop-polygon-directed (first loops) 24))))))
+             (pts (if picked (second picked) shape))
+             (normal (if picked (third picked) (pt 0 0 1))))
+        (if (null pts)
+            (out (format nil "No closed area or solid face there.~%"))
+            (let* ((pts (if (< (dist (first pts) (car (last pts))) 1d-9) (butlast pts) pts))
+                   (base (v* (reduce #'v+ (mapcar #'pt3 pts)) (/ 1d0 (length pts))))
+                   (r (get-user-input :distance
+                                      :prompt (format nil "Specify extrusion height (negative pushes in) <~A>: " (fmt-len *last-solid-height*))
+                                      :base base
+                                      :drag (lambda (cur)
+                                              (let ((h (signed-height base normal cur)))
+                                                (setf *pp-drag-h* h)
+                                                (cons (list :face pts) (prism-preview pts normal h))))))
+                   ;; a click gives the height the preview showed (negative pushes in); typed, as typed
+                   (h (cond ((null r) *last-solid-height*)
+                            ((and (realp r) *pp-drag-h* (pointp *cursor-world*)
+                                  (< (abs (- r (dist2d base *cursor-world*))) 1d-9))
+                             *pp-drag-h*)
+                            ((realp r) (d r)))))
+              (when (and h (> (abs h) 1d-12))
+                (setf *last-solid-height* h)
+                (let ((prism (extrude-mesh pts t (v* (unit3 normal) h))))
+                  (if solid
+                      ;; on a solid's face: pulling out adds to it, pushing in cuts into it
+                      (replace-with-result (list solid)
+                                           (boolean-meshes (if (minusp h) :subtract :union) (list (ent-data solid)) (list prism))
+                                           (if (minusp h) "Push" "Pull"))
+                      (add prism)))
+                (out (format nil "Pulled ~A ~A.~%" (if solid "the face" "the area") (fmt-len h)))
+                (when (gui-p) (gui-regen)))))))))

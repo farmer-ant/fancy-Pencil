@@ -278,4 +278,22 @@
 (chk "an orbit view is not a working plane" (let ((*view* (orbit-view 0d0 0d0))) (ucs)) nil)
 (al "(command \"plan\")")
 
+;; PRESSPULL picks the face in front at the cursor; Edge chooses between the faces at an edge
+(al "(command \"erase\" (ssget \"x\") \"\")")
+(al "(command \"box\" '(0 0 0) '(4 2 0) 3)")
+(al "(command \"-view\" \"seiso\")")
+(chk "face under the cursor: top" (r3 (third (solid-face-at (pt 2 1 3)))) '(0 0 1))
+(chk "face under the cursor: front" (r3 (third (solid-face-at (pt 2 0 1.5)))) '(0 -1 0))
+(chk "face under the cursor: right" (r3 (third (solid-face-at (pt 4 1 1.5)))) '(1 0 0))
+(chk "a whole box side is one outline" (length (second (solid-face-at (pt 2 0 1.5)))) 4)
+(chk "edge under the cursor" (r3 (rest (solid-edge-at (pt 4 0 1.5)))) '((4 0 0) (4 0 3)))
+(chk "the faces at that edge, nearest the viewer first"
+     (let ((ed (solid-edge-at (pt 4 0 1.5)))) (r3 (mapcar #'third (faces-at-edge (first ed) (second ed) (third ed)))))
+     '((1 0 0) (0 -1 0)))
+(al "(command \"presspull\" '(2 1 3) 2)")
+(chk "pull the top up 2" (r3 (mesh-volume (ent-data (newest)))) 40)
+(al "(command \"presspull\" \"edge\" '(4 0 1.5) \"next\" \"\" -1)")
+(chk "Edge, next face (front), push in 1" (r3 (mesh-volume (ent-data (newest)))) 20)
+(al "(command \"plan\")")
+
 (format t "~%View tests: ~D passed, ~D failed.~%" *pass* *fail*)
