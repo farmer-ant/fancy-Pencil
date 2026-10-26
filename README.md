@@ -383,14 +383,18 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
 * **SWEEP** shapes along a path - line, arc, polyline (corners are mitred), spline.
 * **LOFT** through cross sections picked in order (a circle to a square, say).
 * **PRESSPULL**: click inside a closed area, or on a flat face of a solid (in any view), and give
-  the height. Pulling into a solid will come with the boolean tools.
+  the height. On a solid's face, a positive height adds to the solid, a negative one cuts into it.
+* **UNION** joins solids, **SUBTRACT** removes solids from others (pick what to keep, Enter, then
+  what to remove), **INTERSECT** keeps only the shared part, and **SLICE** cuts solids with a plane
+  (two points square to the working plane, XY/YZ/ZX through a point, or 3 points), keeping one side
+  or both. The result keeps the outlines and isolines of the originals plus the lines where they
+  meet; flat faces merge without seams.
 * **UCS Face** on a solid puts the working plane on the face you click, to draw on it.
 
 The shapes used are removed afterwards (set DELOBJ to 0 to keep them). Properties and the
 hover tip show a solid's volume. Solids are saved as AutoCAD polyface meshes, which AutoCAD opens
 and shows exactly (there they are meshes, not ACIS solids); polyface meshes, polygon meshes and
-3D faces in AutoCAD drawings open as solids/meshes here too. Union, subtract, intersect and solid
-editing come next.
+3D faces in AutoCAD drawings open as solids/meshes here too.
 
 ### Isometric drafting (View → Isometric Drafting, ISODRAFT)
 

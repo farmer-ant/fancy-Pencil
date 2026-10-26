@@ -6,7 +6,7 @@
 
 (defparameter *root* (make-pathname :name nil :type nil :defaults *load-truename*))
 (defparameter *files* '("package" "geom" "db" "plane" "mesh" "vector-font" "text3d" "textstyle" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
-                         "commands" "dims" "leader" "modify" "modify2" "cmds2" "utilcmds" "dwg" "props" "express" "textcmds" "docs" "uicmds" "clip" "matchprop" "hover" "prefs" "recent" "blockedit" "views" "solids" "spell" "plot" "main"))
+                         "commands" "dims" "leader" "modify" "modify2" "cmds2" "utilcmds" "dwg" "props" "express" "textcmds" "docs" "uicmds" "clip" "matchprop" "hover" "prefs" "recent" "blockedit" "views" "solids" "csg" "spell" "plot" "main"))
 
 ;; A compiled file is used only if it was built from exactly this source file: each one has a
 ;; stamp recording its source's date and size. (Comparing dates alone fails after an update,
