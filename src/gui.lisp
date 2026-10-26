@@ -177,8 +177,8 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
         (dolist (e (live-entities))
           (when (entity-visible-p e)
             (let ((b (ignore-errors (entity-bbox e))) (data (ent-data e)))
-              ;; an object in another plane: its own 3D edges
-              (when (offplane-p data)
+              ;; an object in another plane, a solid or a 3D line: its own 3D edges
+              (when (or (offplane-p data) (wcs-type-p (dxf 0 data)))
                 (dolist (pc (entity-pieces e))
                   (dolist (p (case (first pc) ((:seg :gseg) (list (second pc) (third pc))) (:pt (list (second pc)))))
                     (multiple-value-bind (u v) (view-project (pt3 p))
@@ -696,9 +696,11 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
   (when (eq *ui* :gui)
     (let ((cmds (list ".c delete all")))
       (setf cmds (nconc cmds (grid-cmds)))
-      (dolist (e (live-entities))
-        (when (and (entity-visible-p e) (entity-in-view-p e))
-          (setf cmds (nconc cmds (entity-render-cmds e)))))
+      (if (and (fboundp 'visual-style) (not (equal (funcall 'visual-style) "Wireframe")))
+          (setf cmds (nconc cmds (funcall 'visual-style-cmds)))
+          (dolist (e (live-entities))
+            (when (and (entity-visible-p e) (entity-in-view-p e))
+              (setf cmds (nconc cmds (entity-render-cmds e))))))
       (dolist (g *grdraw-items*)
         (destructuring-bind (a b aci) g
           (setf cmds (nconc cmds (screen-line (list a b) (aci->hex aci) "grd")))))

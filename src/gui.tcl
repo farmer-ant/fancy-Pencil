@@ -140,6 +140,13 @@ foreach {label kw} {Top Top Bottom Bottom Left Left Right Right Front Front Back
 }
 set ::viewname Top
 .mb.view add command -label "Plan View (Top)" -command {menucmd PLAN}
+.mb.view add command -label "Orbit" -command {menucmd 3DORBIT}
+menu .mb.view.vs -tearoff 0
+.mb.view add cascade -label "Visual Styles" -menu .mb.view.vs
+set ::vstyle Wireframe
+foreach {label val kw} {Wireframe Wireframe Wireframe Hidden Hidden Hidden Shaded Shaded Shaded "Shaded with Edges" ShadedEdges Edges} {
+    .mb.view.vs add radiobutton -label $label -variable ::vstyle -value $val -command [list menucmd "VSCURRENT $kw"]
+}
 menu .mb.view.ucs -tearoff 0
 .mb.view add cascade -label "Working Plane (UCS)" -menu .mb.view.ucs
 mcmd .mb.view.ucs "World" "UCS World"
