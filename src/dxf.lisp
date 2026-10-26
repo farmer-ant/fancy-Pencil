@@ -160,6 +160,8 @@
 (defun polyline-from-group (head verts)
   (let* ((flags (or (dxf 70 head) 0))
          (w0 (dxf 40 head)) (w1 (dxf 41 head)))
+    (cond ((logtest flags 64) (return-from polyline-from-group (mesh-from-polyface head verts)))
+          ((logtest flags 16) (return-from polyline-from-group (mesh-from-polygon-mesh head verts))))
     (when (zerop (logand flags (logior 16 64)))
       (let ((vlist (loop for v in verts
                          for vd = (group-coords (clean-group v))
@@ -195,6 +197,7 @@
                               out))))
            (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups)))
           ((equal (dxf 67 g) 1) nil)    ; paper space
+          ((equal type "3DFACE") (push (with-src-handle (mesh-from-3dface (convert-in g)) g) out))
           (t (push (with-src-handle (convert-in g) g) out)))))
     (nreverse out)))
 
@@ -343,8 +346,9 @@
     (dolist (data (mapcar (lambda (x) (rem-dxf :src-handle x))
                           (apply-draw-order (convert-entity-list ents)
                                             (sortents-map (split-entities (section-pairs pairs "OBJECTS")) tables))))
+      (when (equal (dxf 0 data) "3DFACE") (setf data (mesh-from-3dface data)))
       (if (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
-                                 "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH")
+                                 "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE")
                   :test #'equal)
           (progn
             (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
@@ -388,6 +392,7 @@
 (defun write-entity (out data)
   (let ((type (dxf 0 data)))
     (cond
+      ((equal type "POLYFACE") (write-mesh-r12 out data))
       ((offplane-p data)                    ; R12: an object in another plane goes out as its edges
        (dolist (pc (offplane-pieces data))
          (when (member (first pc) '(:seg :gseg))
