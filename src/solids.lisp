@@ -548,14 +548,14 @@ and touching it (a box side is two triangles or one quad; a cap is many triangle
         (dolist (f coplanar)
           (loop for (a b) on (append f (list (first f))) while b
                 do (let* ((ia (abs a)) (ib (abs b)) (key (if (< ia ib) (cons ia ib) (cons ib ia))))
-                     (incf (gethash key count 0)) (setf (gethash ia dir) ib))))
+                     (incf (gethash key count 0)) (setf (gethash (cons ia ib) dir) t))))
         ;; walk the outline
         (let* ((vs (mesh-verts data))
                (edges (loop for k being the hash-keys of count using (hash-value c) when (= c 1) collect k))
                (next (make-hash-table)))
           (dolist (k edges)
             (let ((a (car k)) (b (cdr k)))
-              (if (eql (gethash a dir) b) (setf (gethash a next) b) (setf (gethash b next) a))))
+              (if (gethash (cons a b) dir) (setf (gethash a next) b) (setf (gethash b next) a))))
           (when edges
             (let* ((start (car (first edges))) (loop-ix (list start)))
               (loop for nx = (gethash (car loop-ix) next)
@@ -579,9 +579,13 @@ and touching it (a box side is two triangles or one quad; a cap is many triangle
              (let ((h (ask-height "Specify extrusion height (negative pushes in)" p *last-solid-height*)))
                (when h
                  (setf *last-solid-height* h)
-                 (when (and solid (minusp h))
-                   (out (format nil "Pushing into a solid needs Subtract (coming with the boolean tools); a separate solid is made instead.~%")))
-                 (let ((pts (if (< (dist (first pts) (car (last pts))) 1d-9) (butlast pts) pts)))
-                   (add (extrude-mesh pts t (v* (unit3 normal) h))))
+                 (let* ((pts (if (< (dist (first pts) (car (last pts))) 1d-9) (butlast pts) pts))
+                        (prism (extrude-mesh pts t (v* (unit3 normal) h))))
+                   (if solid
+                       ;; on a solid's face: pulling out adds to it, pushing in cuts into it
+                       (replace-with-result (list solid)
+                                            (boolean-meshes (if (minusp h) :subtract :union) (list (ent-data solid)) (list prism))
+                                            (if (minusp h) "Push" "Pull"))
+                       (add prism)))
                  (out (format nil "Pulled ~A ~A.~%" (if solid "the face" "the area") (fmt-len h)))
                  (when (gui-p) (gui-regen)))))))))))

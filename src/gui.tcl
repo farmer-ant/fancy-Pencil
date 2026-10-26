@@ -175,6 +175,8 @@ foreach {l c} {Box BOX Wedge WEDGE Cylinder CYLINDER Cone CONE Sphere SPHERE Tor
 .mb.solid add separator
 foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull PRESSPULL} { mcmd .mb.solid $l $c }
 .mb.solid add separator
+foreach {l c} {Union UNION Subtract SUBTRACT Intersect INTERSECT Slice SLICE} { mcmd .mb.solid $l $c }
+.mb.solid add separator
 mcmd .mb.solid "Working Plane on a Face (UCS)" "UCS Face"
 mcmd .mb.draw "Line" LINE
 mcmd .mb.draw "Polyline" PLINE
