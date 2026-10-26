@@ -205,6 +205,8 @@ foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull P
 foreach {l c} {Union UNION Subtract SUBTRACT Intersect INTERSECT Slice SLICE} { mcmd .mb.solid $l $c }
 .mb.solid add separator
 mcmd .mb.solid "Working Plane on a Face (UCS)" "UCS Face"
+.mb.solid add separator
+mcmd .mb.solid "Mass Properties" MASSPROP
 mcmd .mb.draw "Line" LINE
 mcmd .mb.draw "Polyline" PLINE
 mcmd .mb.draw "Rectangle" RECTANG
@@ -265,6 +267,7 @@ mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
 mcmd .mb.tools "List" LIST
 mcmd .mb.tools "Area" AREA
+mcmd .mb.tools "Mass Properties" MASSPROP
 foreach {l c} {Linear DIMLINEAR Aligned DIMALIGNED Radius DIMRADIUS Diameter DIMDIAMETER Angular DIMANGULAR \
                Continue DIMCONTINUE Baseline DIMBASELINE Leader LEADER "Dimension Style..." DIMSTYLE} { mcmd .mb.dim $l $c }
 foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pick)" LAYOFF "Layer Freeze (pick)" LAYFRZ
@@ -428,6 +431,30 @@ ttk::combobox .pal.type -state readonly -takefocus 0
 bind .pal.type <<ComboboxSelected>> {typepicked .pal.type}
 
 # ---- Quick Properties: a small panel by the cursor with the main properties of the selection ----
+# a window of text (MASSPROP and other reports), with Copy and Close
+proc textwin {title text} {
+    set w .tw
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w $title
+    wm transient $w .
+    text $w.t -width 72 -height 32 -background "#1a1f26" -foreground "#d6dce4" -font {{DejaVu Sans Mono} 9} \
+        -borderwidth 0 -highlightthickness 0 -padx 8 -pady 6 -yscrollcommand [list $w.sb set]
+    ttk::scrollbar $w.sb -command [list $w.t yview]
+    ttk::frame $w.b
+    ttk::button $w.b.copy -text "Copy" -command [list apply {{w} {clipboard clear; clipboard append [$w.t get 1.0 end-1c]}} $w]
+    ttk::button $w.b.close -text "Close" -command [list destroy $w]
+    pack $w.b.close $w.b.copy -side right -padx 4 -pady 4
+    pack $w.b -side bottom -fill x
+    pack $w.sb -side right -fill y
+    pack $w.t -side left -fill both -expand 1
+    $w.t insert end $text
+    $w.t configure -state disabled
+    bind $w <Escape> [list destroy $w]
+}
+
+# Quick Properties: a small window that stays open (until Close) beside the drawing; the drawing
+# keeps working while it is up, and it follows whatever is selected
 proc qpanel_set {rows types current} {
     set w .qp
     if {![winfo exists $w]} {
@@ -442,16 +469,29 @@ proc qpanel_set {rows types current} {
         pack $w.type -side top -fill x -padx 6 -pady {6 3}
         pack $w.rows -side top -fill both -expand 1 -padx 4
         pack $w.close -side bottom -anchor e -padx 6 -pady 6
-        bind $w <Escape> qpanel_close
+        # Esc clears the selection (the panel stays; Close closes it)
         wm protocol $w WM_DELETE_WINDOW qpanel_close
-        lassign [winfo pointerxy .] px py
-        wm geometry $w +[expr {$px + 24}]+[expr {$py + 16}]
+        # where it was last time, else the drawing's top right corner (out of the way)
+        if {[info exists ::qp_geom]} {
+            wm geometry $w $::qp_geom
+        } else {
+            wm geometry $w +[expr {[winfo rootx .c] + [winfo width .c] - 450}]+[expr {[winfo rooty .c] + 12}]
+        }
+        bind $w <Configure> {if {"%W" eq ".qp"} {set ::qp_geom +[winfo x .qp]+[winfo y .qp]}}
+        # the keyboard goes back to the command line when the mouse goes back to the drawing
+        bind $w <Leave> {if {"%W" eq ".qp" && [focus] ne "" && [string match ".qp*" [focus]] && ![string match "*Combobox*" [winfo class [focus]]]} {focus .cmd.e}}
     }
-    settypes $w.type $types $current
+    if {[llength $types] == 0} {
+        $w.type configure -values {}
+        $w.type set "No selection (current settings)"
+    } else {
+        settypes $w.type $types $current
+    }
     fillrows $w.rows $rows
     raise $w
 }
 proc qpanel_close {} { catch {destroy .qp}; emit QPCLOSE; focus .cmd.e }
+bind .c <Enter> {if {[winfo exists .qp] && [string match ".qp*" [focus]]} {focus .cmd.e}}
 proc qpanel_hide {} { catch {destroy .qp} }
 proc palemit {key w} { emit PROP $key [$w get]; focus .cmd.e }
 bind all <Control-Key-1> {palette_toggle; break}
