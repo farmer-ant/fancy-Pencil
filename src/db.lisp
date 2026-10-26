@@ -351,7 +351,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
 
 (defun insert-xf (data base)
   (xf-insert (pt3 (dxf 10 data)) (or (dxf 41 data) 1d0) (or (dxf 42 data) 1d0)
-             (or (dxf 50 data) 0d0) base))
+             (or (dxf 50 data) 0d0) (pt3 base) (d (or (dxf 43 data) 1d0))))
 
 (defun insert-pieces (data)
   (let ((b (find-block (dxf 2 data))))

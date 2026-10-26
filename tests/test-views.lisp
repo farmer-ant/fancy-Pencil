@@ -171,4 +171,20 @@
      (r3 (entity-bbox (newest))) (list (+ (first dm-box) 100) (+ (second dm-box) 50) (+ (third dm-box) 100) (+ (fourth dm-box) 50)))
 (chk "picture matches its points" (dimension-picture-misplaced-p (ent-data (newest))) nil)
 
+;; 3D blocks keep their shape
+(al "(command \"new\")")
+(al "(command \"-view\" \"front\")")
+(al "(command \"rectang\" '(0 0) '(4 3))")
+(al "(command \"plan\")")
+(al "(command \"line\" '(0 0 0) '(0 0 5) \"\")")
+(al "(command \"-block\" \"B3D\" '(0 0) (ssget \"X\") \"\")")
+(al "(command \"-insert\" \"B3D\" '(10 0) 1 1 0)") (defvar b3 (newest))
+(defun z-range (e) (let ((zs (loop for pc in (entity-pieces e) append (case (first pc) ((:seg :gseg) (list (pz (pt3 (second pc))) (pz (pt3 (third pc))))))))) (r3 (list (reduce #'min zs) (reduce #'max zs)))))
+(chk "inserted 3D block keeps its heights" (z-range b3) '(0 5))
+(al "(command \"-insert\" \"B3D\" '(20 0) 2 2 0)") (defvar b4 (newest))
+(chk "scaled 3D block: heights scale with it (Z scale 2)" (progn (set-entity-data b4 (set-dxf 43 2d0 (ent-data b4))) (z-range b4)) '(0 10))
+(al (format nil "(command \"explode\" (handent ~S) \"\")" (ename-handle b3)))
+(chk "exploded: the standing rectangle still stands" (let ((r (find "LWPOLYLINE" (live-entities) :key #'ent-type :test #'equal :from-end t))) (r3 (entity-normal (world r)))) '(0 -1 0))
+(chk "exploded: the vertical line is still vertical" (let ((l (find "LINE" (live-entities) :key #'ent-type :test #'equal :from-end t))) (r3 (pz (pt3 (dxf 11 (world l)))))) 5)
+
 (format t "~%View tests: ~D passed, ~D failed.~%" *pass* *fail*)
