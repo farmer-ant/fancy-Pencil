@@ -415,6 +415,17 @@
 (check "object inside the block follows" (g (entlast) 8) "NEWL")
 (command "close")
 
+;; ---------- plotting an isometric view ----------
+(command "new")
+(command "rectang" '(0 0) '(8 5))
+(command "text" '(1 6) 0.6 0 "ISO" "")
+(command "-view" "swiso")
+(vl-file-delete "/tmp/fp-iso.pdf")
+(command "-plot" "" "Letter" "Landscape" "Extents" "Fit" "No" "/tmp/fp-iso.pdf")
+(check "isometric view plots" (if (findfile "/tmp/fp-iso.pdf") T nil) T)
+(command "plan")
+(command "close")
+
 ;; ---------- leaders ----------
 (defun entbefore (e / x prev) (setq x (entnext)) (while (and x (not (eq x e))) (setq prev x x (entnext x))) prev)
 (command "new")

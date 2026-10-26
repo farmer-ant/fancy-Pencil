@@ -334,6 +334,14 @@ Linetypes (hidden, center, phantom, dashed ...) show in every view: in the isome
 objects standing in other planes the dashes are laid out along the object itself, at the same
 size as in plan.
 
+**Plotting 3D views.** PLOT prints the view you are in. In an isometric view the plot shows
+what the screen shows: objects at their heights, with thickness, linetypes, and text drawn in
+its plane. Extents and Display fit that view, and a plot Window is picked on the screen. In
+Front, Back, Left, Right and the UCS views the working plane is plotted flat, as on screen.
+
+**3D blocks.** A block made from objects at different heights or in other planes keeps its 3D
+shape when inserted (its Z scale scales the heights), exploded, saved and opened again.
+
 **Any plane as the working plane (UCS).** View → Working Plane (UCS), or type `UCS`:
 
 * **Object / Face** — pick a panel (polyline, circle, text ...): its plane becomes the working

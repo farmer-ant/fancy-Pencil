@@ -249,12 +249,14 @@
   (let ((m (ang a b)))
     (make-xf :fn (lambda (p) (mirror-pt p a b))
              :ang (lambda (x) (norm-ang (- (* 2 m) x))) :mirror t)))
-(defun xf-insert (ins sx sy rot &optional (base (pt 0 0)))
-  "Block insert transform: translate by -BASE, scale SX/SY, rotate ROT, translate to INS."
+(defun xf-insert (ins sx sy rot &optional (base (pt 0 0)) (sz 1d0))
+  "Block insert transform: translate by -BASE, scale SX/SY/SZ, rotate ROT, translate to INS.
+Heights inside the block are kept (scaled by SZ), so 3D blocks stay 3D."
   (let ((c (cos rot)) (s (sin rot)))
     (make-xf :fn (lambda (p)
-                   (let ((x (* sx (- (px p) (px base)))) (y (* sy (- (py p) (py base)))))
-                     (pt (+ (px ins) (- (* x c) (* y s))) (+ (py ins) (* x s) (* y c)) (pz ins))))
+                   (let ((x (* sx (- (px p) (px base)))) (y (* sy (- (py p) (py base))))
+                         (z (* sz (- (pz p) (pz base)))))
+                     (pt (+ (px ins) (- (* x c) (* y s))) (+ (py ins) (* x s) (* y c)) (+ (pz ins) z))))
              :ang (lambda (a)
                     (norm-ang (+ rot (atan (* sy (sin a)) (* sx (cos a))))))
              :scale (abs (d sx)) :mirror (< (* sx sy) 0)

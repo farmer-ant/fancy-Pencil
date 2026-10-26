@@ -224,6 +224,9 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
         (return-from plot-data nil)))
     (let ((color (plot-color aci))
           (lw (plot-lw-mm (entity-lineweight data parent-lw))))
+      ;; an isometric view, or an object lying in another plane: plotted as it is seen, in 3D
+      (when (or (projected-view-p) (offplane-p data))
+        (return-from plot-data (plot-data-3d data aci color lw xf depth parent-lt parent-lw parent-lts)))
       (cond
         ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
          (unless (and (equal type "ATTDEF") (null xf))     ; attribute definitions show only inside blocks
@@ -275,7 +278,7 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
   "Primitives for every visible entity touching the window."
   (let ((*plot-prims* nil) (*plotting* t))
     (dolist (e (live-entities))
-      (let ((b (ignore-errors (entity-bbox e))))
+      (let ((b (ignore-errors (if (projected-view-p) (entity-view-bbox e) (entity-bbox e)))))
         (when (or (null b) (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0))))
           (ignore-errors (plot-data (ent-data e) (entity-aci (ent-data e)))))))
     (join-poly-prims)
@@ -416,7 +419,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
            (multiple-value-bind (x0 y0 x1 y1) (view-rect 0) (list x0 y0 x1 y1)))
           ((string-equal area "Limits")
            (let ((a (pt3 (sysvar "LIMMIN"))) (b (pt3 (sysvar "LIMMAX")))) (list (px a) (py a) (px b) (py b))))
-          (t (or (drawing-extents) (list 0d0 0d0 12d0 9d0))))))
+          (t (or (if (projected-view-p) (view-extents) (drawing-extents)) (list 0d0 0d0 12d0 9d0))))))
 
 (defun make-plot (s path)
   "Write the plot described by settings S to PDF PATH. Returns a short description."
@@ -444,7 +447,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
             (string-trim " " (first (split-string (first paper) #\()))
             (plot-settings-area s) (plot-settings-landscape s)
             (if in-per-unit (plot-settings-scale s) "scaled to fit")
-            (if (or (< cw ww) (< ch wh)) " (area larger than the paper: middle part plotted)" ""))))
+            (if (or (< cw (* ww (- 1 1d-6))) (< ch (* wh (- 1 1d-6)))) " (area larger than the paper: middle part plotted)" ""))))
 
 (defun system-printers ()
   (multiple-value-bind (code text) (run-shell "lpstat -e 2>/dev/null || lpstat -a 2>/dev/null | cut -d' ' -f1")
@@ -490,6 +493,8 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
     (when (pointp a)
       (let ((b (get-user-input :corner :base a :prompt "Specify opposite corner: ")))
         (when (pointp b)
+          ;; in an isometric view the window is on the screen: keep it in view coordinates
+          (when (projected-view-p) (setf a (w->uv a) b (w->uv b)))
           (list (min (px a) (px b)) (min (py a) (py b)) (max (px a) (px b)) (max (py a) (py b))))))))
 
 (defun default-pdf-name ()
@@ -633,3 +638,94 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                    (setf (sysvar "LIMMIN") (list (px lo) (py lo)) (sysvar "LIMMAX") (list (px hi) (py hi)))
                    (touch)
                    (when (gui-p) (gui-regen))))))))
+;;; ---------- plotting what a 3D view shows ----------
+;;; In the isometric views (and for objects lying in other planes) everything is plotted as the
+;;; screen shows it: 3D outlines at their heights, with thickness, linetypes (dashes laid out along
+;;; the object) and text drawn letter by letter in its plane, then seen from the view's direction.
+
+(defun plot-uv (p) (if (projected-view-p) (w->uv (pt3 p)) (pt3 p)))
+
+(defun plot-3d-poly (pts color lw pattern scale)
+  "Plot the 3D polyline PTS, dashed when PATTERN says so and the dashes are big enough."
+  (when (cdr pts)
+    (let ((period (and pattern (* (abs scale) (reduce #'+ (mapcar #'abs pattern))))))
+      (if (or (null pattern) (< period 1d-9)
+              (and *plot-ppu* (< (* period *plot-ppu*) 2d0))
+              (> (/ (polyline-length pts) period) 5000))
+          (emit-prim (list :poly (mapcar #'plot-uv pts) color lw))
+          (dolist (run (dash-runs pts pattern scale))
+            (when (>= (length run) 2) (emit-prim (list :poly (mapcar #'plot-uv run) color lw))))))))
+
+(defun piece-points-3d (pc)
+  "Points along piece PC (arcs and circles finely, at the height of their centre)."
+  (case (first pc)
+    ((:seg :gseg) (list (pt3 (second pc)) (pt3 (third pc))))
+    (:circle (let ((c (pt3 (second pc)))) (mapcar (lambda (q) (pt (px q) (py q) (pz c))) (arc-points c (third pc) 0d0 +2pi+ 120))))
+    (:arc (destructuring-bind (c r a1 a2) (rest pc)
+            (let ((c (pt3 c))) (mapcar (lambda (q) (pt (px q) (py q) (pz c))) (arc-points c r a1 a2 (max 12 (ceiling (* 60 (/ (arc-sweep a1 a2) pi)))))))))
+    (t nil)))
+
+(defun plot-data-3d (data aci color lw xf depth parent-lt parent-lw parent-lts)
+  (let* ((type (dxf 0 data))
+         (pattern (ltype-pattern-for (entity-ltype-name data parent-lt)))
+         (scale (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1)))
+         (xp (lambda (p) (if xf (xf-point xf (pt3 p)) (pt3 p)))))
+    (cond
+      ;; text: its letters, in its plane
+      ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
+       (unless (and (equal type "ATTDEF") (null xf))
+         (let ((strokes (if (offplane-p data)
+                            (offplane-pieces data (ignore-errors (text-stroke-pieces (rem-dxf 210 data))))
+                            (ignore-errors (text-stroke-pieces data)))))
+           (dolist (pc strokes)
+             (emit-prim (list :poly (list (plot-uv (funcall xp (second pc))) (plot-uv (funcall xp (third pc)))) color (* 0.7 lw)))))))
+      ;; outlines in another plane, with their linetype
+      ((and (offplane-p data) (member type '("CIRCLE" "ARC" "LWPOLYLINE" "ELLIPSE" "SPLINE") :test #'equal))
+       (dolist (poly (offplane-polylines data))
+         (plot-3d-poly (mapcar xp poly) color lw pattern scale)))
+      ((offplane-p data)                     ; blocks, hatches ... in another plane: their edges
+       (dolist (pc (data-pieces data))
+         (if (eq (first pc) :pt)
+             (plot-point-symbol (plot-uv (funcall xp (second pc))) color lw)
+             (emit-prim (list :poly (list (plot-uv (funcall xp (second pc))) (plot-uv (funcall xp (third pc)))) color lw)))))
+      ((member type '("INSERT" "DIMENSION") :test #'equal)
+       (let ((b (find-block (dxf 2 data))))
+         (when b
+           (let ((cxf (if (equal type "INSERT")
+                          (let ((ixf (insert-xf data (block-def-base b)))) (if xf (xf-compose ixf xf) ixf))
+                          xf))
+                 (lt (entity-ltype-name data parent-lt)) (lw2 (entity-lineweight data parent-lw))
+                 (lts (* parent-lts (d (or (dxf 48 data) 1)))))
+             (dolist (sub (block-def-entities b))
+               (plot-data sub (sub-color sub aci) cxf (1+ depth) lt lw2 lts))))))
+      ((equal type "LEADER")
+       (dolist (sub (leader-display-entities (if xf (xform-data data xf) data)))
+         (plot-data sub (sub-color sub aci) nil (1+ depth) (entity-ltype-name data parent-lt)
+                    (entity-lineweight data parent-lw) parent-lts)))
+      ((equal type "SOLID")
+       (let ((pts (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
+         (emit-prim (list :fill (list (mapcar (lambda (p) (plot-uv (funcall xp p))) pts)) color))))
+      ((equal type "HATCH")
+       (let ((polys (remove-if (lambda (p) (< (length p) 3)) (hatch-world-polys data xf))))
+         (if (or (eql (dxf 70 data) 1) (solid-pattern-p (or (dxf 2 data) "")))
+             (emit-prim (list :fill (mapcar (lambda (poly) (mapcar #'plot-uv poly)) polys) color))
+             (let ((bbox (points-bbox (apply #'append polys))))
+               (when bbox
+                 (dolist (fam (hatch-pattern-lines data))
+                   (let ((segs (hatch-family-segments fam polys bbox 20000)))
+                     (unless (eq segs :too-dense)
+                       (dolist (s segs) (emit-prim (list :poly (mapcar #'plot-uv s) color (* 0.7 lw))))))))))))
+      (t
+       ;; lines, arcs, circles, polylines, ellipses, splines: at their height, with thickness
+       (let* ((elev (if (equal type "LWPOLYLINE") (d (or (dxf 38 data) 0)) 0d0))
+              (th (if (member type '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal) (d (or (dxf 39 data) 0)) 0d0)))
+         (dolist (pc (data-pieces data))
+           (if (eq (first pc) :pt)
+               (plot-point-symbol (plot-uv (funcall xp (v+ (pt3 (second pc)) (pt 0 0 elev)))) color lw)
+               (let ((pts (mapcar (lambda (p) (funcall xp (pt (px p) (py p) (+ (pz p) elev)))) (piece-points-3d pc))))
+                 (plot-3d-poly pts color lw pattern scale)
+                 (unless (zerop th)
+                   (let ((top (mapcar (lambda (p) (v+ p (pt 0 0 th))) pts)))
+                     (plot-3d-poly top color lw pattern scale)
+                     (dolist (p (list (first pts) (car (last pts))))
+                       (plot-3d-poly (list p (v+ p (pt 0 0 th))) color lw pattern scale))))))))))))
