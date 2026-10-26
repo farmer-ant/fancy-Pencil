@@ -165,7 +165,7 @@ Returns a plist (:font F :bold B :italic I :underline U :height H :relative-heig
     (append defined
             (loop for n in (remove-duplicates
                             (remove-if-not #'stringp
-                                           (append (mapcar (lambda (e) (dxf 7 (ename-data e))) (live-entities))
+                                           (append (mapcar (lambda (e) (dxf 7 (ename-data e))) (all-live-entities))
                                                    (loop for b in (drawing-blocks *dwg*)
                                                          append (mapcar (lambda (dd) (dxf 7 dd)) (block-def-entities b)))))
                             :test #'string-equal)

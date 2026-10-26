@@ -178,7 +178,10 @@
   "Turn split entity groups (with POLYLINE/VERTEX/SEQEND and ATTRIBs) into alists."
   (let ((out nil))
     (loop while groups do
-      (let* ((g (pop groups)) (type (cdr (first g))))
+      (let* ((g (pop groups)) (type (cdr (first g)))
+             (start out)
+             ;; paper space objects remember which layout (block record) owns them
+             (paper (and (eql (dxf 67 g) 1) (let ((o (dxf 330 g))) (if o (princ-to-string o) "")))))
         (cond
           ((equal type "POLYLINE")
            (let ((verts (loop while (and groups (equal (cdr (first (first groups))) "VERTEX"))
@@ -196,9 +199,11 @@
                                                a))
                               out))))
            (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups)))
-          ((equal (dxf 67 g) 1) nil)    ; paper space
           ((equal type "3DFACE") (push (with-src-handle (mesh-from-3dface (convert-in g)) g) out))
-          (t (push (with-src-handle (convert-in g) g) out)))))
+          (t (push (with-src-handle (convert-in g) g) out)))
+        (when paper
+          (loop for cell on out until (eq cell start)
+                do (setf (car cell) (append (car cell) (list (cons :paper paper))))))))
     (nreverse out)))
 
 (defun with-src-handle (data g)
@@ -265,6 +270,8 @@
          (tables (split-entities (section-pairs pairs "TABLES")))
          (blocks (split-entities (section-pairs pairs "BLOCKS")))
          (ents (split-entities (section-pairs pairs "ENTITIES")))
+         (objects (split-entities (section-pairs pairs "OBJECTS")))
+         (paper-blocks nil)
          (count 0))
     (when replace
       (new-drawing)
@@ -325,15 +332,22 @@
            (pos (position "$CLAYER" hdr :key #'cdr :test #'equal))
            (l (and pos (stringp (cdr (nth (1+ pos) hdr))) (find-layer (cdr (nth (1+ pos) hdr))))))
       (when (and l (not (layer-frozen l))) (setf (sysvar "CLAYER") (layer-name l))))
-    ;; blocks
-    (let ((cur nil) (body nil))
+    ;; blocks (a layout's objects, other than the active layout's, are kept in its *Paper_Space block)
+    (let ((cur nil) (body nil) (cur-br nil))
       (dolist (g blocks)
         (let ((type (cdr (first g))))
           (cond ((equal type "BLOCK")
                  (let ((gd (group-coords g)))
                    (setf cur (make-block-def :name (dxf 2 gd) :base (pt3 (or (dxf 10 gd) (pt 0 0))))
+                         cur-br (and (dxf 330 g) (princ-to-string (dxf 330 g)))
                          body nil)))
                 ((equal type "ENDBLK")
+                 (when (and cur (stringp (block-def-name cur)) (search "*Paper_Space" (block-def-name cur) :test #'char-equal)
+                            (not (string-equal (block-def-name cur) "*Paper_Space")))
+                   (setf paper-blocks
+                         (append paper-blocks
+                                 (mapcar (lambda (x) (append (rem-dxf :paper (rem-dxf :src-handle x)) (list (cons :paper (or cur-br "")))))
+                                         (convert-entity-list (nreverse body))))))
                  (when (and cur (not (member (block-def-name cur) '("*Model_Space" "*Paper_Space" "$MODEL_SPACE" "$PAPER_SPACE")
                                              :test (lambda (a b) (and (stringp a) (search b a :test #'char-equal))))))
                    (setf (block-def-entities cur) (mapcar (lambda (x) (rem-dxf :src-handle x))
@@ -343,23 +357,31 @@
                 (t (push g body))))))
     ;; entities (anything Fancy Pencil can't keep is counted, so opening can say so)
     (setf *import-skipped* nil)
-    (dolist (data (mapcar (lambda (x) (rem-dxf :src-handle x))
-                          (apply-draw-order (convert-entity-list ents)
-                                            (sortents-map (split-entities (section-pairs pairs "OBJECTS")) tables))))
+    ;; layouts (paper space): their names, sheets and the block records that own their objects
+    (let ((space-of (funcall 'import-layouts objects tables replace)))
+     (dolist (data (append (mapcar (lambda (x) (rem-dxf :src-handle x))
+                                   (apply-draw-order (convert-entity-list ents) (sortents-map objects tables)))
+                           paper-blocks))
       (when (equal (dxf 0 data) "3DFACE") (setf data (mesh-from-3dface data)))
-      (if (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
-                                 "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE")
-                  :test #'equal)
+      (let ((owner (dxf :paper data)))
+        (setf data (rem-dxf :paper data))
+        (when (and owner (equal (dxf 0 data) "VIEWPORT")) (setf data (funcall 'vp-from-dxf data)))
+        (setf data (and data (append data (list (cons :space (and owner (funcall space-of owner))))))))
+      (if (and data
+               (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
+                                      "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT")
+                       :test #'equal))
           (progn
             (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
               (let ((name (block-record-name tables (dxf :ldr-blk-handle data))))
                 (setf data (rem-dxf :ldr-blk-handle data))
                 (when (and name (known-arrow-name-p name))
                   (setf data (append data (list (cons :ldr-blk (arrow-code name))))))))
-            (add-entity data)
+            (let ((*space-override* (dxf :space data))) (add-entity (rem-dxf :space data)))
             (incf count))
-          (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
-            (if c (incf (cdr c)) (push (cons (dxf 0 data) 1) *import-skipped*)))))
+          (when data
+            (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
+              (if c (incf (cdr c)) (push (cons (dxf 0 data) 1) *import-skipped*)))))))
     (setf (drawing-saved-modcount *dwg*) (drawing-modcount *dwg*))
     count))
 
@@ -379,7 +401,9 @@
   (format out "~3D~%" code)
   (cond ((floatp val) (format out "~A~%" (fmt-real val)))
         ((integerp val) (format out "~6D~%" val))
-        (t (format out "~A~%" val))))
+        (t (format out "~A~%" val)))
+  ;; paper space objects (R12): every entity record says so
+  (when (and *write-paper* (eql code 0)) (format out " 67~%     1~%")))
 (defun wr-pt (out code p)
   (wr out code (px p)) (wr out (+ code 10) (py p)) (wr out (+ code 20) (pz p)))
 
@@ -463,7 +487,7 @@
                      (remove-if (lambda (n) (or (not (stringp n)) (member n '("CONTINUOUS" "BYLAYER" "BYBLOCK") :test #'string-equal)))
                                 (append (mapcar #'layer-ltype (drawing-layers *dwg*))
                                         (mapcar #'ltype-name (drawing-ltypes *dwg*))
-                                        (mapcar (lambda (e) (dxf 6 (ename-data e))) (live-entities))
+                                        (mapcar (lambda (e) (dxf 6 (ename-data e))) (all-live-entities))
                                         (loop for b in (drawing-blocks *dwg*) append (mapcar (lambda (dd) (dxf 6 dd)) (block-def-entities b)))))
                      :test #'string-equal)))
         (wr out 0 "TABLE") (wr out 2 "LTYPE") (wr out 70 (1+ (length ltypes)))
@@ -517,6 +541,10 @@
       ;; entities
       (wr out 0 "SECTION") (wr out 2 "ENTITIES")
       (dolist (e (live-entities)) (write-entity out (ename-data e)))
+      ;; R12 has one paper space: the layout showing (or the first), without its viewports
+      (let ((*write-paper* t))
+        (dolist (e (funcall 'layout-entities (or (drawing-ctab *dwg*) (layout-name (first (drawing-layouts *dwg*))))))
+          (unless (equal (ent-type e) "VIEWPORT") (write-entity out (ename-data e)))))
       (wr out 0 "ENDSEC")
       (wr out 0 "EOF")))
   (setf (drawing-filename *dwg*) (namestring path)
@@ -560,4 +588,5 @@
 
 ;; files always hold world coordinates, whatever view is showing
 (defun dxf-import (path &key (replace t)) (let ((*ucs-off* t)) (%dxf-import path :replace replace)))
-(defun dxf-export (path) (let ((*ucs-off* t)) (ignore-errors (prune-unused-dimension-blocks)) (%dxf-export path)))
+(defun dxf-export (path)
+  (let ((*ucs-off* t) (*space-override* nil)) (ignore-errors (prune-unused-dimension-blocks)) (%dxf-export path)))

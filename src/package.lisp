@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.45")
+(defparameter *version* "0.3.46")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -37,5 +37,8 @@ then snaps onto the dimension line of an existing parallel dimension, so they li
 (defvar *view* nil
   "NIL for the plan (Top) view, else (name right up dir): the 3D view direction, with RIGHT and
 UP the world directions that point right and up on the screen and DIR pointing at the viewer.")
+(defvar *vstyle-override* nil "Bound to a visual style name to draw with it instead of VSCURRENT (viewports).")
+(defvar *prims-for-display* nil "True while plot primitives are made for the screen (layers that don't plot still show).")
+(defvar *write-paper* nil "True while paper space objects are written to a DXF file (group 67 = 1).")
 (defvar *quick-shown* nil "True while the Quick Properties panel is open.")
 (defvar *undo-ran* 0 "How many times U/UNDO/REDO have run (never rebound, so every thread sees it).")

@@ -220,7 +220,9 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
   (let ((type (dxf 0 data)))
     (when (> depth 8) (return-from plot-data nil))
     (let ((layer (find-layer (dxf 8 data))))
-      (when (and layer (or (not (layer-visible-p layer)) (not (layer-plot layer)) (string-equal (layer-name layer) "Defpoints")))
+      (when (and layer (or (not (layer-visible-p layer))
+                           (and (not *prims-for-display*)
+                                (or (not (layer-plot layer)) (string-equal (layer-name layer) "Defpoints")))))
         (return-from plot-data nil)))
     (let ((color (plot-color aci))
           (lw (plot-lw-mm (entity-lineweight data parent-lw))))
@@ -356,6 +358,13 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                             (format o "~A m" (xy (first (first bz))))
                             (dolist (b bz) (format o " ~A ~A ~A c" (xy (second b)) (xy (third b)) (xy (fourth b))))
                             (format o " S~%"))))
+                       ;; a layout viewport: what follows is clipped to its rectangle until :unclip
+                       (:clip
+                        (destructuring-bind (x0 y0 x1 y1) (rest p)
+                          (format o "q ~A ~A ~A ~A re W n~%" (pdf-num (tx (pt x0 y0))) (pdf-num (ty (pt x0 y0)))
+                                  (pdf-num (* (- x1 x0) scale-ppu)) (pdf-num (* (- y1 y0) scale-ppu)))
+                          (setf cur-stroke nil cur-fill nil cur-w nil)))
+                       (:unclip (format o "Q~%") (setf cur-stroke nil cur-fill nil cur-w nil))
                        (:fill
                         (destructuring-bind (polys color) (rest p)
                           (unless (equal color cur-fill) (rgb color "rg") (setf cur-fill color))
@@ -429,6 +438,9 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
 
 (defun make-plot (s path)
   "Write the plot described by settings S to PDF PATH. Returns a short description."
+  ;; on a layout tab the sheet is plotted, with its viewports
+  (when (and (drawing-ctab *dwg*) (fboundp 'make-layout-plot))
+    (return-from make-plot (funcall 'make-layout-plot s path)))
   (let* ((paper (or (assoc (plot-settings-paper s) *paper-sizes* :test #'string-equal) (third *paper-sizes*)))
          (pw (* 72 (if (plot-settings-landscape s) (max (second paper) (third paper)) (min (second paper) (third paper)))))
          (ph (* 72 (if (plot-settings-landscape s) (min (second paper) (third paper)) (max (second paper) (third paper)))))
@@ -527,7 +539,8 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
 (defcmd "PLOT" ("PRINT" "PLT") "Plots the drawing to a PDF file or a printer."
   (if (not (use-inplace-editor-p))
       (plot-command-line)
-      (let ((s (or *plot-settings* (make-plot-settings :units (default-plot-units))))
+      (let ((s (let ((s0 (or *plot-settings* (make-plot-settings :units (default-plot-units)))))
+                 (if (drawing-ctab *dwg*) (funcall 'layout-plot-settings s0) s0)))
             (printers (system-printers)))
         (loop
           (multiple-value-bind (action new) (plot-dialog s printers)

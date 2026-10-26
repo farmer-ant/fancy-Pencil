@@ -235,7 +235,7 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
                           (list (make-dimstyle :name name :vars vars))))
             ;; dimensions drawn with a changed style follow it, as in AutoCAD
             (when (and old (not (equal (dimstyle-vars old) vars)))
-              (dolist (e (live-entities))
+              (dolist (e (all-live-entities))
                 (when (and (equal (ent-type e) "DIMENSION") (string-equal (or (dxf 3 (ent-data e)) "Standard") name))
                   (set-entity-data e (set-dxf :dimvars vars (ent-data e)))
                   (incf updated))))))
@@ -244,7 +244,7 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
           (unless (member (dimstyle-name ds) kept :test #'string-equal)
             (if (some (lambda (e) (and (equal (ent-type e) "DIMENSION")
                                        (string-equal (or (dxf 3 (ent-data e)) "") (dimstyle-name ds))))
-                      (live-entities))
+                      (all-live-entities))
                 (out (format nil "Dimension style ~A is in use and was not deleted.~%" (dimstyle-name ds)))
                 (setf (drawing-dimstyles *dwg*) (remove ds (drawing-dimstyles *dwg*))))))
         (let ((ds (find-dimstyle current)))

@@ -113,7 +113,7 @@
     (w out 100 "AcDbPolyFaceMesh") (w out 66 1) (wp out 10 (pt 0 0 0))
     (w out 70 64) (w out 71 (length vs)) (w out 72 (length fs))
     (flet ((vertex-head (sub)
-             (w out 0 "VERTEX") (w out 5 (h2)) (w out 330 handle) (w out 100 "AcDbEntity") (w out 8 layer)
+             (w out 0 "VERTEX") (w out 5 (h2)) (w out 330 handle) (w out 100 "AcDbEntity") (when *write-paper* (w out 67 1)) (w out 8 layer)
              (let ((c (dxf 62 data))) (when c (w out 62 c)))
              (w out 100 sub)))
       (dolist (v vs)
@@ -123,7 +123,7 @@
         (vertex-head "AcDbFaceRecord")
         (wp out 10 (pt 0 0 0)) (w out 70 128)
         (loop for i in f for c from 71 do (w out c i))))
-    (w out 0 "SEQEND") (w out 5 (h2)) (w out 330 handle) (w out 100 "AcDbEntity") (w out 8 layer)))
+    (w out 0 "SEQEND") (w out 5 (h2)) (w out 330 handle) (w out 100 "AcDbEntity") (when *write-paper* (w out 67 1)) (w out 8 layer)))
 
 (defun write-mesh-r12 (out data)
   (let ((layer (or (dxf 8 data) "0")) (vs (mesh-verts data)) (fs (mesh-faces data)))

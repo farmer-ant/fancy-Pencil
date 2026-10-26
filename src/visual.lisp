@@ -11,7 +11,7 @@
 (in-package :fancy-pencil)
 
 (defun visual-style ()
-  (let ((v (sysvar "VSCURRENT")))
+  (let ((v (or *vstyle-override* (sysvar "VSCURRENT"))))
     (if (member v '("Hidden" "Shaded" "ShadedEdges") :test #'equal) v "Wireframe")))
 
 (defun shading-light ()
@@ -21,6 +21,8 @@
       (unit3 (pt 0.25 0.45 1))))
 
 (defun shade-hex (hex normal)
+  ;; white objects show black on a light background: shade them as light gray, as plots do
+  (when (string-equal hex "#000000") (setf hex "#d9d9d9"))
   (let* ((i (+ 0.28d0 (* 0.72d0 (abs (vdot3 (unit3 normal) (shading-light)))))))
     (destructuring-bind (r g b) (hex-rgb hex) (rgb-hex (* r i) (* g i) (* b i)))))
 

@@ -10,9 +10,30 @@
 
 (defcmd "ZOOM" ("Z") "Changes the view magnification."
   (let ((r (gpoint "Specify corner of window, enter a scale factor (nX or nXP), or [All/Center/Extents/Previous/Window] <real time>: "
-                   :keywords '("All" "Center" "Extents" "Previous" "Window" "E" "A" "P" "W"))))
+                   :keywords '("All" "Center" "Extents" "Previous" "Window" "E" "A" "P" "W") :flags 128)))
+    ;; nXP: inside a layout viewport, its scale (n paper units per model unit)
+    (when (and (stringp r)
+               (let ((u (string-upcase (string-trim " " r)))) (and (> (length u) 2) (string= (subseq u (- (length u) 2)) "XP")
+                                                                   (parse-number-text (subseq u 0 (- (length u) 2))))))
+      (let* ((u (string-trim " " r)) (n (parse-number-text (subseq u 0 (- (length u) 2)))))
+        (if (and (drawing-ctab *dwg*) (drawing-active-vp *dwg*) (plusp n))
+            (funcall 'set-active-vp-scale (d n))
+            (out (format nil "nXP sets a layout viewport's scale: use it inside a viewport (MSPACE).~%"))))
+      (return-from-cmd))
     (when (gui-p)
       (cond ((null r) nil)
+            ((and (stringp r) (zoom-scale-text-p r))
+             (let ((n (zoom-scale-text-p r)))
+               (when (plusp n)
+                 (push-view)
+                 ;; inside a layout viewport: about the viewport's middle
+                 (if (and (drawing-ctab *dwg*) (drawing-active-vp *dwg*))
+                     (multiple-value-bind (sx sy) (funcall 'paper->screen (funcall 'vp-center (ename-data (drawing-active-vp *dwg*))))
+                       (zoom-at sx sy n))
+                     (progn (setf *vscale* (* *vscale* n)) (gui-regen))))))
+            ((and (stringp r) (parse-number-text r) (plusp (parse-number-text r)))
+             (push-view) (setf *vscale* (* *vscale* (d (parse-number-text r)))) (gui-regen))
+            ((stringp r) (out (format nil "Point or option keyword required.~%")))
             ((member r '("Extents" "E") :test #'string-equal) (zoom-extents))
             ((member r '("All" "A") :test #'string-equal)
              (if (projected-view-p) (zoom-extents)
@@ -381,8 +402,8 @@
                    (add (funcall mk p x y r)))))))))))
 
 (defcmd "PURGE" ("PU" "-PURGE") "Removes unused layers and block definitions."
-  (let* ((used-layers (remove-duplicates (mapcar #'ent-layer (live-entities)) :test #'string-equal))
-         (used-blocks (remove-duplicates (loop for e in (live-entities) when (dxf 2 (ent-data e)) collect (dxf 2 (ent-data e))) :test #'string-equal))
+  (let* ((used-layers (remove-duplicates (mapcar #'ent-layer (all-live-entities)) :test #'string-equal))
+         (used-blocks (remove-duplicates (loop for e in (all-live-entities) when (dxf 2 (ent-data e)) collect (dxf 2 (ent-data e))) :test #'string-equal))
          (nl 0) (nb 0))
     (setf (drawing-layers *dwg*)
           (remove-if (lambda (l) (and (not (string-equal (layer-name l) "0")) (not (string-equal (layer-name l) (sysvar "CLAYER")))

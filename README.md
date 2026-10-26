@@ -385,6 +385,37 @@ Enter to finish. The view stays "Custom" until you pick a standard view.
 Faces are painted far to near, so very large faces crossing others can occasionally overlap
 wrongly. Plots follow the visual style (hidden-line and shaded PDFs).
 
+### Layouts, paper space and viewports (Layout menu)
+
+Under the drawing are tabs: **Model** and **Layout1** (add more with **+**; right-click a layout
+tab to rename, copy, delete, move it or set its page). A layout is a sheet of paper at its real
+size - inches, or millimeters in metric drawings - with a dashed line showing the printable area.
+Draw the border, title block and notes on it; they belong to that sheet only.
+
+**Viewports** are windows on the sheet that show model space, each with its own view, visual
+style and scale:
+
+* **MVIEW** (`MV`): pick two corners, or **Fit** (the printable area), or **2**, **3** or **4** at
+  once. **4 → Standard** makes Top, Front, Right and SE Isometric: the three flat views at one
+  scale and lined up with each other, as a drawing's views are. MVIEW **Lock** keeps a viewport's
+  scale and view from changing; **ON/OFF** shows or hides what is in it.
+* **Double-click inside a viewport** (or **MSPACE**, `MS`) to work in model space through it
+  (blue border): zoom, pan, pick a view, orbit, change the visual style or draw - the viewport
+  keeps what you set. **Double-click outside** it (or **PSPACE**, `PS`) goes back to the sheet.
+  The MODEL/PAPER button on the status bar switches too.
+* **VPSCALE**: 1:2, 2:1, 1/4"=1'-0", 1:100, Fit ... (or `ZOOM 0.5XP` inside the viewport). The
+  Properties palette shows a selected viewport's scale, view, visual style, lock and size, and
+  changes them. Moving a viewport moves what it shows; a corner grip resizes it at the same scale.
+* **PAGESETUP**: paper size, orientation and units of the sheet. **LAYOUT** (`LO`): New, Copy,
+  Delete, Rename, Set, ?.
+* **PLOT** on a layout plots the sheet at 1:1 (shrunk if the chosen paper is smaller), each
+  viewport clipped to its edge. Viewport borders plot like any object: put viewports on a layer
+  set to No Plot to hide them.
+
+Layouts are saved in the DXF file as AutoCAD keeps them (LAYOUT objects, VIEWPORT entities and
+paper space objects) and open in AutoCAD; R12 keeps the showing layout's objects but not its
+viewports. Opening a file with layouts brings them back, viewports included.
+
 ### 3D solids (Solids menu)
 
 Solids are built in the working plane (Top, a side view, or a UCS), so a box drawn in the Front
@@ -598,9 +629,8 @@ layers with color, linetype, lineweight, on/off, freeze and lock; linetype and d
 
 ## What's not there (yet)
 
-Compared with AutoCAD, this version does not have: paper space and layouts (plotting is from
-model space), gradient fills, associative hatches and dimensions (they don't follow edits to
-their boundary objects), UCS, 3D, and ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. DWG
+Compared with AutoCAD, this version does not have: gradient fills, associative hatches and dimensions (they don't follow edits to
+their boundary objects), true NURBS solids (solids are meshes), and ActiveX (`vla-*`/`vlax-*`) or DCL dialog functions. DWG
 files are opened and saved through a converter (ODA File Converter or LibreDWG). TRIM and EXTEND
 (Shift+click switches between them) work on lines, arcs, circles and polylines but not ellipses
 or splines. Express Tools that depend on external references (XREF tools) are not included.
@@ -609,6 +639,8 @@ or splines. Express Tools that depend on external references (XREF tools) are no
 
 ```sh
 ./fancypencil --tty tests/test-alisp.lsp tests/test-cad.lsp tests/test-cad2.lsp tests/test-v02.lsp tests/test-v03.lsp < /dev/null
+sbcl --non-interactive --load load.lisp --load tests/test-views.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-layouts.lisp
 ```
 
 ## Layout
@@ -623,6 +655,7 @@ src/db.lisp        drawing database (entities are DXF association lists, like en
 src/ltype.lisp     linetypes (.lin), dashes, lineweights
 src/hatch.lisp     hatch patterns, rendering, boundary detection
 src/dxf.lisp       DXF reader and R12 writer
+src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
 src/dxf2000.lisp   AutoCAD 2000 DXF writer
 src/alisp.lisp     AutoLISP reader, printer, evaluator and core functions
 src/input.lisp     prompts, coordinate entry, keywords, object snaps, selection, (command)
