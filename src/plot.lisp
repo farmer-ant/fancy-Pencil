@@ -91,7 +91,8 @@
 (defun plot-color (aci)
   "RGB (0-1) for ACI on white paper: white/black print black, everything black when monochrome."
   (if (or *plot-mono* (member aci '(7 0 255 256)) (null aci))
-      '(0 0 0)
+      ;; white/black: black on paper, but white when shown on a dark screen
+      (if (and *prims-for-display* (not *plot-mono*) (not (light-background-p))) '(1 1 1) '(0 0 0))
       (let ((hex (aci->hex aci)))
         (list (/ (parse-integer hex :start 1 :end 3 :radix 16) 255d0)
               (/ (parse-integer hex :start 3 :end 5 :radix 16) 255d0)

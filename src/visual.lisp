@@ -41,6 +41,14 @@
 (defun view-toward-viewer ()
   (if (projected-view-p) (fourth *view*) (pt 0 0 1)))
 
+(defun shaded-edge-color (color style)
+  "Edges over shaded faces: a light object's edges would vanish on its own light faces; draw them dark."
+  (if (and (equal style "ShadedEdges") (not (string-equal color "#8fc4ff"))
+           (destructuring-bind (r g b) (hex-rgb (if (string-equal color "#000000") "#d9d9d9" color))
+             (> (+ (* 0.299 r) (* 0.587 g) (* 0.114 b)) 170)))
+      "#2a2f36"
+      color))
+
 (defun mesh-face-items (e style)
   "(depth . canvas-commands) for each face of solid E in visual STYLE. Faces of a closed solid
 that point away from the viewer are left out (they are hidden anyway)."
@@ -61,7 +69,7 @@ that point away from the viewer are left out (they are hidden anyway)."
                                 for a = (nth i ps) for b = (nth (mod (1+ i) (length ps)) ps)
                                 do (when (nth i vis)
                                      (push (format nil ".c create line ~{~A~^ ~} -fill ~A~A -tags {~A}"
-                                                   (screen-coords (list a b)) color (if hl " -dash {6 3}" "") tags)
+                                                   (screen-coords (list a b)) (shaded-edge-color color style) (if hl " -dash {6 3}" "") tags)
                                            cmds))))
                         (cons (/ (reduce #'+ (mapcar #'view-depth ps)) (length ps)) (nreverse cmds)))))))
 
@@ -71,7 +79,7 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
   (unless (equal style "Shaded")
     (let* ((data (ent-data e)) (toward (view-toward-viewer))
            (tags (format nil "ent h~A" (ename-handle e)))
-           (color (if (gethash e *hl*) "#8fc4ff" (aci->hex (entity-aci data))))
+           (color (shaded-edge-color (if (gethash e *hl*) "#8fc4ff" (aci->hex (entity-aci data))) style))
            (edge-faces (make-hash-table :test #'equal)) (ends (make-hash-table :test #'equal)) (out nil))
       (multiple-value-bind (faces closed) (mesh-display-faces data)
         (when closed
@@ -149,7 +157,7 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
       (let ((sx0 *mouse-sx*) (sy0 *mouse-sy*))
         (multiple-value-bind (az0 el0) (view-angles *view*)
           ;; keep the middle of the screen in the middle while turning
-          (let* ((centre (s->w (/ *cw* 2d0) (/ *ch* 2d0)))
+          (let* ((centre (s->w (+ *tx* (/ *cw* 2d0)) (+ *ty* (/ *ch* 2d0))))
                  (turn (lambda (cur)
                          (declare (ignore cur))
                          (let ((dx (- *mouse-sx* sx0)) (dy (- *mouse-sy* sy0)))
@@ -174,7 +182,14 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
 (defun mesh-plot-items (data aci style)
   "(depth . prims) for each front face (and outline edge) of solid DATA, for a plot."
   (let* ((color (plot-color aci))
-         (base (if (every #'zerop color) '(0.85d0 0.85d0 0.85d0) color))
+         (base (if (or (every #'zerop color) (every (lambda (c) (> c 0.99d0)) color)) '(0.85d0 0.85d0 0.85d0) color))
+         ;; edges over light shaded faces are drawn dark, or they would vanish
+         (ecol (if (and (equal style "ShadedEdges") (> (+ (* 0.299 (first base)) (* 0.587 (second base)) (* 0.114 (third base))) 0.67d0))
+                   '(0.16d0 0.18d0 0.21d0) color))
+         ;; Hidden: faces in the background colour (white paper, or the screen's)
+         (blank (if (and *prims-for-display* (not (light-background-p)))
+                    (mapcar (lambda (c) (/ c 255d0)) (hex-rgb (background-color)))
+                    '(1d0 1d0 1d0)))
          (lw (plot-lw-mm (entity-lineweight data nil)))
          (toward (view-toward-viewer))
          (items nil))
@@ -183,7 +198,7 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
         (destructuring-bind (ps n vis) f
           (when (and n (or (not closed) (> (vdot3 n toward) -1d-9)))
             (let* ((uv (mapcar #'plot-uv ps))
-                   (fill (if (equal style "Hidden") '(1d0 1d0 1d0) (plot-shade base n)))
+                   (fill (if (equal style "Hidden") blank (plot-shade base n)))
                    (prims (list (list :fill (list uv) fill))))
               ;; shaded faces: a hairline in their own colour closes the seams between them
               (unless (equal style "Hidden")
@@ -191,7 +206,7 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
               (unless (equal style "Shaded")
                 (loop for i below (length ps)
                       do (when (nth i vis)
-                           (push (list :poly (list (nth i uv) (nth (mod (1+ i) (length uv)) uv)) color lw) prims))))
+                           (push (list :poly (list (nth i uv) (nth (mod (1+ i) (length uv)) uv)) ecol lw) prims))))
               (push (cons (/ (reduce #'+ (mapcar #'view-depth ps)) (length ps)) (nreverse prims)) items)))))
       ;; outlines of curved solids
       (when (and closed (not (equal style "Shaded")))
@@ -212,7 +227,7 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
                          (unless (eq f1 f2)
                            (let ((ab (gethash k ends)) (front (if f1 (first fs) (second fs))))
                              (push (cons (+ (cdr front) 1d-9)
-                                         (list (list :poly (list (plot-uv (car ab)) (plot-uv (cdr ab))) color lw)))
+                                         (list (list :poly (list (plot-uv (car ab)) (plot-uv (cdr ab))) ecol lw)))
                                    items))))))
                    edge-faces))))
     items))

@@ -23,12 +23,18 @@
   (units nil)         ; :in or :mm (NIL = from the drawing's units, the first time it is needed)
   pview)              ; the paper view last used on this tab: (vx vy vscale)
 
+(defstruct tile
+  rect                ; (x0 y0 x1 y1) as fractions of the drawing area, y0 at the top
+  view (vx 6d0) (vy 4.5d0) (vscale 60d0) (vstyle "Wireframe"))
+
 (defstruct drawing
   (entities (make-array 64 :adjustable t :fill-pointer 0))
   (layouts (list (make-layout :name "Layout1")))   ; paper space layouts, in tab order
   (ctab nil)             ; the layout tab showing (NIL = Model)
   (active-vp nil)        ; the viewport being worked in from a layout (MSPACE), or NIL
   (model-view nil)       ; the Model tab's view while a layout is showing
+  (tiles nil)            ; the Model tab split into viewports (VPORTS): tile structs, or NIL for one
+  (active-tile 0)
   (next-handle #x30)
   (layers (list (make-layer :name "0")))
   (blocks nil)
