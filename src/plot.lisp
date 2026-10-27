@@ -274,7 +274,7 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
                 (scale (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1)))
                 (wide (and (equal type "LWPOLYLINE") (dxf 43 data) (plusp (dxf 43 data))
                            (* (dxf 43 data) (if xf (xf-scale xf) 1))))
-                (pieces (loop for pc in (data-pieces data) append (if xf (transform-piece pc xf) (list pc)))))
+                (pieces (loop for pc in (display-pieces data xf) append (if xf (transform-piece pc xf) (list pc)))))
            ;; a polyline with width: its width is in drawing units (marked with a negative weight)
            (plot-pieces pieces color (if wide (- wide) lw) pattern scale)))))))
 
@@ -756,7 +756,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
        ;; lines, arcs, circles, polylines, ellipses, splines: at their height, with thickness
        (let* ((elev (if (equal type "LWPOLYLINE") (d (or (dxf 38 data) 0)) 0d0))
               (th (if (member type '("LINE" "ARC" "CIRCLE" "LWPOLYLINE" "POINT") :test #'equal) (d (or (dxf 39 data) 0)) 0d0)))
-         (dolist (pc (data-pieces data))
+         (dolist (pc (display-pieces data xf))
            (if (eq (first pc) :pt)
                (plot-point-symbol (plot-uv (funcall xp (v+ (pt3 (second pc)) (pt 0 0 elev)))) color lw)
                (let ((pts (mapcar (lambda (p) (funcall xp (pt (px p) (py p) (+ (pz p) elev)))) (piece-points-3d pc))))

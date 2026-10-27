@@ -142,6 +142,9 @@ mcmd .mb.file "Import DXF..." DXFIN
 mcmd .mb.file "Attach Image (JPEG, TIFF, PNG)..." IMAGEATTACH
 mcmd .mb.file "Attach PDF Page..." PDFATTACH
 mcmd .mb.file "Image Manager..." IMAGE
+.mb.file add separator
+mcmd .mb.file "3D Print: Save STL / 3MF / OBJ..." 3DPRINT
+mcmd .mb.file "Import STL / OBJ Model..." STLIN
 mcmd .mb.file "Export DXF..." DXFOUT
 .mb.file add separator
 mcmd .mb.file "Exit" QUIT
@@ -241,6 +244,8 @@ mcmd .mb.view "Regen" REGEN
 
 foreach {l c} {Box BOX Wedge WEDGE Cylinder CYLINDER Cone CONE Sphere SPHERE Torus TORUS} { mcmd .mb.solid $l $c }
 mcmd .mb.solid "Helix (path for a spring or thread)" HELIX
+mcmd .mb.solid "3D Print (STL / 3MF / OBJ)..." 3DPRINT
+mcmd .mb.solid "Import STL / OBJ Model..." STLIN
 .mb.solid add separator
 foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull PRESSPULL} { mcmd .mb.solid $l $c }
 .mb.solid add separator
@@ -2843,7 +2848,7 @@ proc filedlg {save title initial exts} {
     if {[llength $exts] > 1} {
         set globs {}; set tglobs {}
         foreach e $exts { lappend globs *.$e *.[string toupper $e]; lappend tglobs .$e .[string toupper $e] }
-        set lab [expr {[lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : "Files")}]
+        set lab [expr {[lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : ([lsearch $exts stl] >= 0 ? "3D models" : "Files"))}]
         lappend zf --file-filter "$lab ([join [lmap e $exts {string toupper $e}] ", "]) | [join $globs " "]"
         lappend kf "[join $globs " "]|$lab"
         lappend types [list $lab $tglobs]

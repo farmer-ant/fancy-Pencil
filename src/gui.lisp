@@ -522,7 +522,7 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
              (render-chained (loop for pc in (data-pieces data)
                                    append (if xf (transform-piece pc xf) (list pc)))
                              color tags hl width)
-             (loop for pc in (data-pieces data)
+             (loop for pc in (display-pieces data xf)
                    append (loop for tp in (if xf (transform-piece pc xf) (list pc))
                                 append (if pattern
                                            (render-linetyped tp pattern scale color tags hl width)

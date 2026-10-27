@@ -36,6 +36,51 @@
 (defun mesh-pieces (data)
   (mapcar (lambda (e) (list :seg (car e) (cdr e))) (mesh-edges data)))
 
+;;; outlines of curved sides: the hidden edges where the surface turns away from the viewer
+(defvar *mesh-folds* (make-hash-table :test #'eq #+sbcl :weakness #+sbcl :key))
+
+(defun mesh-folds (data)
+  "Hidden edges between two faces: a vector of (a b normal1 normal2)."
+  (or (gethash data *mesh-folds*)
+      (setf (gethash data *mesh-folds*)
+            (let* ((vs (mesh-verts-vector data)) (n (length vs))
+                   (edges (make-hash-table :test #'equal)))
+              (dolist (f (mesh-faces data))
+                (let ((nrm (newell-normal (mapcar (lambda (i) (aref vs (1- (abs i)))) f))) (k (length f)))
+                  (when nrm
+                    (loop for i below k
+                          for a = (nth i f) for b = (nth (mod (1+ i) k) f)
+                          for ia = (1- (abs a)) for ib = (1- (abs b))
+                          do (when (and (< -1 ia n) (< -1 ib n) (/= ia ib))
+                               (let* ((key (if (< ia ib) (cons ia ib) (cons ib ia)))
+                                      (rec (or (gethash key edges) (setf (gethash key edges) (list nil nil)))))
+                                 (when (plusp a) (setf (first rec) t))      ; drawn by some face
+                                 (push nrm (second rec))))))))
+              (let ((out nil))
+                (maphash (lambda (key rec)
+                           (when (and (not (first rec)) (= (length (second rec)) 2))
+                             (push (list (aref vs (car key)) (aref vs (cdr key)) (first (second rec)) (second (second rec))) out)))
+                         edges)
+                (coerce out 'vector))))))
+
+(defun mesh-silhouette-pieces (data toward)
+  "The outline of DATA's curved sides seen looking along -TOWARD."
+  (loop for (a b n1 n2) across (mesh-folds data)
+        when (minusp (* (vdot3 n1 toward) (vdot3 n2 toward)))
+          collect (list :seg a b)))
+
+(defun display-pieces (data &optional xf)
+  "Pieces to draw for DATA: a solid's edges plus the outline of its curved sides in this view."
+  (if (and (null xf) (equal (dxf 0 data) "POLYFACE") (fboundp 'view-toward-viewer))
+      (append (data-pieces data) (mesh-silhouette-pieces data (funcall 'view-toward-viewer)))
+      (data-pieces data)))
+
+(defun pick-pieces (e)
+  "E's pieces for picking: with a solid, the outline of its curved sides as seen now too."
+  (if (and (equal (ent-type e) "POLYFACE") (fboundp 'view-toward-viewer))
+      (append (entity-pieces e) (mesh-silhouette-pieces (ent-data e) (funcall 'view-toward-viewer)))
+      (entity-pieces e)))
+
 (defun mesh-centroid (data)
   (let ((vs (mesh-verts data)))
     (if vs (v* (reduce #'v+ vs) (/ 1d0 (length vs))) (pt 0 0 0))))
@@ -48,8 +93,13 @@
                                   p))
                   (rest data)))))
 
+(defvar *verts-vectors* (make-hash-table :test #'eq #+sbcl :weakness #+sbcl :key))
+(defun mesh-verts-vector (data)
+  "The corners of mesh DATA as a vector (kept, so big meshes don't walk the list for every face)."
+  (let ((vs (mesh-verts data)))
+    (or (gethash vs *verts-vectors*) (setf (gethash vs *verts-vectors*) (coerce vs 'vector)))))
 (defun mesh-face-points (data f)
-  (let ((vs (mesh-verts data))) (mapcar (lambda (i) (nth (1- (abs i)) vs)) f)))
+  (let ((vs (mesh-verts-vector data))) (mapcar (lambda (i) (aref vs (1- (abs i)))) f)))
 
 (defun newell-normal (pts)
   "Unit normal of the (roughly flat) polygon PTS, by Newell's method; NIL when degenerate."

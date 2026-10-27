@@ -209,7 +209,7 @@
   (multiple-value-bind (elev th) (view-object-height (ent-data e))
     (let ((out nil))
       (flet ((uv (p dz) (w->uv (pt (px p) (py p) (+ (pz p) elev dz)))))
-        (dolist (pc (entity-pieces e) out)
+        (dolist (pc (pick-pieces e) out)
           (let ((pts (piece-polyline-3d pc)))
             (loop for (a b) on pts while b
                   do (push (list :seg (uv a 0) (uv b 0)) out)
@@ -233,6 +233,10 @@
           (dolist (pc (entity-pieces e))
             (dolist (p (case (first pc) ((:seg :gseg) (list (second pc) (third pc))) (t nil)))
               (push (+ elev (pz (pt3 p))) zs)))
+          ;; a solid: its lowest and highest corners (its curved sides may have no drawn edges)
+          (let ((vs (and (equal (ent-type e) "POLYFACE") (mesh-verts (ent-data e)))))
+            (when vs
+              (push (reduce #'min vs :key #'pz) zs) (push (reduce #'max vs :key #'pz) zs)))
           (dolist (x (list (first b) (third b)))
             (dolist (y (list (second b) (fourth b)))
               (dolist (z zs)
