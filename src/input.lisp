@@ -396,7 +396,10 @@
         (let ((dd (cond ((eq (first pc) :gseg) (if (point-in-text-box-p p e) 0d0 (piece-dist pc p)))
                         ((equal (ent-type e) "HATCH") (if (point-in-hatch-p p (ent-data e)) (* 0.5 tol) (piece-dist pc p)))
                         (t (piece-dist pc p)))))
-          (when (and (<= dd tol) (or (null bd) (< dd bd))) (setf best e bd dd)))))))
+          (when (<= dd tol)
+            ;; a solid has edges everywhere: a line, circle or text under the same spot wins
+            (when (equal (ent-type e) "POLYFACE") (incf dd (* 2 tol)))
+            (when (or (null bd) (< dd bd)) (setf best e bd dd))))))))
 
 (defun point-in-text-box-p (p e)
   (let ((c (text-box (ent-data e))))

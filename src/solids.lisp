@@ -321,7 +321,11 @@ smooth shape."
   (let* ((ents (get-selection prompt))
          (ok (remove-if-not (lambda (e) (member (ent-type e) '("CIRCLE" "ARC" "LWPOLYLINE" "ELLIPSE" "SPLINE" "LINE") :test #'equal)) ents)))
     (when (< (length ok) (length ents))
-      (out (format nil "~D object~:P skipped (use circles, arcs, polylines, ellipses, splines or lines).~%" (- (length ents) (length ok)))))
+      (let ((solids (count "POLYFACE" ents :key #'ent-type :test #'equal)))
+        (out (format nil "~D object~:P skipped (use circles, arcs, polylines, ellipses, splines or lines)~:[~;: ~D of them ~:*~[~;is a solid~:;are solids~] - pick the edge of the circle or polyline itself~].~%"
+                     (- (length ents) (length ok)) (plusp solids) solids))))
+    (when (and (null ok) ents)
+      (out (format nil "Nothing to extrude.~%")))
     ok))
 
 (defun delete-profiles (ents)
