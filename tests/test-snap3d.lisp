@@ -63,4 +63,19 @@
   (chk "opened solid: the hole's axis" (r3 (rest (find :axis fs :key #'first)))
        '((-219/1000 1637/1000 3641/1000) (3292/1000 1637/1000 3641/1000) 259/500)))
 
+;; a circle drawn on a solid's face: picking it gets the circle, not the solid
+(al "(command \"-view\" \"swiso\")")
+(al "(command \"circle\" '(1.537 1.433 4.83) 1.773)")
+(chk "pick the circle on the solid's rim" (ent-type (pick-entity-at (pt (+ 1.537 1.773) 1.433 4.83))) "CIRCLE")
+(al "(command \"extrude\" (entlast) \"\" 1)")
+(chk "and extrude it" (count "POLYFACE" (mapcar #'ent-type (live-entities)) :test #'equal) 2)
+(al "(command \"plan\")")
+(al "(command \"circle\" '(1.537 1.433 4.83) 1.773)")
+(chk "Top view: the circle wins over the solid's rim too" (ent-type (pick-entity-at (pt (+ 1.537 1.773) 1.433 4.83))) "CIRCLE")
+;; PEDIT turns a circle into a polyline
+(al "(command \"pedit\" (entlast) \"\" \"\")")
+(let ((d (ename-data (newest))))
+  (chk "PEDIT: circle -> closed polyline" (list (dxf 0 d) (lwpoly-closed-p d)) '("LWPOLYLINE" t))
+  (chk "same size" (r3 (entity-bbox (newest))) (r3 (list (- 1.537 1.773) (- 1.433 1.773) (+ 1.537 1.773) (+ 1.433 1.773)))))
+
 (format t "~%3D snap tests: ~D passed, ~D failed.~%" *pass* *fail*)

@@ -515,6 +515,8 @@ opened from files - so the usual snaps work on them:
   **Quadrants** from any view.
 
 On a round edge, its centre takes the place of the many little corner (Endpoint) snaps along it.
+When a line, circle or text lies on a solid, a click on it picks it rather than the solid. PEDIT
+offers to turn a circle (as well as a line or arc) into a polyline.
 **Solids → Keep the Shapes Solids Are Made From** (KEEPPROFILES, DELOBJ 0) keeps the circles,
 polylines and paths that EXTRUDE, REVOLVE, SWEEP and LOFT use, as ordinary objects to snap to
 and reuse.

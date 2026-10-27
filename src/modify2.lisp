@@ -303,7 +303,17 @@ Returns new vertex list or NIL when it does not fit."
 ;;; ---------- PEDIT ----------
 
 (defun to-polyline (e)
-  "Turn a LINE or ARC into an LWPOLYLINE in place; returns the new entity."
+  "Turn a LINE, ARC or CIRCLE into an LWPOLYLINE in place; returns the new entity."
+  (when (equal (ent-type e) "CIRCLE")
+    ;; a circle: a closed polyline of two half circles
+    (let* ((d (ent-data e)) (c (pt3 (dxf 10 d))) (r (d (dxf 40 d)))
+           (new (add-entity (append (make-lwpoly-data (list (list (pt (+ (px c) r) (py c)) 1d0) (list (pt (- (px c) r) (py c)) 1d0)) t)
+                                    (unless (zerop (pz c)) (list (cons 38 (pz c))))
+                                    (let ((n (assoc 210 d))) (and n (list n)))
+                                    (let ((th (dxf 39 d))) (and th (list (cons 39 th))))
+                                    (common-props d)))))
+      (delete-entity e)
+      (return-from to-polyline new)))
   (let ((ch (entity-chain-pieces e)))
     (when ch
       (let ((new (add-entity (append (make-lwpoly-data (append (mapcar (lambda (s) (list (first s) (third s))) ch)
@@ -353,9 +363,11 @@ Returns new vertex list or NIL when it does not fit."
        (let ((e (sel-entity sel)))
          (cond ((null e) nil)
                ((equal (ent-type e) "LWPOLYLINE") (pedit-one e))
-               ((member (ent-type e) '("LINE" "ARC") :test #'equal)
+               ((member (ent-type e) '("LINE" "ARC" "CIRCLE") :test #'equal)
                 (when (equal "Yes" (gkw "Object selected is not a polyline. Do you want to turn it into one? <Y> " '("Yes" "No") "Yes"))
                   (pedit-one (to-polyline e))))
+               ((equal (ent-type e) "POLYFACE")
+                (out (format nil "Object selected is a 3D solid, not a polyline (pick the line, arc or circle itself).~%")))
                (t (out (format nil "Object selected is not a polyline.~%")))))))))
 
 (defun mpedit ()

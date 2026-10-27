@@ -255,7 +255,10 @@
     (dolist (e (view-candidates q tol) best)
       (dolist (sg (entity-view-segs e))
         (let ((dd (piece-dist sg q)))
-          (when (and (<= dd tol) (or (null bd) (< dd bd))) (setf best e bd dd)))))))
+          (when (<= dd tol)
+            ;; a solid has edges everywhere: a line, circle or text under the same spot wins
+            (when (equal (ent-type e) "POLYFACE") (incf dd (* 2 tol)))
+            (when (or (null bd) (< dd bd)) (setf best e bd dd))))))))
 
 (defun view-entities-in-window (p1 p2 crossing)
   (let* ((a (w->uv p1)) (b (w->uv p2))
