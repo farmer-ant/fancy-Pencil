@@ -6,7 +6,7 @@
 
 (defparameter *pref-sysvars*
   '("BKGCOLOR" "CURSORSIZE" "CURSORCOLOR" "PICKBOX" "APERTURE" "AUTOSNAPSIZE" "GRIPSIZE" "ROLLOVERTIPS"
-    "OSMODE" "GRIDMODE")
+    "OSMODE" "GRIDMODE" "DELOBJ")
   "Settings kept in the preferences file.")
 
 ;; they belong to the program, not to one drawing: carry them between tabs

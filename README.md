@@ -500,6 +500,25 @@ hover tip show a solid's volume. Solids are saved as AutoCAD polyface meshes, wh
 and shows exactly (there they are meshes, not ACIS solids); polyface meshes, polygon meshes and
 3D faces in AutoCAD drawings open as solids/meshes here too.
 
+### Snapping to solids
+
+Solids are kept as meshes of flat faces, so a round edge is really many short straight ones.
+Fancy Pencil finds the round shapes again from the mesh - for solids you make and for solids
+opened from files - so the usual snaps work on them:
+
+* **Center** and **Quadrant** of round edges on flat faces: a cylinder's ends, a hole drilled
+  through a flat face, the rounded end of a slot (Center of the arc).
+* **Center** of the ends of a round wall - a cylinder's side, or a hole bored through a round
+  body: move over the end of the hole.
+* **Center** of a sphere.
+* Circles and arcs drawn in another plane (say in the Front view) snap to their **Center** and
+  **Quadrants** from any view.
+
+On a round edge, its centre takes the place of the many little corner (Endpoint) snaps along it.
+**Solids → Keep the Shapes Solids Are Made From** (KEEPPROFILES, DELOBJ 0) keeps the circles,
+polylines and paths that EXTRUDE, REVOLVE, SWEEP and LOFT use, as ordinary objects to snap to
+and reuse.
+
 ### Isometric drafting (View → Isometric Drafting, ISODRAFT)
 
 AutoCAD's 2D isometric mode for drawing isometric pictures: the grid becomes an isometric grid,
@@ -701,6 +720,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-layouts.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-massprop.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-draworder.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-tiles.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-snap3d.lisp
 ```
 
 ## Layout
@@ -715,6 +735,7 @@ src/db.lisp        drawing database (entities are DXF association lists, like en
 src/ltype.lisp     linetypes (.lin), dashes, lineweights
 src/hatch.lisp     hatch patterns, rendering, boundary detection
 src/dxf.lisp       DXF reader and R12 writer
+src/snap3d.lisp    snaps on solids: round edges, round walls, spheres; circles in other planes
 src/tiles.lisp     VPORTS: the Model tab split into viewports
 src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
