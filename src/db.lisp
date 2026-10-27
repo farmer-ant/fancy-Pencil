@@ -35,6 +35,7 @@
   (model-view nil)       ; the Model tab's view while a layout is showing
   (tiles nil)            ; the Model tab split into viewports (VPORTS): tile structs, or NIL for one
   (active-tile 0)
+  (reordered nil)        ; true once DRAWORDER has changed the order of the list
   (next-handle #x30)
   (layers (list (make-layer :name "0")))
   (blocks nil)
@@ -175,9 +176,18 @@ and is only redrawn by Fancy Pencil once it is edited.")
   "Every object in the drawing: model space and every layout."
   (loop for e across (drawing-entities *dwg*) unless (ename-deleted e) collect e))
 (defun last-entity ()
-  (loop for i from (1- (length (drawing-entities *dwg*))) downto 0
-        for e = (aref (drawing-entities *dwg*) i)
-        unless (ename-deleted e) return e))
+  "The object made last (ENTLAST). Usually the end of the list; after a change of draw order
+(a hatch sent behind its boundary) the one with the newest handle."
+  (let* ((v (drawing-entities *dwg*))
+         (tail (loop for i from (1- (length v)) downto 0
+                     for e = (aref v i) unless (ename-deleted e) return e))
+         (best tail) (bh (and tail (parse-integer (ename-handle tail) :radix 16 :junk-allowed t))))
+    (when (and tail (drawing-reordered *dwg*))
+      (loop for e across v
+            unless (ename-deleted e)
+              do (let ((h (parse-integer (ename-handle e) :radix 16 :junk-allowed t)))
+                   (when (and h bh (> h bh)) (setf best e bh h)))))
+    best))
 (defun next-entity (e)
   (let ((v (drawing-entities *dwg*)))
     (if (null e)

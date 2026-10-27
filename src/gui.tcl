@@ -3121,3 +3121,155 @@ proc aliasdlg {pairs} {
 emit READY
 # test hook: FANCYPENCIL_TEST_TCL=script.tcl is sourced after startup (used by the automated GUI tests)
 if {[info exists env(FANCYPENCIL_TEST_TCL)]} { after 1500 [list source $env(FANCYPENCIL_TEST_TCL)] }
+
+# ---------------------------------------------------------------- Hatch dialog
+# patterns: list of {name description swatch}; swatch is "solid" or x1 y1 x2 y2 ... in a unit
+# square (lines drawn over -0.5..1.5 so they still fill it when turned). Returns
+# ACTION \x1f pattern \x1f scale \x1f angle \x1f draw-order, ACTION one of OK PICK SELECT REMOVE CANCEL.
+proc swatch_clip {x1 y1 x2 y2} {
+    # Liang-Barsky against the unit square
+    set t0 0.0; set t1 1.0; set dx [expr {$x2 - $x1}]; set dy [expr {$y2 - $y1}]
+    foreach {p q} [list [expr {-$dx}] $x1 $dx [expr {1.0 - $x1}] [expr {-$dy}] $y1 $dy [expr {1.0 - $y1}]] {
+        if {$p == 0} { if {$q < 0} { return {} } ; continue }
+        set r [expr {double($q) / $p}]
+        if {$p < 0} { if {$r > $t1} { return {} }; if {$r > $t0} { set t0 $r } } \
+        else { if {$r < $t0} { return {} }; if {$r < $t1} { set t1 $r } }
+    }
+    return [list [expr {$x1 + $t0 * $dx}] [expr {$y1 + $t0 * $dy}] [expr {$x1 + $t1 * $dx}] [expr {$y1 + $t1 * $dy}]]
+}
+proc swatch_draw {c swatch size {angle 0} {color "#d6dce4"}} {
+    $c delete all
+    $c create rectangle 0 0 $size $size -fill "#1a1f26" -outline "#4a5260"
+    if {$swatch eq "solid"} {
+        $c create rectangle 3 3 [expr {$size - 3}] [expr {$size - 3}] -fill $color -outline ""
+        return
+    }
+    set a [expr {$angle * acos(-1) / 180.0}]
+    set ca [expr {cos($a)}]; set sa [expr {sin($a)}]
+    foreach {x1 y1 x2 y2} $swatch {
+        # turn about the middle of the square, then keep what falls inside it
+        set u1 [expr {0.5 + ($x1 - 0.5) * $ca - ($y1 - 0.5) * $sa}]; set v1 [expr {0.5 + ($x1 - 0.5) * $sa + ($y1 - 0.5) * $ca}]
+        set u2 [expr {0.5 + ($x2 - 0.5) * $ca - ($y2 - 0.5) * $sa}]; set v2 [expr {0.5 + ($x2 - 0.5) * $sa + ($y2 - 0.5) * $ca}]
+        set s [swatch_clip $u1 $v1 $u2 $v2]
+        if {$s eq ""} continue
+        lassign $s a1 b1 a2 b2
+        set px1 [expr {2 + $a1 * ($size - 4)}]; set py1 [expr {$size - 2 - $b1 * ($size - 4)}]
+        set px2 [expr {2 + $a2 * ($size - 4)}]; set py2 [expr {$size - 2 - $b2 * ($size - 4)}]
+        if {abs($px2 - $px1) < 0.5 && abs($py2 - $py1) < 0.5} { set px2 [expr {$px1 + 1}] }
+        $c create line $px1 $py1 $px2 $py2 -fill $color
+    }
+}
+proc hatchdlg_swatch {} {
+    set w .hd
+    set name [$w.f.pat get]
+    set i [lsearch -index 0 $::hd_patterns $name]
+    if {$i < 0} { $w.f.desc configure -text "(unknown pattern)"; return }
+    lassign [lindex $::hd_patterns $i] nm desc sw
+    $w.f.desc configure -text $desc
+    set ang 0
+    catch {set ang [expr {double([$w.f.ang get])}]}
+    swatch_draw $w.f.sw $sw 120 $ang
+}
+proc hatch_palette {} {
+    set p .hpal
+    catch {destroy $p}
+    toplevel $p -background $::panel
+    wm title $p "Hatch Pattern Palette"
+    wm transient $p .hd
+    set f [ttk::frame $p.f -padding 8]
+    pack $f -fill both -expand 1
+    set i 0
+    foreach pat $::hd_patterns {
+        lassign $pat nm desc sw
+        set cell [frame $f.c$i -background $::panel]
+        canvas $cell.c -width 64 -height 64 -highlightthickness 2 -highlightbackground $::panel -background "#1a1f26" -cursor hand2
+        label $cell.l -text $nm -background $::panel -foreground $::fg -font {Helvetica 8}
+        pack $cell.c $cell.l -side top
+        swatch_draw $cell.c $sw 64
+        if {$nm eq [.hd.f.pat get]} { $cell.c configure -highlightbackground $::accent }
+        foreach wdg [list $cell.c $cell.l] {
+            bind $wdg <Button-1> [list apply {{nm} {.hd.f.pat set $nm; hatchdlg_swatch; destroy .hpal}} $nm]
+        }
+        set tip [string map {\{ ( \} )} $desc]
+        bind $cell.c <Enter> [list .hpal.tip configure -text "$nm - $tip"]
+        grid $cell -row [expr {$i / 6}] -column [expr {$i % 6}] -padx 4 -pady 4
+        incr i
+    }
+    label $p.tip -text "Click a pattern" -background $::panel -foreground $::fg -anchor w -padx 8
+    pack $p.tip -side bottom -fill x -pady {0 6}
+    bind $p <Escape> {destroy .hpal}
+    wm geometry $p +[expr {[winfo rootx .hd] + 40}]+[expr {[winfo rooty .hd] + 40}]
+    safegrab $p
+}
+proc hatchdlg {patterns current scale angle order orders nbound mode} {
+    set w .hd
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w [expr {$mode eq "edit" ? "Hatch Edit" : "Hatch"}]
+    wm transient $w .
+    set ::hd_patterns $patterns
+    set f [ttk::frame $w.f -padding 10]
+    pack $f -fill both -expand 1
+    # left: the pattern
+    ttk::label $f.lp -text "Pattern:"
+    ttk::combobox $f.pat -values [lmap p $patterns {lindex $p 0}] -width 14 -state readonly
+    $f.pat set $current
+    ttk::button $f.more -text "..." -width 3 -command hatch_palette
+    ttk::label $f.desc -text "" -wraplength 230
+    canvas $f.sw -width 120 -height 120 -highlightthickness 0 -background "#1a1f26" -cursor hand2
+    bind $f.sw <Button-1> hatch_palette
+    ttk::label $f.la -text "Angle:"
+    ttk::combobox $f.ang -values {0 15 30 45 60 75 90 105 120 135 150 165} -width 8
+    $f.ang set $angle
+    ttk::label $f.ls -text "Scale:"
+    ttk::combobox $f.sc -values {0.0625 0.125 0.25 0.5 0.75 1 1.25 1.5 2 4 8 12 16 24 48} -width 8
+    $f.sc set $scale
+    ttk::label $f.lo -text "Draw order:"
+    ttk::combobox $f.ord -values $orders -width 24 -state readonly
+    $f.ord set $order
+    grid $f.lp -row 0 -column 0 -sticky w
+    grid $f.pat -row 0 -column 1 -sticky w
+    grid $f.more -row 0 -column 2 -sticky w -padx {4 0}
+    grid $f.sw -row 1 -column 1 -columnspan 2 -sticky w -pady 6
+    grid $f.desc -row 2 -column 0 -columnspan 3 -sticky w
+    grid $f.la -row 3 -column 0 -sticky w -pady {8 2}
+    grid $f.ang -row 3 -column 1 -sticky w -pady {8 2}
+    grid $f.ls -row 4 -column 0 -sticky w -pady 2
+    grid $f.sc -row 4 -column 1 -sticky w -pady 2
+    grid $f.lo -row 5 -column 0 -sticky w -pady 2
+    grid $f.ord -row 5 -column 1 -columnspan 2 -sticky w -pady 2
+    # right: the boundaries
+    set b [ttk::labelframe $f.b -text "Boundaries" -padding 8]
+    ttk::button $b.pick -text "Add: Pick points" -command {hatchdlg_done PICK}
+    ttk::button $b.sel -text "Add: Select objects" -command {hatchdlg_done SELECT}
+    ttk::button $b.rem -text "Remove all boundaries" -command {hatchdlg_done REMOVE}
+    ttk::label $b.n -text [expr {$nbound == 0 ? "No boundaries yet" : "$nbound boundary loop[expr {$nbound == 1 ? {} : {s}}]"}]
+    pack $b.pick $b.sel $b.rem -side top -fill x -pady 2
+    pack $b.n -side top -anchor w -pady {8 0}
+    if {$mode eq "edit"} { $b.pick state disabled; $b.sel state disabled; $b.rem state disabled; $b.n configure -text "Editing a hatch" }
+    if {$nbound == 0} { $b.rem state disabled }
+    grid $b -row 0 -column 3 -rowspan 6 -sticky nsew -padx {16 0}
+    ttk::label $f.note -text "The hatch shows in the drawing as you add boundaries." -foreground "#8a94a3"
+    grid $f.note -row 6 -column 0 -columnspan 4 -sticky w -pady {10 0}
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.ok -text OK -command {hatchdlg_done OK}
+    ttk::button $bb.cancel -text Cancel -command {hatchdlg_done CANCEL}
+    pack $bb.cancel $bb.ok -side right -padx 3
+    grid $bb -row 7 -column 0 -columnspan 4 -sticky e -pady {10 0}
+    bind $f.pat <<ComboboxSelected>> hatchdlg_swatch
+    foreach e [list $f.ang] { bind $e <<ComboboxSelected>> hatchdlg_swatch; bind $e <KeyRelease> hatchdlg_swatch }
+    bind $w <Return> {hatchdlg_done OK}
+    bind $w <Escape> {hatchdlg_done CANCEL}
+    set ::hd_result ""
+    hatchdlg_swatch
+    wm geometry $w +[expr {[winfo rootx .] + 180}]+[expr {[winfo rooty .] + 110}]
+    safegrab $w
+    tkwait window $w
+    return $::hd_result
+}
+proc hatchdlg_done {action} {
+    set f .hd.f
+    set ::hd_result [join [list $action [$f.pat get] [$f.sc get] [$f.ang get] [$f.ord get]] "\x1f"]
+    catch {destroy .hpal}
+    destroy .hd
+}

@@ -26,6 +26,7 @@ just :ABOVE or :UNDER the reference objects REFS."
                             (if k (append (subseq others 0 k) moving (nthcdr k others)) (append moving others))))))
            (v (drawing-entities *dwg*)))
       (unless (equal new all)
+        (setf (drawing-reordered *dwg*) t)
         (setf (fill-pointer v) 0)
         (dolist (e new) (vector-push-extend e v))
         (touch))

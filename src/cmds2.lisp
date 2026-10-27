@@ -119,33 +119,133 @@
 
 (defcmd "HPSET" () "Sets the hatch pattern, scale and angle used by HATCH." (hatch-settings-prompt))
 
+(defun dash-command-p ()
+  "True when the command was typed with a leading dash (-HATCH ...): the command-line version."
+  (and (plusp (length *command-word*)) (char= (char *command-word* 0) #\-)))
+
+(defvar *pattern-swatches* nil)
+
+(defun pattern-swatch (name)
+  "For the Hatch dialog: :solid, or pattern NAME's lines as x1 y1 x2 y2 ... over the square from
+-0.5 to 1.5 (unit square in the middle), scaled to show a few repeats."
+  (if (solid-pattern-p name)
+      :solid
+      (let* ((fams0 (pattern-lines-world name 1d0 0d0))
+             (sp (loop for (a base off) in fams0
+                       for s = (abs (- (* (py off) (cos a)) (* (px off) (sin a))))
+                       when (> s 1d-9) minimize s))
+             (scale (max 0.05d0 (min 4d0 (/ 0.14d0 (max sp 1d-6)))))
+             (fams (pattern-lines-world name scale 0d0))
+             (poly (list (pt -0.5 -0.5) (pt 1.5 -0.5) (pt 1.5 1.5) (pt -0.5 1.5)))
+             (*plotting* t))
+        (loop for f in fams
+              for segs = (hatch-family-segments f (list poly) (list -0.5d0 -0.5d0 1.5d0 1.5d0) 4000)
+              unless (eq segs :too-dense)
+                append (loop for sg in segs
+                             append (let ((p (first sg)) (q (car (last sg))))
+                                      (mapcar (lambda (x) (/ (round (* x 1000)) 1000.0)) (list (px p) (py p) (px q) (py q)))))))))
+
+(defun hatch-patterns-tcl ()
+  (or *pattern-swatches*
+      (setf *pattern-swatches*
+            (format nil "{~{{~A}~^ ~}}"
+                    (mapcar (lambda (h)
+                              (let ((sw (pattern-swatch (first h))))
+                                (format nil "~A ~A ~A" (tq (first h)) (tq (second h))
+                                        (if (eq sw :solid) "solid" (format nil "{~{~A~^ ~}}" sw)))))
+                            *hatch-patterns*)))))
+
+(defparameter *hatch-orders*
+  '((3 . "Behind its boundary") (1 . "Send to back") (2 . "Bring to front") (0 . "Leave as drawn (on top)")))
+
+(defun hatch-order-label () (cdr (or (assoc (or (sysvar "HPDRAWORDER") 3) *hatch-orders*) (first *hatch-orders*))))
+
+(defun hatch-dialog (nbound &optional (mode "new"))
+  "The Hatch dialog. Applies its settings; returns the button: OK PICK SELECT REMOVE or CANCEL."
+  (let* ((r (tk-ask (format nil "hatchdlg ~A ~A ~A ~A ~A ~A ~D ~A"
+                            (hatch-patterns-tcl) (tq (sysvar "HPNAME")) (tq (fmt-plain (sysvar "HPSCALE")))
+                            (tq (string-right-trim "." (string-right-trim "0" (format nil "~,4F" (deg (or (sysvar "HPANG") 0d0)))))) (tq (hatch-order-label))
+                            (tcl-list (mapcar #'cdr *hatch-orders*)) nbound mode)))
+         (f (split-string r (code-char 31))))
+    (if (< (length f) 5)
+        "CANCEL"
+        (destructuring-bind (action pat sc an ord) f
+          (unless (string= action "CANCEL")
+            (when (hatch-pattern-def pat) (setf (sysvar "HPNAME") (string-upcase pat)))
+            (let ((s (parse-number-text sc))) (when (and s (> s 0)) (setf (sysvar "HPSCALE") (d s))))
+            (let ((a (parse-number-text an))) (when a (setf (sysvar "HPANG") (rad (d a)))))
+            (let ((o (rassoc ord *hatch-orders* :test #'string=))) (when o (setf (sysvar "HPDRAWORDER") (car o)))))
+          action))))
+
+(defun apply-hatch-draw-order (e)
+  "Put new hatch E behind its boundary, at the back or the front (HPDRAWORDER 3, 1, 2)."
+  (case (or (sysvar "HPDRAWORDER") 3)
+    (1 (reorder-entities (list e) :back))
+    (2 (reorder-entities (list e) :front))
+    (3 (let* ((b (entity-bbox e))
+              (around (and b (remove-if (lambda (x) (or (eq x e) (equal (ent-type x) "HATCH")
+                                                        (let ((xb (entity-bbox x)))
+                                                          (or (null xb) (> (first xb) (third b)) (< (third xb) (first b))
+                                                              (> (second xb) (fourth b)) (< (fourth xb) (second b))))))
+                                        (live-entities)))))
+         (when around (reorder-entities (list e) :under around))))))
+
 (defcmd "HATCH" ("H" "BH" "BHATCH" "-HATCH" "GRADIENT") "Fills an enclosed area with a hatch pattern or solid fill."
-  (let ((e nil) (loops nil) (history nil))
+  (let ((e nil) (loops nil) (history nil)
+        (dialog (and (use-inplace-editor-p) (not (dash-command-p)))))
     (labels ((update ()
                (cond ((and e (null loops)) (delete-entity e) (setf e nil))
                      (e (set-entity-data e (append (list (cons 0 "HATCH") (cons 5 (ename-handle e)))
                                                    (rest (make-hatch-data loops)) (common-props (ent-data e)))))
-                     (loops (setf e (add (make-hatch-data loops)))))))
-      (loop
-        (out (format nil "Pattern: ~A   Scale: ~A   Angle: ~A~%" (sysvar "HPNAME") (fmt-plain (sysvar "HPSCALE")) (fmt-ang (sysvar "HPANG"))))
-        (let ((r (gpoint "Pick internal point or [Select objects/Properties/Undo]: "
-                         :keywords '("Select" "Properties" "Undo"))))
-          (cond
-            ((null r) (return))
-            ((equal r "Properties") (hatch-settings-prompt) (when e (update)))
-            ((equal r "Undo") (when history (setf loops (pop history)) (update)))
-            ((equal r "Select")
-             (let* ((ents (select-objects :editable nil))
-                    (new (remove nil (mapcar #'closed-entity-loop ents))))
-               (if new (progn (push loops history) (setf loops (append loops new)) (update))
-                   (out (format nil "No closed boundaries were selected.~%")))))
-            ((pointp r)
-             (out (format nil "Analyzing the selected data...~%"))
-             (let ((found (detect-boundary r)))
-               (if found
-                   (progn (push loops history) (setf loops (append loops found)) (update)
-                          (when (gui-p) (gui-regen)))
-                   (out (format nil "Valid hatch boundary not found.~%")))))))))))
+                     (loops (setf e (add (make-hatch-data loops)))))
+               (when (gui-p) (gui-regen)))
+             (pick-points ()
+               (loop
+                 (let ((r (gpoint "Pick internal point or [Select objects/Undo]: " :keywords '("Select" "Undo"))))
+                   (cond
+                     ((null r) (return))
+                     ((equal r "Undo") (when history (setf loops (pop history)) (update)))
+                     ((equal r "Select") (select-bounds))
+                     ((pointp r)
+                      (out (format nil "Analyzing the selected data...~%"))
+                      (let ((found (detect-boundary r)))
+                        (if found
+                            (progn (push loops history) (setf loops (append loops found)) (update))
+                            (out (format nil "Valid hatch boundary not found.~%")))))))))
+             (select-bounds ()
+               (let* ((ents (select-objects :editable nil))
+                      (new (remove nil (mapcar #'closed-entity-loop ents))))
+                 (if new (progn (push loops history) (setf loops (append loops new)) (update))
+                     (out (format nil "No closed boundaries were selected.~%"))))))
+      (if dialog
+          ;; the dialog, as in AutoCAD: pick or select boundaries, back to the dialog, OK
+          (loop
+            (let ((action (hatch-dialog (length loops))))
+              (when e (update))
+              (cond
+                ((string= action "CANCEL") (when e (delete-entity e) (setf e nil)) (when (gui-p) (gui-regen)) (return))
+                ((string= action "PICK") (pick-points))
+                ((string= action "SELECT") (select-bounds))
+                ((string= action "REMOVE") (push loops history) (setf loops nil) (update))
+                (t (when e (apply-hatch-draw-order e) (when (gui-p) (gui-regen))
+                         (out (format nil "Hatch: ~A, scale ~A, angle ~A, ~D boundary loop~:P.~%" (sysvar "HPNAME")
+                                      (fmt-plain (sysvar "HPSCALE")) (fmt-ang (sysvar "HPANG")) (length loops))))
+                   (return)))))
+          (loop
+            (out (format nil "Pattern: ~A   Scale: ~A   Angle: ~A~%" (sysvar "HPNAME") (fmt-plain (sysvar "HPSCALE")) (fmt-ang (sysvar "HPANG"))))
+            (let ((r (gpoint "Pick internal point or [Select objects/Properties/Undo]: "
+                             :keywords '("Select" "Properties" "Undo"))))
+              (cond
+                ((null r) (when e (apply-hatch-draw-order e) (when (gui-p) (gui-regen))) (return))
+                ((equal r "Properties") (hatch-settings-prompt) (when e (update)))
+                ((equal r "Undo") (when history (setf loops (pop history)) (update)))
+                ((equal r "Select") (select-bounds))
+                ((pointp r)
+                 (out (format nil "Analyzing the selected data...~%"))
+                 (let ((found (detect-boundary r)))
+                   (if found
+                       (progn (push loops history) (setf loops (append loops found)) (update))
+                       (out (format nil "Valid hatch boundary not found.~%"))))))))))))
 
 (defcmd "HATCHEDIT" ("HE" "-HATCHEDIT") "Changes the pattern, scale or angle of existing hatches."
   (let ((e (sel-entity (get-user-input :entity :prompt "Select hatch object: "))))
@@ -154,10 +254,13 @@
         (let* ((data (ent-data e))
                (saved (list (sysvar "HPNAME") (sysvar "HPSCALE") (sysvar "HPANG"))))
           (setf (sysvar "HPNAME") (or (dxf 2 data) "ANSI31") (sysvar "HPSCALE") (d (or (dxf 41 data) 1)) (sysvar "HPANG") (d (or (dxf 52 data) 0)))
-          (hatch-settings-prompt)
-          (set-entity-data e (append (rem-dxf :pattern (rem-dxf 2 (rem-dxf 70 (rem-dxf 41 (rem-dxf 52 data)))))
-                                     (list (cons 2 (sysvar "HPNAME")) (cons 70 (if (solid-pattern-p (sysvar "HPNAME")) 1 0))
-                                           (cons 41 (d (sysvar "HPSCALE"))) (cons 52 (d (sysvar "HPANG"))))))
+          (let ((ok (if (and (use-inplace-editor-p) (not (dash-command-p)))
+                        (string= (hatch-dialog 0 "edit") "OK")
+                        (progn (hatch-settings-prompt) t))))
+            (when ok
+              (set-entity-data e (append (rem-dxf :pattern (rem-dxf 2 (rem-dxf 70 (rem-dxf 41 (rem-dxf 52 data)))))
+                                         (list (cons 2 (sysvar "HPNAME")) (cons 70 (if (solid-pattern-p (sysvar "HPNAME")) 1 0))
+                                               (cons 41 (d (sysvar "HPSCALE"))) (cons 52 (d (sysvar "HPANG"))))))))
           (destructuring-bind (n s a) saved (setf (sysvar "HPNAME") n (sysvar "HPSCALE") s (sysvar "HPANG") a))))))
 
 ;;; ---------- REVCLOUD ----------

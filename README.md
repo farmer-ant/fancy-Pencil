@@ -177,6 +177,19 @@ ANSI31–38, LINE, NET, NET3, DASH, DOTS, BRICK, SQUARE, CROSS, ANGLE, HONEY, ZI
 INSUL. HATCHEDIT changes pattern, scale and angle. Hatch patterns read from DXF files are drawn
 exactly as defined.
 
+**The Hatch dialog** (HATCH, H): choose the pattern from the list or from the palette of swatches
+(the **...** button, or click the swatch), set the angle and scale (the swatch turns with the
+angle), and the draw order (behind its boundary, the default as in AutoCAD; to the back; to the
+front; or as drawn). **Add: Pick points** and **Add: Select objects** go to the drawing to add
+boundaries; the hatch shows as you add them, and Enter brings the dialog back. **Remove all
+boundaries** starts again; **OK** keeps the hatch, **Cancel** drops it. HATCHEDIT (HE) opens the
+same dialog for an existing hatch. **-HATCH** asks at the command line instead (for scripts).
+
+**LIST** (LI) shows each selected object's type, layer, space, color, linetype and lineweight,
+and its geometry (lengths, areas, radii, vertices, a hatch's pattern and area, a solid's volume,
+a dimension's measurement ...) in a window you can scroll and copy from, as well as on the
+command line.
+
 ### Recent files
 
 File → Recent Files lists the last 12 drawings you opened or saved (newest first, with the

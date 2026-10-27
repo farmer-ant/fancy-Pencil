@@ -62,4 +62,14 @@
 (al "(command \"tcase\" (entlast) \"\" \"title\")")
 (chk "TCASE Title" (dxf 1 (ename-data (newest))) "Mixed Case")
 
+;; hatches go behind their boundary; LIST describes everything
+(al "(command \"erase\" (ssget \"x\") \"\")")
+(al "(command \"rectang\" '(2 2) '(10 7))")
+(al "(command \"circle\" '(6 4.5) 1)")
+(al "(command \"-hatch\" '(3 3) \"\")")
+(chk "new hatch is drawn behind its boundary" (ent-type (first (live-entities))) "HATCH")
+(chk "hatch area: rectangle less the circle" (/ (round (* 1000 (hatch-area (ename-data (first (live-entities)))))) 1000) (/ (round (* 1000 (- 40 pi))) 1000))
+(chk "LIST names the pattern" (and (search "Pattern: ANSI31" (describe-entity (first (live-entities)))) t) t)
+(chk "pattern swatches for the dialog" (every (lambda (h) (pattern-swatch (first h))) *hatch-patterns*) t)
+
 (format t "~%Draw order tests: ~D passed, ~D failed.~%" *pass* *fail*)
