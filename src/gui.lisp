@@ -146,12 +146,12 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
 
 (defun w->s (p)
   (multiple-value-bind (u v) (view-project p)
-    (values (+ (/ *cw* 2d0) (* (- u *vx*) *vscale*))
-            (- (/ *ch* 2d0) (* (- v *vy*) *vscale*)))))
+    (values (+ *tx* (/ *cw* 2d0) (* (- u *vx*) *vscale*))
+            (- (+ *ty* (/ *ch* 2d0)) (* (- v *vy*) *vscale*)))))
 (defun s->uv (sx sy)
   "Screen pixel -> view coordinates (the same as world X,Y in plan view)."
-  (pt (+ *vx* (/ (- sx (/ *cw* 2d0)) *vscale*))
-      (- *vy* (/ (- sy (/ *ch* 2d0)) *vscale*))))
+  (pt (+ *vx* (/ (- sx *tx* (/ *cw* 2d0)) *vscale*))
+      (- *vy* (/ (- sy *ty* (/ *ch* 2d0)) *vscale*))))
 (defun s->w (sx sy)
   (let ((q (s->uv sx sy)))
     (if (projected-view-p) (view-unproject (px q) (py q)) q)))
@@ -214,8 +214,8 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
 (defun zoom-at (sx sy factor &optional quick)
   (let ((w (s->uv sx sy)))
     (setf *vscale* (min 1d9 (max 1d-9 (* *vscale* factor))))
-    (setf *vx* (- (px w) (/ (- sx (/ *cw* 2d0)) *vscale*))
-          *vy* (+ (py w) (/ (- sy (/ *ch* 2d0)) *vscale*)))
+    (setf *vx* (- (px w) (/ (- sx *tx* (/ *cw* 2d0)) *vscale*))
+          *vy* (+ (py w) (/ (- sy *ty* (/ *ch* 2d0)) *vscale*)))
     (if quick
         ;; instant feedback: scale what is on the canvas; exact regen follows on IDLE
         (progn (tk-send-string (format nil "foreach tg {~A} {.c scale $tg ~D ~D ~,5F ~,5F}" (quick-tags) sx sy factor factor))
@@ -299,7 +299,7 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
     (loop for (a b) on pts while b
           do (multiple-value-bind (x1 y1) (w->s a)
                (multiple-value-bind (x2 y2) (w->s b)
-                 (let ((c (clip-seg x1 y1 x2 y2 (- m) (- m) (+ *cw* m) (+ *ch* m))))
+                 (let ((c (clip-seg x1 y1 x2 y2 (- m) (- m) (+ *full-cw* m) (+ *full-ch* m))))
                    (when c
                      (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -width ~A~A -tags {~A}"
                                    (fmtn (first c)) (fmtn (second c)) (fmtn (third c)) (fmtn (fourth c))
@@ -408,12 +408,12 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
       (multiple-value-bind (x y) (w->s p)
         (cond
           ((< px-size 3)
-           (when (and (< -50 x (+ *cw* 50)) (< -50 y (+ *ch* 50)))
+           (when (and (< -50 x (+ *full-cw* 50)) (< -50 y (+ *full-ch* 50)))
              (list (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}"
                            (fmtn x) (fmtn y) (fmtn (+ x (* (cos rot) (max 2 (* 0.6 h *vscale* (length s))))))
                            (fmtn (- y (* (sin rot) (max 2 (* 0.6 h *vscale* (length s)))))) color tags))))
           ((> px-size 3000) nil)
-          ((or (< x -4000) (> x (+ *cw* 4000)) (< y -4000) (> y (+ *ch* 4000))) nil)
+          ((or (< x -4000) (> x (+ *full-cw* 4000)) (< y -4000) (> y (+ *full-ch* 4000))) nil)
           (t (multiple-value-bind (anchor justify) (text-anchor data)
                (list (format nil ".c create text ~A ~A -text ~A -anchor ~A -justify ~A -angle ~,3F -font {~A} -fill ~A -tags {~A}~A"
                              (fmtn x) (fmtn y) (tq s) anchor justify (deg rot) (text-font-spec data px-size)
@@ -583,7 +583,7 @@ other pieces (arcs, circles) are drawn one by one."
         (if (eq (first pc) :seg)
             (multiple-value-bind (x1 y1) (w->s (second pc))
               (multiple-value-bind (x2 y2) (w->s (third pc))
-                (let ((c (clip-seg x1 y1 x2 y2 (- m) (- m) (+ *cw* m) (+ *ch* m))))
+                (let ((c (clip-seg x1 y1 x2 y2 (- m) (- m) (+ *full-cw* m) (+ *full-ch* m))))
                   (cond
                     ((null c) (flush))
                     (t
@@ -657,11 +657,11 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
         (flet ((vline (x col) (when (<= (- x0 1d-9) x (+ x1 1d-9)) (multiple-value-bind (sx sy0) (w->s (pt x y0))
                                 (multiple-value-bind (sx1 sy1) (w->s (pt x y1)) (declare (ignore sx1))
                                   (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags grid"
-                                                (fmtn sx) (fmtn (max -2 sy1)) (fmtn sx) (fmtn (min (+ *ch* 2) sy0)) col) out)))))
+                                                (fmtn sx) (fmtn (max -2 sy1)) (fmtn sx) (fmtn (min (+ *full-ch* 2) sy0)) col) out)))))
                (hline (y col) (when (<= (- y0 1d-9) y (+ y1 1d-9)) (multiple-value-bind (sx0 sy) (w->s (pt x0 y))
                                 (multiple-value-bind (sx1) (w->s (pt x1 y))
                                   (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags grid"
-                                                (fmtn (max -2 sx0)) (fmtn sy) (fmtn (min (+ *cw* 2) sx1)) (fmtn sy) col) out))))))
+                                                (fmtn (max -2 sx0)) (fmtn sy) (fmtn (min (+ *full-cw* 2) sx1)) (fmtn sy) col) out))))))
           (loop for i from (floor x0 g) to (ceiling x1 g)
                 do (vline (* i g) (cond ((zerop i) (grid-color :x-axis)) ((zerop (mod i major)) (grid-color :major)) (t (grid-color :minor)))))
           (loop for i from (floor y0 g) to (ceiling y1 g)
@@ -680,7 +680,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
   (when *view*
     ;; the world axes as they point in this view, with the view's name
     (return-from ucs-icon-cmds
-      (let ((x 44) (y (- *ch* 44)) (out nil))
+      (let ((x (+ *tx* 44)) (y (+ *ty* (- *ch* 44))) (out nil))
         (loop for (axis col label) in '(((1 0 0) "#d24b4b" "X") ((0 1 0) "#4bbf5a" "Y") ((0 0 1) "#4b8fd2" "Z"))
               do (multiple-value-bind (u v) (view-project axis)
                    (let ((ex (+ x (* 34 u))) (ey (- y (* 34 v))))
@@ -688,10 +688,10 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
                        (push (format nil ".c create line ~D ~D ~,1F ~,1F -fill ~A -width 2 -arrow last -tags ucs" x y ex ey col) out)
                        (push (format nil ".c create text ~,1F ~,1F -text ~A -fill ~A -font {Helvetica 9 bold} -tags ucs"
                                      (+ ex (* 9 u)) (- ey (* 9 v)) label col) out)))))
-        (push (format nil ".c create text 10 ~D -anchor sw -text ~A -fill #c9ced6 -font {Helvetica 10 bold} -tags ucs"
-                      (- *ch* 6) (tq (string-upcase (first *view*)))) out)
+        (push (format nil ".c create text ~D ~D -anchor sw -text ~A -fill #c9ced6 -font {Helvetica 10 bold} -tags ucs"
+                      (+ *tx* 10) (+ *ty* (- *ch* 6)) (tq (string-upcase (first *view*)))) out)
         (nreverse out))))
-  (let ((x 34) (y (- *ch* 30)))
+  (let ((x (+ *tx* 34)) (y (+ *ty* (- *ch* 30))))
     (list (format nil ".c create line ~D ~D ~D ~D -fill #d24b4b -width 2 -arrow last -tags ucs" x y (+ x 44) y)
           (format nil ".c create line ~D ~D ~D ~D -fill #4bbf5a -width 2 -arrow last -tags ucs" x y x (- y 44))
           (format nil ".c create text ~D ~D -text X -fill #d24b4b -font {Helvetica 9 bold} -tags ucs" (+ x 52) y)
@@ -727,6 +727,7 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
 
 (defun gui-regen ()
   (when (eq *ui* :gui)
+    (when (fboundp 'apply-tile-geometry) (funcall 'apply-tile-geometry))
     (when (and (drawing-ctab *dwg*) (fboundp 'layout-prepare)) (funcall 'layout-prepare))
     (unless (equal *canvas-bg-shown* (canvas-bg))
       (setf *canvas-bg-shown* (canvas-bg))
@@ -735,6 +736,9 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
       (setf cmds (nconc cmds (if (and (drawing-ctab *dwg*) (fboundp 'layout-body-cmds))
                                  (funcall 'layout-body-cmds)
                                  (model-body-cmds))))
+      ;; the Model tab split into viewports: the others over the active one's drawing
+      (when (and (fboundp 'tiled-p) (funcall 'tiled-p))
+        (setf cmds (nconc cmds (funcall 'tiles-overlay-cmds))))
       (dolist (g *grdraw-items*)
         (destructuring-bind (a b aci) g
           (setf cmds (nconc cmds (screen-line (list a b) (aci->hex aci) "grd")))))
@@ -967,6 +971,13 @@ several), else the current layer. Only shows it; the current layer is not change
 (defun handle-common-event (ev)
   "Events that mean the same thing at every prompt. Returns T if handled."
   (let ((ty (event-type ev)))
+    ;; with the Model tab split into viewports, a click, wheel or pan in another viewport makes it
+    ;; the active one first (a click there does nothing else)
+    (when (and (member ty '("B" "W" "P" "DBL") :test #'string=) (fboundp 'tile-switch-at))
+      (destructuring-bind (&optional x y &rest ignore) (event-ints ev)
+        (declare (ignore ignore))
+        (when (and x y (funcall 'tile-switch-at x y) (member ty '("B" "DBL") :test #'string=))
+          (return-from handle-common-event t))))
     (cond
       ((string= ty "W") (destructuring-bind (x y dir) (event-ints ev)
                           (zoom-at x y (if (plusp dir) 1.25d0 0.8d0) t) t))
@@ -985,7 +996,9 @@ several), else the current layer. Only shows it; the current layer is not change
                         t)
       ((string= ty "Q") (setf *pan-start* nil) (gui-regen) t)
       ((string= ty "C") (destructuring-bind (w h) (event-ints ev)
-                          (setf *cw* (max 50 w) *ch* (max 50 h)) (gui-regen) t))
+                          (setf *full-cw* (max 50 w) *full-ch* (max 50 h) *cw* *full-cw* *ch* *full-ch*)
+                          (when (fboundp 'apply-tile-geometry) (funcall 'apply-tile-geometry))
+                          (gui-regen) t))
       ((string= ty "X") (setf *mouse-in* nil) (draw-temp) t)
       ((string= ty "K") (toggle-key (event-rest ev)) t)
       ((string= ty "LAYERSET") (let ((n (event-rest ev)) (sel (remove-if-not #'ent-live-p *pickfirst*)))

@@ -157,17 +157,17 @@ mcmd .mb.edit "Create Block from Selection..." BLOCK
 mcmd .mb.edit "Erase" ERASE Del
 mcmd .mb.edit "Select All" SELECTALL Ctrl+A
 
-# Layout: paper space sheets and their viewports
+# Layout: paper space sheets and their viewports (the Model tab's own viewports are under View)
 mcmd .mb.layout "Model Tab" MODEL
 mcmd .mb.layout "New Layout" LAYOUTNEW
 mcmd .mb.layout "Page Setup (paper size)..." PAGESETUP
 mcmd .mb.layout "Layout Options (copy, rename, delete...)" LAYOUT
 .mb.layout add separator
-mcmd .mb.layout "Viewport: Two Corners" MVIEW
-mcmd .mb.layout "Viewport: Fill the Sheet" "MVIEW Fit"
-mcmd .mb.layout "2 Viewports" "MVIEW 2"
-mcmd .mb.layout "3 Viewports" "MVIEW 3"
-mcmd .mb.layout "4 Viewports (Top, Front, Right, Iso)" "MVIEW 4 Standard"
+mcmd .mb.layout "Sheet Viewport: Two Corners" MVIEW
+mcmd .mb.layout "Sheet Viewport: Fill the Sheet" "MVIEW Fit"
+mcmd .mb.layout "2 Sheet Viewports" "MVIEW 2"
+mcmd .mb.layout "3 Sheet Viewports" "MVIEW 3"
+mcmd .mb.layout "4 Sheet Viewports (Top, Front, Right, Iso)" "MVIEW 4 Standard"
 .mb.layout add separator
 mcmd .mb.layout "Viewport Scale..." VPSCALE
 mcmd .mb.layout "Lock Viewport Scale" "MVIEW Lock ON"
@@ -216,6 +216,18 @@ mcmd .mb.view.iso "Isoplane Top" "ISODRAFT isoplaneTop"
 mcmd .mb.view.iso "Isoplane Right" "ISODRAFT isoplaneRight"
 .mb.view.iso add separator
 mcmd .mb.view.iso "Next Isoplane" ISOPLANE F5
+.mb.view add separator
+menu .mb.view.vp -tearoff 0
+.mb.view add cascade -label "Viewports (Model tab)" -menu .mb.view.vp
+mcmd .mb.view.vp "Single Viewport" "VPORTS Single"
+mcmd .mb.view.vp "Two: Side by Side" "VPORTS 2 Vertical"
+mcmd .mb.view.vp "Two: Above and Below" "VPORTS 2 Horizontal"
+mcmd .mb.view.vp "Three: Large on the Right" "VPORTS 3 Right"
+mcmd .mb.view.vp "Three: Large on the Left" "VPORTS 3 Left"
+mcmd .mb.view.vp "Four: Same View" "VPORTS 4 Same"
+mcmd .mb.view.vp "Four: Top, Front, Right, Iso" "VPORTS 4 Standard"
+.mb.view.vp add separator
+mcmd .mb.view.vp "Join with the One Beside It" "VPORTS Join"
 .mb.view add separator
 mcmd .mb.view "Zoom Extents" "ZOOM E"
 mcmd .mb.view "Zoom Window" "ZOOM W"

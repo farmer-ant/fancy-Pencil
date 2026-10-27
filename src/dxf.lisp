@@ -357,6 +357,8 @@
                 (t (push g body))))))
     ;; entities (anything Fancy Pencil can't keep is counted, so opening can say so)
     (setf *import-skipped* nil)
+    ;; the Model tab's viewports (VPORTS)
+    (when replace (funcall 'import-tiles tables))
     ;; layouts (paper space): their names, sheets and the block records that own their objects
     (let ((space-of (funcall 'import-layouts objects tables replace)))
      (dolist (data (append (mapcar (lambda (x) (rem-dxf :src-handle x))

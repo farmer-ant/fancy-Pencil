@@ -167,7 +167,9 @@
 (defun leave-space ()
   "Remember the view of the tab being left."
   (let ((dw *dwg*))
-    (cond ((null (drawing-ctab dw)) (setf (drawing-model-view dw) (model-state)))
+    (cond ((null (drawing-ctab dw))
+           (when (fboundp 'save-active-tile) (funcall 'save-active-tile))
+           (setf (drawing-model-view dw) (model-state)))
           (t (when (drawing-active-vp dw) (leave-viewport))
              (let ((l (current-layout))) (when l (setf (layout-pview l) (list *vx* *vy* *vscale*))))))))
 
@@ -185,6 +187,7 @@
     (unless (equal (and name (layout-name l)) (drawing-ctab *dwg*))
       (leave-space)
       (setf (drawing-ctab *dwg*) (and l (layout-name l)) (drawing-active-vp *dwg*) nil)
+      (when (fboundp 'apply-tile-geometry) (funcall 'apply-tile-geometry))
       (setf (sysvar "CTAB") (if l (layout-name l) "Model"))
       (if (null l)
           (let ((mv (drawing-model-view *dwg*)))
@@ -375,12 +378,13 @@ PPU: PDF points per paper unit when plotting (NIL on the screen)."
 
 (defun rgb-hex01 (c) (rgb-hex (* 255 (first c)) (* 255 (second c)) (* 255 (third c))))
 
-(defun prims-canvas-cmds (prims tags &optional rect)
-  "Canvas commands drawing plot primitives PRIMS (paper coordinates), clipped to RECT."
-  (let* ((out nil) (ppx (third (paper-view)))
+(defun prims-canvas-cmds (prims tags &optional rect &key (to-screen #'paper->screen) ppx (mm-px nil))
+  "Canvas commands drawing plot primitives PRIMS, clipped to RECT (both in the primitives'
+coordinates: paper, unless TO-SCREEN maps others; PPX is pixels per unit)."
+  (let* ((out nil) (ppx (or ppx (third (paper-view))))
          (lwd (eql (sysvar "LWDISPLAY") 1))
-         (mm-px (* ppx (if (and (current-layout) (eq (layout-units* (current-layout)) :mm)) 1d0 (/ 25.4d0)))))
-    (labels ((scr (p) (multiple-value-bind (x y) (paper->screen p) (format nil "~A ~A" (fmtn x) (fmtn y))))
+         (mm-px (or mm-px (* ppx (if (and (current-layout) (eq (layout-units* (current-layout)) :mm)) 1d0 (/ 25.4d0))))))
+    (labels ((scr (p) (multiple-value-bind (x y) (funcall to-screen p) (format nil "~A ~A" (fmtn x) (fmtn y))))
              (width (lw) (cond ((and (realp lw) (minusp lw)) (max 1 (round (* (- lw) ppx))))
                                ((and lwd (realp lw)) (max 1 (round (* lw mm-px))))
                                (t 1)))
@@ -410,7 +414,7 @@ PPU: PDF points per paper unit when plotting (NIL on the screen)."
                    (let ((fs (* size ppx)))
                      (when (and (>= fs 3) (plusp (length (string-trim " " s)))
                                 (or (null rect) (destructuring-bind (x0 y0 x1 y1) rect (and (<= x0 (px pos) x1) (<= y0 (py pos) y1)))))
-                       (multiple-value-bind (sx sy) (paper->screen pos)
+                       (multiple-value-bind (sx sy) (funcall to-screen pos)
                          (let* ((w (* fs (text-em-width s)))
                                 (dx (case ha (1 (- (/ w 2))) (2 (- w)) (t 0)))
                                 (dy (case va (1 (* 0.207 fs)) (2 (- (* 0.359 fs))) (3 (- (* +cap+ fs))) (t 0)))
@@ -801,7 +805,7 @@ three flat views at one scale and lined up, as a drawing's views are."
 (defun pick-viewports (prompt)
   (remove-if-not (lambda (e) (equal (ent-type e) "VIEWPORT")) (get-selection prompt)))
 
-(defcmd "MVIEW" ("MV" "-VPORTS") "Makes layout viewports: windows on the sheet that show model space."
+(defcmd "MVIEW" ("MV") "Makes layout viewports: windows on the sheet that show model space."
   (unless (require-layout "MVIEW") (return-from-cmd))
   (when (drawing-active-vp *dwg*) (leave-viewport) (clear-selection-state) (after-space-change))
   (let ((r (gpoint "Specify corner of viewport or [ON/OFF/Fit/Lock/2/3/4] <Fit>: "
@@ -970,13 +974,13 @@ to it), then the paper space objects on top."
 
 (defun view-uv->world (view uv)
   "The world point at view coordinates UV of VIEW (on the working plane for the flat views)."
-  (let ((*view* view))
+  (let ((*view* view) (*ucs-off* nil))
     (cond ((null view) (pt (px uv) (py uv) 0))
           ((ucs) (ucs-point-to-world (pt (px uv) (py uv) 0)))
           (t (v+ (v* (second view) (px uv)) (v* (third view) (py uv)))))))
 
 (defun world->view-uv (view p)
-  (let ((*view* view))
+  (let ((*view* view) (*ucs-off* nil))
     (cond ((null view) (pt (px p) (py p)))
           ((ucs) (let ((q (funcall (xf-fn (ucs-xf (ucs))) p))) (pt (px q) (py q))))
           (t (pt (vdot3 p (second view)) (vdot3 p (third view)))))))

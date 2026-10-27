@@ -142,7 +142,7 @@
     (let ((s (grip-pixel-size)) (cmds (list ".c delete grip")))
       (dolist (g (remove-duplicates *grip-points* :key #'first :test (lambda (a b) (< (dist2d a b) 1d-9))))
         (multiple-value-bind (x y) (w->s (first g))
-          (when (and (< -20 x (+ *cw* 20)) (< -20 y (+ *ch* 20)))
+          (when (and (< -20 x (+ *full-cw* 20)) (< -20 y (+ *full-ch* 20)))
             (push (format nil ".c create rectangle ~D ~D ~D ~D -fill #1e6fff -outline #0b2a66 -tags grip"
                           (round (- x s)) (round (- y s)) (round (+ x s)) (round (+ y s)))
                   cmds))))

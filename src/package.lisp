@@ -12,13 +12,16 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.3.50")
+(defparameter *version* "0.3.51")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
 (defvar *ui* :tty "Either :TTY or :GUI.")
 (defvar *vx* 6d0) (defvar *vy* 4.5d0) (defvar *vscale* 60d0)
 (defvar *cw* 1000) (defvar *ch* 600)
+;; tiled model viewports (VPORTS): *cw* x *ch* is the active viewport, at *tx*,*ty* on the canvas,
+;; which is *full-cw* x *full-ch*
+(defvar *tx* 0) (defvar *ty* 0) (defvar *full-cw* 1000) (defvar *full-ch* 600)
 (defvar *last-command* nil "Command repeated by Enter at an empty prompt.")
 (defvar *lisp-buffer* "" "Unfinished AutoLISP typed at the command line.")
 (defvar *plotting* nil "True while generating a plot (turns off screen-only simplifications).")

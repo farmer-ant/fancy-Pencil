@@ -420,6 +420,22 @@ the top right (move it anywhere; it comes back there next time). Keep working in
 it is up: it follows whatever you select, and with nothing selected it shows the current settings
 that new objects get. Esc clears the selection without closing it.
 
+### Viewports on the Model tab (View → Viewports, VPORTS)
+
+Split the drawing area into several viewports, each with its own view, zoom and visual style -
+for example Top, Front, Right and an isometric side by side while you draw. **VPORTS** (or View →
+Viewports): **2** (side by side or above and below), **3** (a large one on the right or left, or
+three in a row), **4** (Same view, or **Standard**: Top, SE Isometric, Front and Right, the flat
+views at one scale and lined up), **Join** (the active viewport with the one beside it) and
+**Single** (back to one). The active viewport has a blue border: you draw, select, zoom and change
+its view or visual style as usual, and what you draw shows in all of them. Click in another
+viewport (or turn the wheel over it) to make it the active one. VPORTS 2/3/4 split the active
+viewport, so you can split again. The viewports are saved in the file (the VPORT table, as AutoCAD
+keeps them) and come back when it is opened.
+
+These are different from layout viewports (MVIEW), which are windows on a sheet of paper for
+plotting.
+
 ### Layouts, paper space and viewports (Layout menu)
 
 Under the drawing are tabs: **Model** and **Layout1** (add more with **+**; right-click a layout
@@ -684,6 +700,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-views.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-layouts.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-massprop.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-draworder.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-tiles.lisp
 ```
 
 ## Layout
@@ -698,6 +715,7 @@ src/db.lisp        drawing database (entities are DXF association lists, like en
 src/ltype.lisp     linetypes (.lin), dashes, lineweights
 src/hatch.lisp     hatch patterns, rendering, boundary detection
 src/dxf.lisp       DXF reader and R12 writer
+src/tiles.lisp     VPORTS: the Model tab split into viewports
 src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
