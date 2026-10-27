@@ -445,7 +445,7 @@ Each solid is checked first: faces turned inward are put right, the small cracks
 closed ("watertight") - what a slicer needs - with its size in the file's units. **STLOUT** is
 AutoCAD's command: binary or text STL, in millimetres.
 
-**STLIN** (Import STL / OBJ Model) brings in a model from a printing site or another program as a
+**STLIN** (Import STL / OBJ Model), or File → Open on an STL or OBJ file, brings in a model from a printing site or another program as a
 solid: it asks the file's units (millimetres, inches or drawing units). Flat faces show only their
 edges, and curved sides show their outline in each view.
 

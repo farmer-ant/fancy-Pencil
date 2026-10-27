@@ -2848,7 +2848,7 @@ proc filedlg {save title initial exts} {
     if {[llength $exts] > 1} {
         set globs {}; set tglobs {}
         foreach e $exts { lappend globs *.$e *.[string toupper $e]; lappend tglobs .$e .[string toupper $e] }
-        set lab [expr {[lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : ([lsearch $exts stl] >= 0 ? "3D models" : "Files"))}]
+        set lab [expr {[lsearch $exts dxf] >= 0 && [lsearch $exts stl] >= 0 ? "Drawings and 3D models" : [lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : ([lsearch $exts stl] >= 0 ? "3D models" : "Files"))}]
         lappend zf --file-filter "$lab ([join [lmap e $exts {string toupper $e}] ", "]) | [join $globs " "]"
         lappend kf "[join $globs " "]|$lab"
         lappend types [list $lab $tglobs]
