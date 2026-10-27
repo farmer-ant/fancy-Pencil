@@ -96,7 +96,7 @@
           (unwind-protect
          (progn
            (cond
-             (fn (remember-command word name) (run-builtin name fn))
+             (fn (remember-command word name) (let ((*command-word* (strip-command-prefix word))) (run-builtin name fn)))
              ((or (ufunc-p lisp-fn) (subr-p lisp-fn) (and (consp lisp-fn) (listp (car lisp-fn))))
               (setf *last-command* word)
               (run-lisp-toplevel (lambda () (apply-a lisp-fn nil))))
