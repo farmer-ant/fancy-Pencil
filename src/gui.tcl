@@ -98,6 +98,32 @@ proc mcmd {m label cmd {accel ""}} {
 }
 proc menucmd {cmd} { emit MENU $cmd; focus .cmd.e }
 
+# A menu left open when you switch to another program would stay on top of everything (some
+# desktops, Wayland especially, don't close it): close any open menu once Fancy Pencil loses focus.
+proc all_menus {w} {
+    set out {}
+    foreach c [winfo children $w] {
+        if {[winfo class $c] eq "Menu"} { lappend out $c }
+        lappend out {*}[all_menus $c]
+    }
+    return $out
+}
+proc menu_watch {} {
+    if {[focus] eq ""} {
+        set open {}
+        foreach m [all_menus .] {
+            if {[winfo ismapped $m] && [$m cget -type] ne "menubar"} { lappend open $m }
+        }
+        if {[llength $open]} {
+            catch {tk::MenuUnpost {}}
+            foreach m $open { catch {$m unpost} }
+            catch {grab release [grab current]}
+        }
+    }
+    after 400 menu_watch
+}
+after 1000 menu_watch
+
 foreach {name label} {file File edit Edit view View layout Layout draw Draw solid Solids dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
     menu .mb.$name
     .mb add cascade -label $label -menu .mb.$name
