@@ -746,10 +746,21 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
       (when (fboundp 'refresh-layout-tabs) (funcall 'refresh-layout-tabs))
       (draw-temp))))
 
+(defun next-drawn-entity (e)
+  "The next object after E in draw order that is on the screen (its canvas items lie above E's)."
+  (let* ((v (drawing-entities *dwg*)) (k (position e v)))
+    (when k
+      (loop for i from (1+ k) below (length v)
+            for x = (aref v i)
+            when (and (not (ename-deleted x)) (entity-visible-p x)) return x))))
+
 (defun rerender-entity (e)
-  (tk-send-string (format nil ".c delete h~A~%~{~A~%~}.c raise pover~%.c raise grip~%.c raise tmp"
-                          (ename-handle e)
-                          (and (entity-visible-p e) (entity-render-cmds e)))))
+  ;; redrawn in its place in the draw order (new canvas items would otherwise go on top)
+  (let ((nx (next-drawn-entity e)))
+    (tk-send-string (format nil ".c delete h~A~%~{~A~%~}~@[catch {.c lower h~A h~A}~%~].c raise pover~%.c raise grip~%.c raise tmp"
+                            (ename-handle e)
+                            (and (entity-visible-p e) (entity-render-cmds e))
+                            (and nx (ename-handle e)) (and nx (ename-handle nx))))))
 
 (defun gui-highlight (ents on)
   (dolist (e ents)

@@ -146,6 +146,13 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
                (list "Cut" "CUTCLIP") (list "Copy to Clipboard" "COPYCLIP")
                (list "Copy with Base Point" "COPYBASE")
                :sep
+               (list :sub "Draw Order" (list (list "Bring to Front" "DRAWORDER Front") (list "Send to Back" "DRAWORDER Back")
+                                             (list "Bring Above Objects" "DRAWORDER Above") (list "Send Under Objects" "DRAWORDER Under")))
+               (when (some (lambda (e) (member (ent-type e) '("TEXT" "MTEXT" "ATTDEF" "DIMENSION") :test #'equal)) sel)
+                 (list :sub "Change Text Case" (list (list "UPPER CASE" "TCASE UPPER") (list "lower case" "TCASE lower")
+                                                     (list "Sentence case" "TCASE Sentence") (list "Title Case" "TCASE Title")
+                                                     (list "tOGGLE cASE" "TCASE toGGLE"))))
+               :sep
                (list "Create Block from Selection..." "BLOCK")
                (when ins (list "Edit Block..." "BEDIT"))
                (when ins (list "Rename Block..." "RENAME"))
