@@ -177,7 +177,7 @@
   (let ((p1 (gpoint "Specify first corner point: ")))
     (when p1
       (let* ((rect (lambda (p2) (list (pt3 p1) (pt (px p2) (py p1)) (pt3 p2) (pt (px p1) (py p2)))))
-             (r (gpoint "Specify other corner point or [Dimensions]: " :keywords '("Dimensions")
+             (r (get-user-input :corner :prompt "Specify other corner point or [Dimensions]: " :keywords '("Dimensions") :base p1
                         :drag (lambda (cur) (lwpoly-pieces (make-lwpoly-data (funcall rect cur) t))))))
         (when (equal r "Dimensions")
           (let ((w (gdist "Specify length for rectangles: " :flags 3))

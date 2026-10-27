@@ -106,7 +106,12 @@ It behaves like AutoCAD's command line:
 
 - Type a command or alias (`L`, `C`, `PL`, `TR` ...) and press Enter or Space. Enter on an empty
   prompt repeats the last command. Esc cancels. Right-click acts as Enter.
-- Coordinates: `3,4`  `@2,0` (relative)  `@5<45` (polar)  or a bare number for direct distance
+- Coordinates: `3,4`  `@2,0` (relative)  `@5<45` (polar)  or a bare number for direct distance.
+  As with AutoCAD's dynamic input, a second or later point typed at the command line is relative
+  to the last point: RECTANG, a click, then `11,8.5` draws an 11 x 8.5 rectangle; LINE `0,0` then
+  `4,0` then `0,3` goes 4 across and 3 up. Put `#` in front for an absolute point (`#10,10`).
+  `SETVAR DYNPICOORDS 1` makes typed points absolute again (remembered). Points given by AutoLISP
+  `(command ...)` and scripts are always absolute.
   along the rubber band. Distances accept feet-inches (`2'6`) and fractions (`1 1/2`).
 - Type `END`, `MID`, `CEN`, `INT`, `PER`, `TAN`, `QUA`, `NOD`, `INS`, `NEA` or `NON` at a point
   prompt for a one-time snap override.
@@ -804,6 +809,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-snap3d.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-raster.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-helix.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-print3d.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-input.lisp
 ```
 
 ## Layout
