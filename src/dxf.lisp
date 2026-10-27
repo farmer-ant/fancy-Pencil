@@ -200,6 +200,7 @@
                               out))))
            (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups)))
           ((equal type "3DFACE") (push (with-src-handle (mesh-from-3dface (convert-in g)) g) out))
+          ((equal type "HELIX") (let ((hx (funcall 'helix-from-dxf g))) (when hx (push (with-src-handle hx g) out))))
           (t (push (with-src-handle (convert-in g) g) out)))
         (when paper
           (loop for cell on out until (eq cell start)
@@ -381,7 +382,7 @@
       (if (and data
                (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
                                       "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT"
-                                      "IMAGE")
+                                      "IMAGE" "HELIX")
                        :test #'equal))
           (progn
             (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
@@ -430,6 +431,10 @@
     (cond
       ((equal type "POLYFACE") (write-mesh-r12 out data))
       ((equal type "IMAGE") nil)              ; R12 has no pictures
+      ((equal type "HELIX")                   ; R12 has no helix: short lines along it
+       (dolist (pc (data-pieces data))
+         (write-entity out (append (list (cons 0 "LINE") (cons 8 (or (dxf 8 data) "0")) (cons 10 (second pc)) (cons 11 (third pc)))
+                                   (let ((c (assoc 62 data))) (and c (list c)))))))
       ((offplane-p data)                    ; R12: an object in another plane goes out as its edges
        (dolist (pc (offplane-pieces data))
          (when (member (first pc) '(:seg :gseg))

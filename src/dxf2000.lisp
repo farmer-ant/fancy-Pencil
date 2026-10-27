@@ -46,6 +46,7 @@
            (thick () (let ((th (dxf 39 data))) (when (and (realp th) (/= th 0)) (w out 39 (d th))))))
       (cond
         ((equal type "IMAGE") (funcall 'write-image-entity-2000 out data0 owner handle))
+        ((equal type "HELIX") (funcall 'write-helix-2000 out data0 handle owner))
         ((equal type "LINE")
          (common) (w out 100 "AcDbLine") (thick) (wp out 10 (pt3 (dxf 10 data))) (wp out 11 (pt3 (dxf 11 data))))
         ((equal type "CIRCLE")
