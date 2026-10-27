@@ -2818,11 +2818,12 @@ if {[auto_execok zenity] ne ""} {
 }
 if {[info exists env(FANCYPENCIL_FILEDIALOG)]} { set ::filedlg_tool $env(FANCYPENCIL_FILEDIALOG) }
 
-proc run_external_dialog {cmd} {
+proc run_external_dialog {cmd {title ""}} {
     # run the chooser without blocking Tk, so the drawing keeps repainting behind it
     set ::extdlg_out ""
     set ::extdlg_done 0
     if {[catch {open "|$cmd 2>/dev/null" r} ch]} { return -code error $ch }
+    set ::extdlg_pids [pid $ch]
     fconfigure $ch -blocking 0 -encoding utf-8
     fileevent $ch readable [list apply {{ch} {
         append ::extdlg_out [read $ch]
@@ -2830,9 +2831,53 @@ proc run_external_dialog {cmd} {
     }} $ch]
     catch {tk busy hold .}
     update idletasks
+    # the chooser is its own program: if you go to another window it can end up behind Fancy
+    # Pencil, which then shows only a busy cursor. After a moment a small window says so and
+    # offers to bring the chooser back or cancel it.
+    set ::extdlg_hint [after 1500 [list extdlg_hint $title]]
     vwait ::extdlg_done
+    after cancel $::extdlg_hint
+    catch {grab release .fdwait}
+    catch {destroy .fdwait}
     catch {tk busy forget .}
     return [string trimright $::extdlg_out "\n"]
+}
+proc extdlg_hint {title} {
+    if {$::extdlg_done} return
+    set w .fdwait
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Fancy Pencil - choosing a file"
+    wm transient $w .
+    wm resizable $w 0 0
+    set f [ttk::frame $w.f -padding 14]
+    pack $f -fill both -expand 1
+    ttk::label $f.l -justify left -text "A file window is open: \"$title\".\nChoose a file there (or Cancel) to go on.\n\nIf you can't see it, it is behind another window:\npress Alt+Tab to find it, or click Show It."
+    ttk::frame $f.b
+    ttk::button $f.b.show -text "Show It" -command [list extdlg_raise $title]
+    ttk::button $f.b.cancel -text "Cancel" -command extdlg_cancel
+    pack $f.l -side top -anchor w
+    pack $f.b -side top -anchor e -pady {12 0}
+    pack $f.b.cancel $f.b.show -side right -padx 3
+    if {[auto_execok wmctrl] eq "" && [auto_execok xdotool] eq ""} { $f.b.show state disabled }
+    wm protocol $w WM_DELETE_WINDOW extdlg_cancel
+    wm geometry $w +[expr {[winfo rootx .] + 40}]+[expr {[winfo rooty .] + 40}]
+    # from here the drawing is held by this window's grab instead of the busy cursor, so its
+    # buttons answer for certain
+    catch {tk busy forget .}
+    safegrab $w
+}
+proc extdlg_raise {title} {
+    if {[auto_execok wmctrl] ne ""} {
+        catch {exec wmctrl -a $title &}
+    } elseif {[auto_execok xdotool] ne ""} {
+        catch {exec xdotool search --name $title windowactivate &}
+    }
+}
+proc extdlg_cancel {} {
+    # stop the chooser: its window closes and the command goes on as if you had pressed Cancel
+    foreach p $::extdlg_pids { catch {exec kill $p} }
+    after 1500 {if {!$::extdlg_done} {set ::extdlg_out ""; set ::extdlg_done 1}}
 }
 
 proc filedlg {save title initial exts} {
@@ -2871,11 +2916,11 @@ proc filedlg {save title initial exts} {
             if {$::zenity_major < 4} { lappend cmd --confirm-overwrite }
         }
         lappend cmd --filename [expr {$name eq "" ? "[string trimright $dir /]/" : [file join $dir $name]}]
-        if {[catch {set r [run_external_dialog $cmd]}]} { set tool tk }
+        if {[catch {set r [run_external_dialog $cmd $title]}]} { set tool tk }
     } elseif {$tool eq "kdialog"} {
         set cmd [list kdialog --title $title [expr {$save ? "--getsavefilename" : "--getopenfilename"}] \
                      [file join $dir $name] [join $kf "\n"]]
-        if {[catch {set r [run_external_dialog $cmd]}]} { set tool tk }
+        if {[catch {set r [run_external_dialog $cmd $title]}]} { set tool tk }
     }
     if {$tool ne "zenity" && $tool ne "kdialog"} {
         if {$save} {
