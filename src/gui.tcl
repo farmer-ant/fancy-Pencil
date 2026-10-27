@@ -3358,6 +3358,14 @@ proc fpimg_show {key png x y fx0 fy0 fx1 fy1 z s bg fade tags} {
         .c create rectangle $x $y [expr {$x + $w}] [expr {$y + $h}] -fill $bg -outline {} -stipple $st -tags $tags
     }
 }
+# a view of a picture made by Fancy Pencil (imgview.lisp): a PNG the size of its part of the screen
+proc fpimg_place {name file reload x y tags} {
+    if {[lsearch [image names] $name] < 0} { image create photo $name; set reload 1 }
+    if {$reload} {
+        if {[catch {$name configure -file $file} err]} { puts stderr "Fancy Pencil: picture view: $err"; return }
+    }
+    .c create image $x $y -anchor nw -image $name -tags $tags
+}
 proc fpimg_forget_all {} {
     foreach k [array names ::fpimg_src] { catch {image delete $::fpimg_src($k)} }
     array unset ::fpimg_src
@@ -3367,10 +3375,17 @@ proc fpimg_forget_all {} {
 # a copy of a picture as a PPM file (for plotting), 1 pixel in S each way
 proc fpimg_ppm {png out s} {
     set src [fpimg_src $png]
-    set t [image create photo]
-    $t copy $src -subsample $s $s
-    $t write $out -format ppm
-    image delete $t
+    if {$s == 1} {
+        $src write $out -format ppm
+    } else {
+        set t [image create photo]
+        $t copy $src -subsample $s $s
+        $t write $out -format ppm
+        image delete $t
+    }
+    # Fancy Pencil keeps the pixels itself now: let Tk's copy go (a photo can be large)
+    image delete $src
+    unset ::fpimg_src($png)
     return ok
 }
 

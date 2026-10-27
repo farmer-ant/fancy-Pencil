@@ -61,14 +61,52 @@
     (format nil "~Aimg-~36R-~D.png" (image-cache-dir)
             (logand (sxhash (format nil "~A|~A|~A|~A" (namestring (truename path)) date page dpi)) #xFFFFFFFFFF) (or page 0))))
 
+(defun picture-complete-p (f)
+  "F is a whole picture file: a PNG must end with its IEND record (a conversion that was stopped
+part way - the program closed, the computer slept - leaves only the start of one)."
+  (ignore-errors
+   (with-open-file (s f :element-type '(unsigned-byte 8))
+     (let ((n (file-length s)))
+       (and (> n 0)
+            (let ((head (make-array 8 :element-type '(unsigned-byte 8))))
+              (read-sequence head s)
+              (if (or (and (= (aref head 1) 80) (= (aref head 2) 78) (= (aref head 3) 71))   ; PNG
+                      (string-equal (pathname-type (pathname f)) "png"))
+                  (and (>= n 57)
+                       (let ((tail (make-array 12 :element-type '(unsigned-byte 8))))
+                         (file-position s (- n 12))
+                         (read-sequence tail s)
+                         (equal (map 'list #'identity (subseq tail 4 8)) '(73 69 78 68))))   ; "IEND"
+                  t)))))))
+
 (defun try-commands (cmds out)
-  "Run shell commands in turn until one makes file OUT."
-  (dolist (c cmds nil)
-    (when c
-      (ignore-errors (delete-file out))
-      (run-shell c)
-      (when (and (probe-file out) (plusp (or (ignore-errors (with-open-file (s out) (file-length s))) 0)))
-        (return t)))))
+  "Run shell commands in turn until one makes a whole picture file OUT. Each writes to a
+temporary name first, so a stopped conversion never leaves a broken file under OUT's name."
+  (let ((part (concatenate 'string (subseq out 0 (- (length out) 4)) "-part" (subseq out (- (length out) 4)))))
+    (dolist (c cmds nil)
+      (when c
+        (ignore-errors (delete-file part))
+        (run-shell (substitute-part c out part))
+        (when (picture-complete-p part)
+          (ignore-errors (delete-file out))
+          (rename-file part out)
+          (return t))))
+    (ignore-errors (delete-file part))
+    (and (probe-file out) (picture-complete-p out))))
+
+(defun substitute-part (cmd out part)
+  "CMD with OUT (and OUT without its extension, for pdftoppm) replaced by the temporary name."
+  (let* ((qo (shell-quote out)) (qp (shell-quote part))
+         (base (subseq out 0 (- (length out) 4))) (pbase (subseq part 0 (- (length part) 4)))
+         (cmd (replace-all cmd qo qp)))
+    (replace-all cmd (shell-quote base) (shell-quote pbase))))
+
+(defun replace-all (s old new)
+  (with-output-to-string (o)
+    (loop with start = 0
+          for pos = (search old s :start2 start)
+          do (write-string s o :start start :end (or pos (length s)))
+          while pos do (write-string new o) (setf start (+ pos (length old))))))
 
 (defun convert-raster (src out)
   (let ((q (shell-quote (namestring src))) (o (shell-quote out)))
@@ -105,8 +143,14 @@
           (cond
             ((not (probe-file path)) (values nil "file not found"))
             ((null kind) (values nil "not an image or PDF file"))
-            ((eq kind :native) (setf (gethash key *png-memo*) path))
+            ((eq kind :native)
+             (if (picture-complete-p path)
+                 (setf (gethash key *png-memo*) path)
+                 (values nil "the file is damaged or incomplete")))
             (t (let ((out (cache-name path page (and (eq kind :pdf) +pdf-dpi+))))
+                 ;; a converted copy from before: used if whole, made again if it was cut short
+                 (when (and (probe-file out) (not (picture-complete-p out)))
+                   (ignore-errors (delete-file out)))
                  (cond ((probe-file out) (setf (gethash key *png-memo*) out))
                        ((if (eq kind :pdf) (convert-pdf-page path (or page 1) +pdf-dpi+ out) (convert-raster path out))
                         (setf (gethash key *png-memo*) out))
@@ -114,8 +158,8 @@
 
 (defun missing-tool-message (kind)
   (if (eq kind :pdf)
-      "no PDF reader found: install poppler-utils (sudo dnf install poppler-utils)"
-      "no image converter found for this file type: install ImageMagick (sudo dnf install ImageMagick)"))
+      "it could not be read as a PDF; if poppler-utils is missing, install it (Ubuntu: sudo apt install poppler-utils)"
+      "it could not be converted; if ImageMagick is missing, install it (Ubuntu: sudo apt install imagemagick)"))
 
 (defun read-bytes (path n)
   (with-open-file (s path :element-type '(unsigned-byte 8))
@@ -214,83 +258,30 @@
 
 ;;; ---------- on the screen ----------
 
-(defun best-ratio (k)
-  "Integers (z s) with z/s close to K (zoom then subsample), z and s up to 48."
-  (let ((best nil) (be nil))
-    (loop for s from 1 to 48
-          do (let ((z (max 1 (min 48 (round (* k s))))))
-               (let ((e (abs (- (/ z s) k))))
-                 (when (or (null be) (< e (- be 1d-12))) (setf best (list z s) be e)))))
-    best))
-
-(defun image-render-cmds (d color tags hl)
-  "Canvas commands for image D: the picture (when it can be shown) and its frame."
-  (let* ((corners (image-corners d)) (frame (append corners (list (first corners))))
-         (frame-cmds (screen-line frame (if hl "#8fc4ff" color) tags :dash hl))
-         (out nil))
-    (when (and (not (image-hidden-p d)) (image-upright-p d) (not (projected-view-p)))
-      (let ((png (raster-png (image-file d) (image-page d))))
-        (if (null png)
-            ;; not found or can't be read: a cross and the file's name
-            (multiple-value-bind (x0 y0) (w->s (first corners))
-              (multiple-value-bind (x1 y1) (w->s (third corners))
-                (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}" (fmtn x0) (fmtn y0) (fmtn x1) (fmtn y1) color tags) out)
-                (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}" (fmtn x0) (fmtn y1) (fmtn x1) (fmtn y0) color tags) out)
-                (push (format nil ".c create text ~A ~A -text ~A -fill ~A -font {Helvetica 9} -tags {~A}"
-                              (fmtn (/ (+ x0 x1) 2)) (fmtn (/ (+ y0 y1) 2))
-                              (tq (format nil "~A (not found)" (file-namestring (image-file d)))) color tags)
-                      out)))
-            (destructuring-bind (pw ph) (image-px d)
-              (multiple-value-bind (sx0 sy1) (w->s (first corners))        ; lower left
-                (multiple-value-bind (sx1 sy0) (w->s (third corners))      ; upper right
-                  (let* ((k (/ (- sx1 sx0) pw))                            ; pixels on screen per picture pixel
-                         (cx0 (max sx0 *tx*)) (cy0 (max sy0 *ty*))
-                         (cx1 (min sx1 (+ *tx* *cw*))) (cy1 (min sy1 (+ *ty* *ch*))))
-                    (when (and (> k 1d-9) (< cx0 cx1) (< cy0 cy1))
-                      (destructuring-bind (z s) (best-ratio k)
-                        ;; the part of the picture on the screen, whole pixels at the scale used
-                        (let* ((kk (/ z s))
-                               (fx0 (max 0 (floor (/ (- cx0 sx0) k)))) (fy0 (max 0 (floor (/ (- cy0 sy0) k))))
-                               (fx1 (min pw (ceiling (/ (- cx1 sx0) k)))) (fy1 (min ph (ceiling (/ (- cy1 sy0) k)))))
-                          (declare (ignorable kk))
-                          (when (and (< fx0 fx1) (< fy0 fy1) (< (* (- fx1 fx0) (/ z s) (- fy1 fy0) (/ z s)) 2.5d7))
-                            (push (format nil "fpimg_show ~A ~A ~A ~A ~D ~D ~D ~D ~D ~D ~A ~D {~A}"
-                                          (tq (or (dxf 5 d) "x")) (tq png)
-                                          (fmtn (+ sx0 (* fx0 k))) (fmtn (+ sy0 (* fy0 k)))
-                                          fx0 fy0 fx1 fy1 z s (tq (canvas-bg)) (image-fade d) tags)
-                                  out))))))))))))
-    (append (nreverse out) frame-cmds)))
-
 ;;; ---------- plotting ----------
 
 (defun image-ppm (d max-px)
-  "An RGB PPM of image D at most MAX-PX across, for a plot: (values path width height) or NIL."
-  (let ((png (raster-png (image-file d) (image-page d))))
-    (when png
-      (destructuring-bind (pw ph) (image-px d)
-        (let* ((s (max 1 (ceiling (max pw ph) max-px)))
-               (out (format nil "~Aplot-~36R-~D.ppm" (image-cache-dir) (logand (sxhash (list png s)) #xFFFFFFFF) s)))
-          (unless (probe-file out)
-            (if (eq *ui* :gui)
-                (tk-ask (format nil "fpimg_ppm ~A ~A ~D" (tq png) (tq out) s))
-                (let ((q (shell-quote png)) (o (shell-quote out)) (pct (format nil "~,4F%" (/ 100d0 s))))
-                  (try-commands
-                   (list (and (program-path "magick") (format nil "magick ~A -resize ~A ~A" q pct o))
-                         (and (program-path "convert") (format nil "convert ~A -resize ~A ~A" q pct o))
-                         (and (program-path "ffmpeg") (format nil "ffmpeg -loglevel error -y -i ~A -vf scale=iw/~D:ih/~D -pix_fmt rgb24 ~A" q s s o))
-                         (and (python-pil-p) (format nil "python3 -c 'import sys;from PIL import Image;i=Image.open(sys.argv[1]).convert(\"RGB\");i.resize((max(1,i.width//~D),max(1,i.height//~D))).save(sys.argv[2])' ~A ~A" s s q o)))
-                   out))))
-          (when (probe-file out)
-            (let ((h (ignore-errors (ppm-header out))))
-              (when h (values out (first h) (second h))))))))))
+  "An RGB PPM of image D at most MAX-PX across (an averaged copy), for a plot:
+(values path width height) or NIL."
+  (let* ((png (raster-png (image-file d) (image-page d)))
+         (levels (and png (picture-levels png))))
+    (when levels
+      (let* ((full (aref levels 0))
+             (k (max 0 (ceiling (log (/ (max (pixmap-w full) (pixmap-h full)) (d max-px)) 2))))
+             (pm (picture-level levels k))
+             (out (format nil "~Aplot-~36R-~D.ppm" (image-cache-dir) (logand (sxhash png) #xFFFFFFFF) k)))
+        (with-open-file (o out :direction :output :if-exists :supersede :element-type '(unsigned-byte 8))
+          (write-sequence (map '(vector (unsigned-byte 8)) #'char-code (format nil "P6~%~D ~D~%255~%" (pixmap-w pm) (pixmap-h pm))) o)
+          (write-sequence (pixmap-rgb pm) o))
+        (values out (pixmap-w pm) (pixmap-h pm))))))
 
 (defun image-plot-prims (d)
-  "(:image ppm width height lower-left upper-right) for an upright image."
-  (when (and (not (image-hidden-p d)) (image-upright-p d) (not (projected-view-p)))
+  "(:image ppm width height lower-left lower-right upper-left fade), at any angle."
+  (when (and (not (image-hidden-p d)) (not (projected-view-p)))
     (multiple-value-bind (ppm w h) (image-ppm d 2400)
       (when ppm
         (let ((c (image-corners d)))
-          (list (list :image ppm w h (first c) (third c) (image-fade d))))))))
+          (list (list :image ppm w h (first c) (second c) (fourth c) (image-fade d))))))))
 
 (defun ppm-pixel-string (path &optional (fade 0))
   "The RGB bytes of a binary PPM as a string of 8-bit characters (for the PDF stream), faded
@@ -402,6 +393,8 @@ FADE percent toward white. A gray PGM is spread to RGB."
   (with-undo-group (lambda () (dolist (e refs) (set-entity-data e (funcall fn (ename-data e)))))))
 
 (defun forget-raster (file page)
+  (forget-picture-pixels)
+  (clrhash *view-pictures*)
   (remhash (list file page (ignore-errors (file-write-date file))) *png-memo*)
   (maphash (lambda (k v) (declare (ignore v)) (when (equal (first k) file) (remhash k *png-memo*))) *png-memo*)
   (when (gui-p) (tk "fpimg_forget_all")))

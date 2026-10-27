@@ -461,14 +461,16 @@ a sheet. Choose the file (and the page of a PDF), click where its lower-left cor
 its width (Enter: its real size - 96 pixels to the inch for pictures, the page's own size for a
 PDF) or **Scale**. Pictures go behind the drawing (DRAWORDER brings one forward). They move, copy,
 scale and stretch like other objects and are picked by their frame; Properties sets their width,
-height, fade and whether they show. They show in the plan views; turned, or in the 3D views, only
-the frame shows. They plot (into the PDF), and are saved in DXF 2000 files as AutoCAD keeps them
+height, fade and whether they show. They show at any angle and in every view, the 3D views too, drawn
+smoothly at the screen's own scale (Fancy Pencil keeps averaged smaller copies of big photos, so
+thin lines in a scan don't vanish when zoomed out). They plot (into the PDF, turned or not), and are saved in DXF 2000 files as AutoCAD keeps them
 (IMAGE, and PDFUNDERLAY for PDF pages). The drawing keeps each file's name, not the picture, so keep
 the files with the drawing.
 
 PNG and GIF are read directly. JPEG, TIFF, BMP and WebP need ImageMagick (or GraphicsMagick, vips,
 ffmpeg or Python's PIL), and PDF pages need poppler-utils: on Fedora,
-`sudo dnf install ImageMagick poppler-utils`. Converted pictures are kept in
+`sudo apt install imagemagick poppler-utils` on Ubuntu (`sudo dnf install ImageMagick poppler-utils`
+on Fedora). A conversion cut short (the program closed part way) is noticed and done again. Converted pictures are kept in
 ~/.cache/fancypencil/images.
 
 **Image Manager** (IMAGE; File or Tools → Image Manager): every attached file with its type,
@@ -829,6 +831,7 @@ src/tiles.lisp     VPORTS: the Model tab split into viewports
 src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/raster.lisp    pictures and PDF pages: IMAGEATTACH, PDFATTACH, the Image Manager (IMAGE)
+src/imgview.lisp   drawing pictures on the screen: averaged copies, exact resampling, PNG views
 src/history.lisp   the session record: HISTORY window, log files (LOGFILEON / LOGFILEOFF)
 src/helix.lisp     HELIX: springs, thread paths and flat spirals
 src/print3d.lisp   3D printing: STL, 3MF and OBJ out (3DPRINT, STLOUT); STL and OBJ in (STLIN)
