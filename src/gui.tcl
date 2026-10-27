@@ -244,6 +244,10 @@ foreach {l c} {Union UNION Subtract SUBTRACT Intersect INTERSECT Slice SLICE} { 
 .mb.solid add separator
 mcmd .mb.solid "Working Plane on a Face (UCS)" "UCS Face"
 .mb.solid add separator
+set ::keepprof 0
+.mb.solid add checkbutton -label "Keep the Shapes Solids Are Made From" -variable ::keepprof \
+    -command {menucmd "KEEPPROFILES [expr {$::keepprof ? {On} : {Off}}]"}
+.mb.solid add separator
 mcmd .mb.solid "Mass Properties" MASSPROP
 mcmd .mb.draw "Line" LINE
 mcmd .mb.draw "Polyline" PLINE

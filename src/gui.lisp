@@ -899,6 +899,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
         (sysvar "LWDISPLAY") (if (iso-mode-p) 1 0)
         (tq (cond ((iso-mode-p) (format nil "ISO ~A" (string-upcase (isoplane-name)))) (t "ISO"))))
     (tk "setviewname ~A" (tq (if *view* (first *view*) "Top")))
+    (tk "set ::keepprof ~D" (if (eql (sysvar "DELOBJ") 0) 1 0))
     (sync-current-props)
     (tk "settitle ~A" (tq (format nil "Fancy Pencil — ~A~A" (drawing-display-name)
                                   (if (/= (drawing-modcount *dwg*) (drawing-saved-modcount *dwg*)) " *" ""))))))

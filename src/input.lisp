@@ -292,20 +292,38 @@
       (when (logtest bits 64)
         (dolist (e near-ents)
           (when (member (ent-type e) '("TEXT" "MTEXT" "INSERT") :test #'equal)
-            (add (pt3 (text-insertion (ent-data e))) 64)))))
+            (add (pt3 (text-insertion (ent-data e))) 64))))
+      ;; solids and circles in other planes: centres and quadrants of their round shapes
+      (when (fboundp 'round-snap-candidates)
+        (dolist (e near-ents)
+          (when (member (ent-type e) '("POLYFACE" "CIRCLE" "ARC") :test #'equal)
+            (setf cands (append (funcall 'round-snap-candidates e p bits tol (lambda (w) (pt (px w) (py w)))) cands))))))
     cands))
 
 (defun find-osnap (p &optional base (bits nil) (tol (aperture-world)))
   "Best snap near P: (values point bit) or NIL."
   (let* ((bits (or bits (osnap-active-bits)))
+         (*ring-centers* nil) (*ring-circles* nil)
          (cands (and bits (plusp bits) (if (projected-view-p) (view-osnap-candidates p bits tol) (osnap-candidates p bits base tol)))))
+    ;; a solid's round edge is many short straight ones: their ends and middles are not real
+    ;; points of the shape, so they give way to its centre and quadrants
+    (when *ring-circles*
+      (setf cands (remove-if (lambda (c)
+                               (and (member (cdr c) '(1 2))
+                                    (some (lambda (shape) (funcall 'on-round-shape-p (car c) shape)) *ring-circles*)))
+                             cands)))
     (when cands
       ;; prefer specific snaps over NEArest; then closest to cursor
       (let* ((specific (remove 512 cands :key #'cdr))
              (pool (or specific cands))
              ;; coincident candidates: Endpoint beats Midpoint beats Center ... beats Intersection
              (prio '(1 2 4 8 16 64 32 128 256 512))
-             (score (lambda (c) (+ (view-dist (car c) p) (* tol 1d-3 (or (position (cdr c) prio) 10)))))
+             ;; (the centre of a round edge you are on counts as close)
+             (score (lambda (c) (+ (if (member c *ring-centers* :test #'eq)
+                                       ;; (of two such centres, the one nearer the viewer)
+                                       (- (* 0.5d0 tol) (* tol 1d-6 (funcall 'view-depth (car c))))
+                                       (view-dist (car c) p))
+                                   (* tol 1d-3 (or (position (cdr c) prio) 10)))))
              (best (reduce (lambda (a b) (if (<= (funcall score a) (funcall score b)) a b)) pool)))
         (values (pt3 (car best)) (cdr best))))))
 

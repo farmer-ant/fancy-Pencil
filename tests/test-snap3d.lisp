@@ -1,0 +1,66 @@
+;; Object snaps on solids (round edges, round walls, spheres) and on circles in other planes.
+;; Run: sbcl --non-interactive --load load.lisp --load tests/test-snap3d.lisp
+(in-package :fancy-pencil)
+(setf *ui* :tty *output-fn* (lambda (s) s))
+(load-aliases)
+(current-doc)
+(defvar *pass* 0) (defvar *fail* 0)
+(defun r3 (x) (cond ((listp x) (mapcar #'r3 x)) ((realp x) (/ (round (* x 1000)) 1000)) (t x)))
+(defmacro chk (name form expect)
+  `(let ((v (handler-case ,form (error (c) (format nil "ERROR ~A" c)))))
+     (if (equalp v ,expect) (incf *pass*) (incf *fail*))
+     (format t "~:[FAIL~;ok  ~] ~A: ~S~%" (equalp v ,expect) ,name v)))
+(defun al (s) (alisp-eval-string s))
+(defun newest () (car (last (live-entities))))
+(defun kinds (e) (sort (mapcar (lambda (f) (symbol-name (first f))) (data-round-features (ent-data e))) #'string<))
+(defun snap (p &optional (bits 4)) (multiple-value-bind (q b) (find-osnap p nil bits 0.2d0) (and q (list (r3 q) b))))
+
+;; a cylinder: its two ends are circles, its side a round wall
+(al "(command \"cylinder\" '(2 3 0) 1 4)")
+(defvar cy (newest))
+(chk "cylinder: two circles and an axis" (kinds cy) '("AXIS" "CIRCLE" "CIRCLE"))
+(chk "Top view: centre snap from the rim" (snap (pt 3 3 0)) '((2 3 4) 4))
+(chk "quadrant snap" (snap (pt 3.05 3 0) 16) '((3 3 4) 16))
+(al "(command \"-view\" \"seiso\")")
+(chk "iso view: centre of the bottom from its rim"
+     (let ((q (snap (pt 1 3 0)))) (and q (equalp (r3 (first q)) '(2 3 0)))) t)
+(chk "iso view: centre of the top from its rim"
+     (let ((q (snap (pt 1 3 4)))) (and q (equalp (r3 (first q)) '(2 3 4)))) t)
+(al "(command \"-view\" \"top\")")
+;; a hole bored through a box: its rims are circles on the box's faces
+(al "(command \"box\" '(10 0 0) '(14 4 0) 2)")
+(al "(setq bx (entlast))")
+(al "(command \"cylinder\" '(12 2 -1) 0.5 4)")
+(al "(command \"subtract\" bx \"\" (entlast) \"\")")
+(defvar holed (newest))
+(chk "box with a hole: the hole's rims and wall" (kinds holed) '("AXIS" "CIRCLE" "CIRCLE"))
+(chk "the hole's centre" (snap (pt 12.5 2 0)) '((12 2 2) 4))
+;; a sphere: its centre
+(al "(command \"sphere\" '(20 0 1) 1.5)")
+(chk "sphere: its centre" (r3 (rest (find :sphere (data-round-features (ent-data (newest))) :key #'first))) '((20 0 1) 3/2))
+;; a circle drawn in the Front view has a centre snap from Top too
+(al "(command \"-view\" \"front\")")
+(al "(command \"circle\" '(30 2) 1)")
+(al "(command \"-view\" \"top\")")
+(chk "front-view circle: centre from Top" (snap (pt 30.5 0 0)) '((30 0 2) 4))
+;; keeping the shapes a solid is made from
+(al "(command \"keepprofiles\" \"on\")")
+(al "(command \"circle\" '(40 0) 1)")
+(al "(setq c (entlast))")
+(al "(command \"extrude\" c \"\" 2)")
+(chk "the circle is kept" (ent-live-p (alisp-eval-string "c")) t)
+(al "(command \"keepprofiles\" \"off\")")
+(al "(command \"circle\" '(50 0) 1)")
+(al "(setq c (entlast))")
+(al "(command \"extrude\" c \"\" 2)")
+(chk "now it goes" (ent-live-p (alisp-eval-string "c")) nil)
+;; the user's drawing: a cylinder with a hole through its side
+(dxf-import "tests/data/cylinder-with-hole.dxf")
+(let ((fs (data-round-features (ent-data (first (live-entities))))))
+  (chk "opened solid: both end circles" (count :circle fs :key #'first) 2)
+  (chk "opened solid: end centres" (sort (mapcar (lambda (f) (r3 (second f))) (remove :circle fs :key #'first :test-not #'eq)) #'< :key #'third)
+       '((1537/1000 1433/1000 0) (1537/1000 1433/1000 483/100)))
+  (chk "opened solid: the hole's axis" (r3 (rest (find :axis fs :key #'first)))
+       '((-219/1000 1637/1000 3641/1000) (3292/1000 1637/1000 3641/1000) 259/500)))
+
+(format t "~%3D snap tests: ~D passed, ~D failed.~%" *pass* *fail*)

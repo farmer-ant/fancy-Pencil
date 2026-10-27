@@ -281,6 +281,9 @@ quadrants and nearest, at the objects' real heights (tops of thick objects too).
   (let ((q (w->uv p)) (cands nil))
     (flet ((add (w bit) (when (and w (<= (dist2d (w->uv w) q) tol)) (push (cons w bit) cands))))
       (dolist (e (view-candidates q tol) cands)
+        ;; solids and circles in other planes: centres and quadrants of their round shapes
+        (when (and (fboundp 'round-snap-candidates) (member (ent-type e) '("POLYFACE" "CIRCLE" "ARC") :test #'equal))
+          (setf cands (append (funcall 'round-snap-candidates e p bits tol #'w->uv) cands)))
         (when (some (lambda (sg) (<= (piece-dist sg q) tol)) (entity-view-segs e))
           (multiple-value-bind (elev th) (view-object-height (ent-data e))
             (dolist (pc (snap-pieces e))
