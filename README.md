@@ -430,6 +430,7 @@ Draw the border, title block and notes on it; they belong to that sheet only.
 **Viewports** are windows on the sheet that show model space, each with its own view, visual
 style and scale:
 
+* The Layout menu's viewport items work from the Model tab too: they switch to Layout1 first.
 * **MVIEW** (`MV`): pick two corners, or **Fit** (the printable area), or **2**, **3** or **4** at
   once. **4 → Standard** makes Top, Front, Right and SE Isometric: the three flat views at one
   scale and lined up with each other, as a drawing's views are. MVIEW **Lock** keeps a viewport's

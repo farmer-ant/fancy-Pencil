@@ -89,8 +89,11 @@
               (target (or (gethash (strip-command-prefix word) *aliases*) (strip-command-prefix word)))
               (lisp-fn (or (sym-value (asym (concatenate 'string "C:" (strip-command-prefix word))))
                            (sym-value (asym (concatenate 'string "C:" target))))))
-         ;; the rest of the line (e.g. from a menu macro "ZOOM E") is fed as input
-         (setf *script-queue* (append (rest parts) *script-queue*))
+         ;; the rest of the line (e.g. from a menu macro "ZOOM E") is fed as input; whatever of it
+         ;; the command didn't use (it stopped early) is dropped, not run as further commands
+         (let ((tail *script-queue*) (added (rest parts)))
+          (setf *script-queue* (append added *script-queue*))
+          (unwind-protect
          (progn
            (cond
              (fn (remember-command word name) (run-builtin name fn))
@@ -103,12 +106,26 @@
               (handler-case (setvar-prompt word)
                 (alisp-cancel () nil)
                 (alisp-error (c) (out (format nil "~A~%" (alisp-error-msg c))))))
-             (t (out (format nil "Unknown command \"~A\".  Press F1 for help.~%" (string-upcase word)))))))))))
+             (t (out (format nil "Unknown command \"~A\".  Press F1 for help.~%" (string-upcase word))))))
+           (when added (drop-unused-macro-input tail added)))))))))
+
+(defun drop-unused-macro-input (tail added)
+  "After a command run from a line like \"MVIEW 4 Standard\": if it left words of that line unread,
+drop them (only those: anything that was queued before stays)."
+  (when (and (tailp tail *script-queue*) (not (eq tail *script-queue*)))
+    (let* ((left (ldiff *script-queue* tail))
+           (joined (string-trim " " (format nil "~{~A~^ ~}" left)))
+           (whole (string-trim " " (format nil "~{~A~^ ~}" added))))
+      (when (and (every #'stringp left) (<= (length joined) (length whole))
+                 (string-equal joined (subseq whole (- (length whole) (length joined)))))
+        (setf *script-queue* tail)))))
 
 (defun split-first-word (s)
+  "The command word, then each further word of the line as its own input (a space is Enter, as in
+AutoCAD menu macros: \"MVIEW 4 Standard\" answers two prompts)."
   (let ((p (position #\Space s)))
     (if p
-        (cons (subseq s 0 p) (let ((r (string-trim " " (subseq s (1+ p))))) (and (plusp (length r)) (list r))))
+        (cons (subseq s 0 p) (remove "" (split-string (string-trim " " (subseq s (1+ p))) #\Space) :test #'string=))
         (list s))))
 
 (defun command-loop-step ()

@@ -718,8 +718,12 @@ paper space objects drawn over everything outside it."
 ;;; ---------- MSPACE / PSPACE ----------
 
 (defun require-layout (what)
+  "Layout commands work on a layout tab: from the Model tab they go to the first layout."
+  (declare (ignore what))
   (or (in-layout-p)
-      (progn (out (format nil "~A works on a layout tab: click Layout1 under the drawing (or LAYOUT Set).~%" what)) nil)))
+      (progn (set-ctab (layout-name (first (drawing-layouts *dwg*))))
+             (out (format nil "Switched to the ~A tab (paper space).~%" (drawing-ctab *dwg*)))
+             (in-layout-p))))
 
 (defcmd "MSPACE" ("MS") "Works in model space through a layout viewport."
   (when (require-layout "MSPACE")
