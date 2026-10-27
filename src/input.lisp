@@ -392,7 +392,7 @@
   (when (projected-view-p) (return-from pick-entity-at (view-pick-entity-at p tol)))
   (let ((best nil) (bd nil))
     (dolist (e (entities-near p tol) best)
-      (dolist (pc (entity-pieces e))
+      (dolist (pc (pick-pieces e))
         (let ((dd (cond ((eq (first pc) :gseg) (if (point-in-text-box-p p e) 0d0 (piece-dist pc p)))
                         ((equal (ent-type e) "HATCH") (if (point-in-hatch-p p (ent-data e)) (* 0.5 tol) (piece-dist pc p)))
                         (t (piece-dist pc p)))))

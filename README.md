@@ -429,6 +429,26 @@ move it (base centre), set the base radius (start point), the height (top centre
 radius. **SWEEP** a small circle along it to make a spring or a thread. Saved in DXF 2000 files as
 AutoCAD's HELIX object (R12 files get short lines along it).
 
+### 3D printing (File or Solids → 3D Print; 3DPRINT, STLOUT, STLIN)
+
+**3DPRINT** saves the solids you select as a file for a 3D printer's slicer (Cura, PrusaSlicer,
+Bambu Studio, OrcaSlicer ...). The window asks for:
+
+- **File type**: **STL (binary)** - what every slicer reads; **STL (text)**; **3MF** - the newer
+  format, which records its units (written in the drawing's own); **OBJ**.
+- **Units**: STL and OBJ files have no units and slicers read them as millimetres, so a drawing in
+  inches is written x 25.4 (choose Drawing units to write the numbers as they are).
+- **Place on the build plate**: moves the solids so their lowest corner is at 0,0,0.
+
+Each solid is checked first: faces turned inward are put right, the small cracks boolean operations
+(UNION, SUBTRACT) leave where faces meet are mended, and the report says whether every solid is
+closed ("watertight") - what a slicer needs - with its size in the file's units. **STLOUT** is
+AutoCAD's command: binary or text STL, in millimetres.
+
+**STLIN** (Import STL / OBJ Model) brings in a model from a printing site or another program as a
+solid: it asks the file's units (millimetres, inches or drawing units). Flat faces show only their
+edges, and curved sides show their outline in each view.
+
 ### Pictures and PDF pages (File → Attach Image / Attach PDF Page; IMAGEATTACH, PDFATTACH, ATTACH)
 
 Attach a JPEG, TIFF, PNG, GIF, BMP or WebP picture, or one page of a PDF, to trace over or to show on
@@ -783,6 +803,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-tiles.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-snap3d.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-raster.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-helix.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-print3d.lisp
 ```
 
 ## Layout
@@ -804,6 +825,7 @@ src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/raster.lisp    pictures and PDF pages: IMAGEATTACH, PDFATTACH, the Image Manager (IMAGE)
 src/history.lisp   the session record: HISTORY window, log files (LOGFILEON / LOGFILEOFF)
 src/helix.lisp     HELIX: springs, thread paths and flat spirals
+src/print3d.lisp   3D printing: STL, 3MF and OBJ out (3DPRINT, STLOUT); STL and OBJ in (STLIN)
 src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
 src/dxf2000.lisp   AutoCAD 2000 DXF writer
 src/alisp.lisp     AutoLISP reader, printer, evaluator and core functions
