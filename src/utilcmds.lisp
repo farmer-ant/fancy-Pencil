@@ -615,8 +615,17 @@ a DXF next to it instead and leave the DWG untouched."
                                            installed, Fancy Pencil uses it automatically.~]"
                                       (file-namestring f) (not (eq (find-dwg-converter) :oda))))))
              (error (c) (tell-user (format nil "The converted drawing could not be read: ~A" (cl-error-text c))))))))
+    ;; a 3D model (STL, OBJ): opened as a new drawing holding it as a solid, seen at an angle
+    ((funcall 'model-file-p f)
+     (when (funcall 'import-model-file f)
+       (when (gui-p) (set-view "SWiso") (funcall 'zoom-extents))
+       (out (format nil "~A opened as a solid. Save keeps it as a DXF drawing; 3D Print saves it for the printer again.~%"
+                    (file-namestring f)))))
+    ((string-equal (pathname-type (pathname f)) "3mf")
+     (tell-user (format nil "~A is a 3MF file. Fancy Pencil saves 3MF but can't open it: open the STL version instead (3D Print can make one)."
+                        (file-namestring f))))
     ((not (dxf-file-p f))
-     (tell-user (format nil "~A is not a DXF or DWG drawing." (file-namestring f))))
+     (tell-user (format nil "~A is not a drawing or 3D model Fancy Pencil can open (DXF, DWG, STL or OBJ)." (file-namestring f))))
     (t
      (handler-case (after-open f (dxf-import f))
        (file-error () (tell-user (format nil "Cannot open ~A" f)))))))
@@ -660,8 +669,8 @@ a DXF next to it instead and leave the DWG untouched."
 (defcmd "NEW" ("QNEW") "Creates a new drawing in its own tab."
   (new-doc)
   (out (format nil "~A~%" (doc-name (current-doc)))))
-(defcmd "OPEN" () "Opens a drawing (DXF, or DWG through a converter)."
-  (let ((f (ask-file nil "Select File" nil "dwg dxf")))
+(defcmd "OPEN" () "Opens a drawing (DXF, or DWG through a converter), or a 3D model (STL, OBJ) as a solid."
+  (let ((f (ask-file nil "Select File" nil "dwg dxf stl obj")))
     (when f (open-in-tab f))))
 (defcmd "QSAVE" () "Saves the current drawing." (save-drawing nil))
 (defcmd "SAVE" () "Saves the drawing." (save-drawing nil))

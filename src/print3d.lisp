@@ -465,30 +465,36 @@ meet almost flat hidden (so a box shows its 12 edges, not its triangles)."
                                                          (> (vdot3 (aref normals k) (aref normals (first adj))) cosmax))))
                                          (if hide (- (1+ a)) (1+ a)))))))))))
 
+(defun model-file-p (f)
+  (member (string-downcase (or (pathname-type (pathname f)) "")) '("stl" "obj") :test #'string=))
+
+(defun import-model-file (f)
+  "Bring STL or OBJ file F in as a solid (asks its units). Returns the new solid or NIL."
+  (cond
+    ((not (probe-file f)) (out (format nil "Cannot find ~A~%" f)) nil)
+    (t
+     (let* ((tris (if (string-equal (pathname-type (pathname f)) "obj") (read-obj f) (read-stl f))))
+       (if (null tris)
+           (progn (out (format nil "No triangles found in ~A.~%" (file-namestring f))) nil)
+           (let* ((k (gkw "Units in the file [Millimeters/Inches/Drawing] <Millimeters>: "
+                          '("Millimeters" "Inches" "Drawing") "Millimeters"))
+                  (s (cond ((equal k "Drawing") 1d0)
+                           ((equal k "Inches") (/ 25.4d0 (file-unit-scale :mm)))
+                           (t (/ 1d0 (file-unit-scale :mm)))))
+                  (tris (if (= s 1) tris (mapcar (lambda (tr) (mapcar (lambda (p) (v* p s)) tr)) tris)))
+                  (data (triangles-to-mesh tris))
+                  (e (add-entity data)))
+             (multiple-value-bind (open bad) (mesh-check (mapcar (lambda (f) (mapcar (lambda (i) (1- (abs i))) f)) (mesh-faces data)))
+               (multiple-value-bind (lo hi) (tris-bbox tris)
+                 (out (format nil "~A: ~D triangle~:P, ~{~A~^ x ~} ~A, ~A.~%"
+                              (file-namestring f) (length tris)
+                              (mapcar (lambda (x) (fmt-plain (/ (round (* x 1000)) 1000))) (mapcar #'- hi lo))
+                              (units-name)
+                              (if (and (zerop open) (zerop bad)) "closed (watertight)"
+                                  (format nil "not closed: ~D open edge~:P~[~:;, ~:*~D shared by more than two faces~]" open bad))))))
+             (when (gui-p) (funcall 'zoom-extents))
+             e))))))
+
 (defcmd "STLIN" ("IMPORT3D" "OBJIN") "Brings an STL or OBJ file (from a 3D model or a printing site) in as a solid."
   (let ((f (ask-file nil "Import STL or OBJ" nil "stl obj")))
-    (when f
-      (cond
-        ((not (probe-file f)) (out (format nil "Cannot find ~A~%" f)))
-        (t
-         (let* ((tris (if (string-equal (pathname-type (pathname f)) "obj") (read-obj f) (read-stl f))))
-           (if (null tris)
-               (out (format nil "No triangles found in ~A.~%" (file-namestring f)))
-               (let* ((k (gkw "Units in the file [Millimeters/Inches/Drawing] <Millimeters>: "
-                              '("Millimeters" "Inches" "Drawing") "Millimeters"))
-                      (s (cond ((equal k "Drawing") 1d0)
-                               ((equal k "Inches") (/ 25.4d0 (file-unit-scale :mm)))
-                               (t (/ 1d0 (file-unit-scale :mm)))))
-                      (tris (if (= s 1) tris (mapcar (lambda (tr) (mapcar (lambda (p) (v* p s)) tr)) tris)))
-                      (data (triangles-to-mesh tris))
-                      (e (add-entity data)))
-                 (multiple-value-bind (open bad) (mesh-check (mapcar (lambda (f) (mapcar (lambda (i) (1- (abs i))) f)) (mesh-faces data)))
-                   (multiple-value-bind (lo hi) (tris-bbox tris)
-                     (out (format nil "~A: ~D triangle~:P, ~{~A~^ x ~} ~A, ~A.~%"
-                                  (file-namestring f) (length tris)
-                                  (mapcar (lambda (x) (fmt-plain (/ (round (* x 1000)) 1000))) (mapcar #'- hi lo))
-                                  (units-name)
-                                  (if (and (zerop open) (zerop bad)) "closed (watertight)"
-                                      (format nil "not closed: ~D open edge~:P~[~:;, ~:*~D shared by more than two faces~]" open bad))))))
-                 (when (gui-p) (funcall 'zoom-extents))
-                 e))))))))
+    (when f (import-model-file f))))

@@ -118,6 +118,13 @@
 (export-3d-print (solids) "/tmp/fp-print2.stl" :stl)
 (chk "round trip" (length (read-stl "/tmp/fp-print2.stl")) (length (read-stl "/tmp/fp-print.stl")))
 
+;; OPEN takes STL and OBJ as well as drawings
+(al "(command \"erase\" (ssget \"x\") \"\")")
+(al "(command \"open\" \"/tmp/fp-print.stl\" \"\")")
+(chk "OPEN an STL: a solid" (length (solids)) 1)
+(chk "model file types" (mapcar (lambda (f) (and (model-file-p f) t)) '("a.STL" "b.obj" "c.dxf")) '(t t nil))
+(al "(command \"erase\" (ssget \"x\") \"\")")
+
 ;; a smooth model (a sphere of small triangles): no edges to draw, so its outline is drawn and picked
 (al "(command \"erase\" (ssget \"x\") \"\")")
 (let ((tris nil) (n 24) (m 32))
