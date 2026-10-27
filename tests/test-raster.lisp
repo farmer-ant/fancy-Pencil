@@ -30,8 +30,36 @@
 (chk "PDF pages and size" (multiple-value-list (pdf-page-info (data "two-pages.pdf") 2)) (list 2 (/ 300d0 72) (/ 200d0 72)))
 (chk "PDF page 2 at 150 dpi" (image-pixel-size (raster-png (data "two-pages.pdf") 2)) '(625 417))
 (chk "a missing file" (multiple-value-list (raster-png "/nowhere/x.jpg")) '(nil "file not found"))
-(chk "zoom/subsample ratio" (best-ratio 0.5d0) '(1 2))
-(chk "zoom/subsample ratio 3" (best-ratio 3d0) '(3 1))
+;; drawing a view: smaller copies by averaging; each screen pixel from the picture, exactly
+(let* ((pm (make-pixmap 4 2 (coerce '(0 0 0  100 100 100  200 200 200  250 250 250
+                                       0 0 0  100 100 100  200 200 200  250 250 250) '(simple-array (unsigned-byte 8) (*)))))
+       (half (half-pixmap pm)))
+  (chk "half size" (list (pixmap-w half) (pixmap-h half)) '(2 1))
+  (chk "averaged" (coerce (pixmap-rgb half) 'list) '(50 50 50 225 225 225))
+  ;; 4 x 2 picture drawn 2 screen pixels per picture pixel from (10,10): an 8 x 4 patch
+  (let ((rgba (render-picture pm 1 10 10 2 0 0 2 10 10 10 6 0 '(0 0 0))))
+    (chk "inside: opaque" (aref rgba (+ 3 (* 4 (+ (* 1 10) 1)))) 255)
+    (chk "outside: clear" (aref rgba (+ 3 (* 4 (+ (* 5 10) 9)))) 0)
+    (chk "left edge is the first pixel" (aref rgba (* 4 (+ (* 1 10) 0))) 0)
+    (chk "right edge is the last pixel" (aref rgba (* 4 (+ (* 1 10) 7))) 250)))
+(write-png-rgba "/tmp/fp-view.png" 2 1 (coerce '(255 0 0 255 0 0 255 128) '(simple-array (unsigned-byte 8) (*))))
+(chk "view PNG is whole" (picture-complete-p "/tmp/fp-view.png") t)
+(chk "view PNG reads" (multiple-value-bind (code text) (run-shell "python3 -c \"import zlib,sys;d=open('/tmp/fp-view.png','rb').read();i=d.index(b'IDAT');n=int.from_bytes(d[i-4:i],'big');print(list(zlib.decompress(d[i+4:i+4+n])))\"")
+                        (and (eql code 0) (string-trim '(#\Newline) text)))
+     "[0, 255, 0, 0, 255, 0, 0, 255, 128]")
+
+;; a converted copy cut short (the program was stopped part way) is made again, not shown broken
+(let* ((out (raster-png (data "pic.jpg"))) (head (read-bytes out 33)))
+  (with-open-file (o out :direction :output :if-exists :supersede :element-type '(unsigned-byte 8))
+    (write-sequence head o))
+  (chk "cut-short copy is not a whole picture" (picture-complete-p out) nil)
+  (clrhash *png-memo*)
+  (chk "made again" (and (picture-complete-p (raster-png (data "pic.jpg"))) t) t)
+  (chk "same size as before" (image-pixel-size (raster-png (data "pic.jpg"))) '(64 48)))
+(let ((bad "/tmp/fp-cut.png"))
+  (with-open-file (o bad :direction :output :if-exists :supersede :element-type '(unsigned-byte 8))
+    (write-sequence (read-bytes (raster-png (data "pic.jpg")) 40) o))
+  (chk "a damaged PNG says so" (nth-value 1 (raster-png bad)) "the file is damaged or incomplete"))
 
 ;; attaching: insertion point, then width
 (al (format nil "(command \"imageattach\" ~S '(2 3) 8)" (data "pic.jpg")))

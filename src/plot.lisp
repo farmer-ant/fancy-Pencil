@@ -371,10 +371,11 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                        (:unclip (format o "Q~%") (setf cur-stroke nil cur-fill nil cur-w nil))
                        ;; a picture: drawn as an image XObject over its rectangle
                        (:image
-                        (destructuring-bind (ppm iw ih ll ur &optional (fade 0)) (rest p)
+                        (destructuring-bind (ppm iw ih ll lr ul &optional (fade 0)) (rest p)
                           (push (list ppm iw ih fade) images)
-                          (format o "q ~A 0 0 ~A ~A ~A cm /Im~D Do Q~%"
-                                  (pdf-num (* (- (px ur) (px ll)) scale-ppu)) (pdf-num (* (- (py ur) (py ll)) scale-ppu))
+                          (format o "q ~A ~A ~A ~A ~A ~A cm /Im~D Do Q~%"
+                                  (pdf-num (* (- (px lr) (px ll)) scale-ppu)) (pdf-num (* (- (py lr) (py ll)) scale-ppu))
+                                  (pdf-num (* (- (px ul) (px ll)) scale-ppu)) (pdf-num (* (- (py ul) (py ll)) scale-ppu))
                                   (pdf-num (tx ll)) (pdf-num (ty ll)) (length images))))
                        (:fill
                         (destructuring-bind (polys color) (rest p)
