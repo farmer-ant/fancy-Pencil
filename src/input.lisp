@@ -208,11 +208,23 @@
 
 (defun parse-number-text (s) (or (distof s) nil))
 
+(defvar *typed-interactively* nil
+  "True while a point typed at the command line (not given by AutoLISP or a script) is read.")
+
+(defun dynamic-relative-p ()
+  "Typed next points are relative to the last point, as with AutoCAD's dynamic input (DYNPICOORDS 0)."
+  (and *typed-interactively* (not (eql (sysvar "DYNPICOORDS") 1))))
+
 (defun parse-point-text (s base)
   (let* ((s (string-trim " " s))
+         ;; # (or *) in front: absolute, whatever DYNPICOORDS says
+         (absolute (and (plusp (length s)) (find (char s 0) "#*")))
          (s (string-left-trim "#*" s))
-         (rel (and (plusp (length s)) (char= (char s 0) #\@)))
-         (body (if rel (subseq s 1) s))
+         (rel (or (and (plusp (length s)) (char= (char s 0) #\@))
+                  ;; a second or later point typed as x,y or distance<angle: from the last point
+                  (and base (not absolute) (dynamic-relative-p)
+                       (plusp (length s)) (or (find #\, s) (find #\< s)))))
+         (body (if (and (plusp (length s)) (char= (char s 0) #\@)) (subseq s 1) s))
          (last (or (sysvar "LASTPOINT") (pt 0 0)))
          (off
            (cond ((zerop (length body)) (and rel (pt 0 0)))
@@ -657,7 +669,8 @@ NOSNAP turns off object snap, grid snap and ortho (used for selection windows)."
             ;; interactive
             (let ((raw (ui-acquire req)))
               (ecase (first raw)
-                (:text (multiple-value-setq (value ok) (interpret-text (second raw) req)))
+                (:text (multiple-value-setq (value ok)
+                         (let ((*typed-interactively* t)) (interpret-text (second raw) req))))
                 ;; a click at a distance/angle prompt is measured from the base point (or asks for a
                 ;; second point), exactly like a typed point
                 (:point (if (member kind '(:distance :angle))
