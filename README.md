@@ -415,6 +415,20 @@ Select text, MText or dimensions with override text and choose **UPPER**, **lowe
 **Shift+F3** switches the selected words (or all the text) UPPER → lower → Title → Sentence, and the
 editor's right-click menu has Change Case.
 
+### Helix (Draw → Helix / Spiral, or Solids → Helix; HELIX)
+
+A spring or thread path, as in AutoCAD. Pick the centre of the base, the base radius (the point you
+pick is where the helix starts; [Diameter] to give a diameter), the top radius (Enter: the same -
+a different top radius makes a cone-shaped spring), then the height. At the height prompt:
+**Axis endpoint** (pick the top of the axis, in any direction), **Turns** (default 3), **turn
+Height** (the distance between turns; then the height sets the number of turns) and **tWist** (CW or
+CCW, the default). A height of 0 makes a flat spiral. It stands up the working plane's Z.
+
+Afterwards Properties changes its base and top radius, height, turns, turn height and twist; grips
+move it (base centre), set the base radius (start point), the height (top centre) and the top
+radius. **SWEEP** a small circle along it to make a spring or a thread. Saved in DXF 2000 files as
+AutoCAD's HELIX object (R12 files get short lines along it).
+
 ### Pictures and PDF pages (File → Attach Image / Attach PDF Page; IMAGEATTACH, PDFATTACH, ATTACH)
 
 Attach a JPEG, TIFF, PNG, GIF, BMP or WebP picture, or one page of a PDF, to trace over or to show on
@@ -768,6 +782,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-draworder.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-tiles.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-snap3d.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-raster.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-helix.lisp
 ```
 
 ## Layout
@@ -788,6 +803,7 @@ src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/raster.lisp    pictures and PDF pages: IMAGEATTACH, PDFATTACH, the Image Manager (IMAGE)
 src/history.lisp   the session record: HISTORY window, log files (LOGFILEON / LOGFILEOFF)
+src/helix.lisp     HELIX: springs, thread paths and flat spirals
 src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
 src/dxf2000.lisp   AutoCAD 2000 DXF writer
 src/alisp.lisp     AutoLISP reader, printer, evaluator and core functions

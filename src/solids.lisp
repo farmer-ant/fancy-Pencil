@@ -304,6 +304,7 @@ smooth shape."
               (closed (or (logtest 1 (or (dxf 70 data) 0)) (< (dist (first pts) (car (last pts))) 1d-9))))
          (values (if (and closed (< (dist (first pts) (car (last pts))) 1d-9)) (butlast pts) pts) closed)))
       ((equal type "LINE") (values (list (pt3 (dxf 10 data)) (pt3 (dxf 11 data))) nil))
+      ((equal type "HELIX") (values (funcall 'helix-points data) nil))
       (t (values nil nil)))))
 
 (defun shape-of (e)
@@ -319,7 +320,7 @@ smooth shape."
 (defun pick-shapes (prompt)
   "Selected objects that can be shapes, with a note about the others."
   (let* ((ents (get-selection prompt))
-         (ok (remove-if-not (lambda (e) (member (ent-type e) '("CIRCLE" "ARC" "LWPOLYLINE" "ELLIPSE" "SPLINE" "LINE") :test #'equal)) ents)))
+         (ok (remove-if-not (lambda (e) (member (ent-type e) '("CIRCLE" "ARC" "LWPOLYLINE" "ELLIPSE" "SPLINE" "LINE" "HELIX") :test #'equal)) ents)))
     (when (< (length ok) (length ents))
       (let ((solids (count "POLYFACE" ents :key #'ent-type :test #'equal)))
         (out (format nil "~D object~:P skipped (use circles, arcs, polylines, ellipses, splines or lines)~:[~;: ~D of them ~:*~[~;is a solid~:;are solids~] - pick the edge of the circle or polyline itself~].~%"

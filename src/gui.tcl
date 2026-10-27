@@ -240,6 +240,7 @@ mcmd .mb.view "Pan" PAN
 mcmd .mb.view "Regen" REGEN
 
 foreach {l c} {Box BOX Wedge WEDGE Cylinder CYLINDER Cone CONE Sphere SPHERE Torus TORUS} { mcmd .mb.solid $l $c }
+mcmd .mb.solid "Helix (path for a spring or thread)" HELIX
 .mb.solid add separator
 foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull PRESSPULL} { mcmd .mb.solid $l $c }
 .mb.solid add separator
@@ -263,6 +264,7 @@ mcmd .mb.draw "Circle: 3 Points" "CIRCLE 3P"
 mcmd .mb.draw "Arc: 3 Points" ARC
 mcmd .mb.draw "Arc: Center, Start, End" "ARC C"
 mcmd .mb.draw "Ellipse (polyline)" ELLIPSE
+mcmd .mb.draw "Helix / Spiral" HELIX
 .mb.draw add separator
 mcmd .mb.draw "Hatch..." HATCH
 mcmd .mb.draw "Revision Cloud" REVCLOUD

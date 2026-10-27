@@ -517,7 +517,7 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
          (if (and (or (not pattern)
                       ;; dashes too small to see at this zoom: drawn solid anyway
                       (< (* scale (reduce #'+ (mapcar #'abs pattern)) *vscale*) 3))
-                  (member type '("LWPOLYLINE" "SPLINE" "ELLIPSE" "LEADER") :test #'equal))
+                  (member type '("LWPOLYLINE" "SPLINE" "ELLIPSE" "LEADER" "HELIX") :test #'equal))
              ;; many short straight pieces: one canvas line per connected run (far fewer items)
              (render-chained (loop for pc in (data-pieces data)
                                    append (if xf (transform-piece pc xf) (list pc)))

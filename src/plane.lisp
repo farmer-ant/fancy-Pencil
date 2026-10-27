@@ -41,7 +41,7 @@
 (defun down-normal-p (n)
   (and (< (abs (px n)) 1d-7) (< (abs (py n)) 1d-7) (minusp (pz n))))
 
-(defun wcs-type-p (type) (member type '("LINE" "POINT" "POLYFACE") :test #'equal))
+(defun wcs-type-p (type) (member type '("LINE" "POINT" "POLYFACE" "HELIX") :test #'equal))
 
 (defun entity-normal (data)
   (let ((n (dxf 210 data)))
