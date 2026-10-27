@@ -234,6 +234,20 @@ foreach {l c} {Move MOVE Copy COPY Rotate ROTATE Scale SCALE Mirror MIRROR Offse
     mcmd .mb.modify $l $c
 }
 .mb.modify add separator
+menu .mb.modify.dro -tearoff 0
+.mb.modify add cascade -label "Draw Order" -menu .mb.modify.dro
+mcmd .mb.modify.dro "Bring to Front" "DRAWORDER Front"
+mcmd .mb.modify.dro "Send to Back" "DRAWORDER Back"
+mcmd .mb.modify.dro "Bring Above Objects" "DRAWORDER Above"
+mcmd .mb.modify.dro "Send Under Objects" "DRAWORDER Under"
+.mb.modify.dro add separator
+mcmd .mb.modify.dro "Bring Text, Dimensions and Leaders to Front" "TEXTTOFRONT All"
+mcmd .mb.modify.dro "Send Hatches to Back" HATCHTOBACK
+menu .mb.modify.tcase -tearoff 0
+.mb.modify add cascade -label "Change Text Case" -menu .mb.modify.tcase
+foreach {l k} {"UPPER CASE" UPPER "lower case" lower "Sentence case" Sentence "Title Case" Title "tOGGLE cASE" toGGLE} {
+    mcmd .mb.modify.tcase $l "TCASE $k"
+}
 mcmd .mb.modify "Align" ALIGN
 mcmd .mb.modify "Match Properties" MATCHPROP
 mcmd .mb.modify "Properties" PROPERTIES
@@ -1032,6 +1046,7 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     bind $t <Control-i> {set ::mt(italic) [expr {!$::mt(italic)}]; mted_restyle; break}
     bind $t <Control-u> {set ::mt(underline) [expr {!$::mt(underline)}]; mted_restyle; break}
     bind $t <Control-a> {$::mted tag add sel 1.0 end; break}
+    bind $t <Shift-F3> {mted_case_cycle; break}
     set ::mted $t
     set ::mted_geom [list $mode $x $y $width $ls $minh]
     mted_fit
@@ -1110,23 +1125,65 @@ proc mted_popup {X Y} {
     $m add cascade -label "Insert Symbol" -menu $m.sym
     menu $m.sym -tearoff 0
     mted_symbol_items $m.sym
-    if {$::mt(mode) eq "mtext"} {
-        $m add separator
-        $m add command -label "Change Case: UPPER" -command {mted_case toupper}
-        $m add command -label "Change Case: lower" -command {mted_case tolower}
+    $m add cascade -label "Change Case" -menu $m.case
+    menu $m.case -tearoff 0
+    foreach {l fn} {"UPPER CASE" upper "lower case" lower "Sentence case" sentence "Title Case" title "tOGGLE cASE" toggle} {
+        $m.case add command -label $l -command [list mted_case $fn]
     }
+    $m.case add separator
+    $m.case add command -label "Next case (cycle)" -accelerator Shift+F3 -command mted_case_cycle
     $m add separator
     $m add command -label "OK" -command {mted_done ok}
     $m add command -label "Cancel" -command {mted_done cancel}
     tk_popup $m $X $Y
 }
+proc case_convert {s fn} {
+    switch $fn {
+        toupper - upper { return [string toupper $s] }
+        tolower - lower { return [string tolower $s] }
+        toggle {
+            set o ""
+            foreach c [split $s ""] { append o [expr {[string is upper $c] ? [string tolower $c] : [string toupper $c]}] }
+            return $o
+        }
+        title {
+            set o ""; set start 1
+            foreach c [split [string tolower $s] ""] {
+                if {[string is alpha $c]} { append o [expr {$start ? [string toupper $c] : $c}]; set start 0 } \
+                elseif {[string is digit $c]} { append o $c; set start 0 } else { append o $c; set start 1 }
+            }
+            return $o
+        }
+        sentence {
+            set o ""; set start 1
+            foreach c [split [string tolower $s] ""] {
+                if {[string is alnum $c]} { append o [expr {$start && [string is alpha $c] ? [string toupper $c] : $c}]; set start 0 } \
+                else { append o $c; if {$c in {. ! ? "\n"}} { set start 1 } }
+            }
+            return $o
+        }
+    }
+    return $s
+}
+# Shift+F3 cycles the selection (or the word / whole text) through UPPER, lower, Title and Sentence case
+proc mted_case_cycle {} {
+    set t $::mted
+    if {[llength [$t tag ranges sel]]} { set s [$t get sel.first sel.last] } else { set s [$t get 1.0 end-1c] }
+    if {$s eq [string toupper $s] && $s ne [string tolower $s]} { set fn lower } \
+    elseif {$s eq [string tolower $s]} { set fn title } \
+    elseif {$s eq [case_convert $s title]} { set fn sentence } \
+    else { set fn upper }
+    mted_case $fn
+}
 proc mted_case {fn} {
     set t $::mted
     if {[llength [$t tag ranges sel]]} { set a sel.first; set z sel.last } else { set a 1.0; set z end-1c }
-    set s [string $fn [$t get $a $z]]
+    set keepsel [llength [$t tag ranges sel]]
+    set s [case_convert [$t get $a $z] $fn]
     set ia [$t index $a]
     $t delete $a $z
     $t insert $ia $s all
+    if {$keepsel} { $t tag add sel $ia "$ia + [string length $s] chars" }
     mted_fit
 }
 proc mted_fit {} {

@@ -289,8 +289,10 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
       (let ((b (ignore-errors (if (projected-view-p) (entity-view-bbox e) (entity-bbox e)))))
         (when (or (null b) (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0))))
           (ignore-errors (plot-data (ent-data e) (entity-aci (ent-data e)))))))
+    ;; (primitives were pushed, newest first; joining turns them round once: paint them oldest
+    ;; first so later objects print over earlier ones, as on the screen)
     (join-poly-prims)
-    *plot-prims*))
+    (reverse *plot-prims*)))
 
 ;;; ---------- PDF output ----------
 

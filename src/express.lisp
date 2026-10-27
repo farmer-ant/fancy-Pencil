@@ -467,20 +467,14 @@
           (progn (when start (setf (char out i) (char-upcase (char out i)))) (setf start nil))
           (setf start t)))))
 
-(defcmd "TCASE" () "Express: changes the case of selected text."
-  (let ((ents (text-ents "Select text-based objects: ")))
-    (when ents
-      (let ((k (gkw "Select case [Sentence/lower/UPPER/Title/toGGLE] <UPPER>: " '("Sentence" "lower" "UPPER" "Title" "toGGLE") "UPPER")))
-        (dolist (e ents)
-          (let* ((s (or (dxf 1 (ent-data e)) ""))
-                 (ns (cond ((equal k "lower") (string-downcase s))
-                           ((equal k "UPPER") (string-upcase s))
-                           ((equal k "Title") (title-case s))
-                           ((equal k "toGGLE") (map 'string (lambda (c) (if (upper-case-p c) (char-downcase c) (char-upcase c))) s))
-                           (t (let ((l (string-downcase s)))
-                                (if (plusp (length l)) (concatenate 'string (string-upcase (subseq l 0 1)) (subseq l 1)) l))))))
-            (set-entity-data e (set-dxf 1 ns (ent-data e)))))
-        (out (format nil "~D text object~:P changed.~%" (length ents)))))))
+(defcmd "TCASE" ("CHANGECASE") "Changes the case of text, MText and dimension text: Sentence, lower, UPPER, Title, tOGGLE."
+  (let ((ents (funcall 'text-case-ents (get-selection "Select text-based objects: "))))
+    (if (null ents)
+        (out (format nil "No text selected.~%"))
+        (let* ((k (gkw "Select case [Sentence/lower/UPPER/Title/toGGLE] <UPPER>: " '("Sentence" "lower" "UPPER" "Title" "toGGLE") "UPPER"))
+               (n (funcall 'change-text-case ents (funcall 'case-mode k))))
+          (out (format nil "~D text object~:P changed.~%" n))
+          (when (gui-p) (gui-regen))))))
 
 (defcmd "TCOUNT" () "Express: numbers selected text objects."
   (let ((ents (text-ents "Select objects: ")))

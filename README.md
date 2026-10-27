@@ -385,6 +385,23 @@ Enter to finish. The view stays "Custom" until you pick a standard view.
 Faces are painted far to near, so very large faces crossing others can occasionally overlap
 wrongly. Plots follow the visual style (hidden-line and shaded PDFs).
 
+### Draw order (Modify → Draw Order, DRAWORDER / DR)
+
+Later objects are drawn over earlier ones - on the screen and in plots. **DRAWORDER**: select
+objects, then **Front** (over everything), **Back** (under everything, the default), **Above
+objects** or **Under objects** (just over / under the reference objects you pick next). Also on
+the right-click menu when objects are selected. **TEXTTOFRONT** brings text, dimensions and/or
+leaders to the front; **HATCHTOBACK** sends all hatches and fills to the back. The order is saved
+in the file (AutoCAD's draw order table) and comes back when it is opened.
+
+### Changing text case (Modify → Change Text Case, TCASE)
+
+Select text, MText or dimensions with override text and choose **UPPER**, **lower**, **Sentence**,
+**Title** or **tOGGLE**. MText formatting (fonts, heights, line breaks) and codes such as %%c and
+%%d are kept. Also on the right-click menu when text is selected. While typing in the text editor,
+**Shift+F3** switches the selected words (or all the text) UPPER → lower → Title → Sentence, and the
+editor's right-click menu has Change Case.
+
 ### Mass properties (MASSPROP; Tools or Solids → Mass Properties)
 
 Select closed flat objects - closed polylines (arcs included), circles, ellipses, closed splines -
@@ -665,6 +682,7 @@ or splines. Express Tools that depend on external references (XREF tools) are no
 sbcl --non-interactive --load load.lisp --load tests/test-views.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-layouts.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-massprop.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-draworder.lisp
 ```
 
 ## Layout
@@ -679,6 +697,7 @@ src/db.lisp        drawing database (entities are DXF association lists, like en
 src/ltype.lisp     linetypes (.lin), dashes, lineweights
 src/hatch.lisp     hatch patterns, rendering, boundary detection
 src/dxf.lisp       DXF reader and R12 writer
+src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
 src/dxf2000.lisp   AutoCAD 2000 DXF writer
