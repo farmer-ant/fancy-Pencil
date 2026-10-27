@@ -86,7 +86,7 @@
               "DIMSTYLE" "Standard" "DIMSCALE" 1d0 "DIMASZ" 0.18d0 "DIMTXT" 0.18d0 "DIMEXO" 0.0625d0
               "DIMEXE" 0.18d0 "DIMGAP" 0.09d0 "DIMDEC" 4 "DIMTAD" 1 "DIMTSZ" 0d0 "DIMCLRD" 0 "DIMCLRE" 0
               "DIMCLRT" 0 "DIMLFAC" 1d0 "DIMPOST" "" "DIMCEN" 0.09d0 "DIMDLI" 0.38d0 "DIMTIH" 0 "DIMADEC" 0
-              "DIMBLK" "")
+              "DIMBLK" "" "LOGFILEMODE" 0 "LOGFILEPATH" "")
         by #'cddr do (setf (gethash k *sysvars*) v)))
 (reset-sysvars)
 
@@ -393,6 +393,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
       ((equal type "SOLID")
        (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
          (loop for (a b) on (append c (list (first c))) while b collect (list :seg (pt3 a) (pt3 b)))))
+      ((equal type "IMAGE") (funcall 'image-pieces data))   ; a picture: its frame
       ((equal type "VIEWPORT")                ; a layout's window onto model space: its border
        (let* ((c (pt3 (dxf 10 data))) (hw (/ (d (or (dxf 40 data) 1)) 2)) (hh (/ (d (or (dxf 41 data) 1)) 2))
               (q (list (pt (- (px c) hw) (- (py c) hh)) (pt (+ (px c) hw) (- (py c) hh))
@@ -499,6 +500,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
 (defun xform-data (data xf)
   (when (offplane-p data) (return-from xform-data (xform-planar data xf)))
   (when (equal (dxf 0 data) "POLYFACE") (return-from xform-data (xform-mesh data xf)))
+  (when (equal (dxf 0 data) "IMAGE") (return-from xform-data (funcall 'xform-image data xf)))
   (let* ((type (dxf 0 data))
          (s (xf-scale xf))
          (fa (xf-ang xf))

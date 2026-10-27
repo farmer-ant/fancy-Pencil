@@ -33,7 +33,6 @@
                      (progn (setf *vscale* (* *vscale* n)) (gui-regen))))))
             ((and (stringp r) (parse-number-text r) (plusp (parse-number-text r)))
              (push-view) (setf *vscale* (* *vscale* (d (parse-number-text r)))) (gui-regen))
-            ((stringp r) (out (format nil "Point or option keyword required.~%")))
             ((member r '("Extents" "E") :test #'string-equal) (zoom-extents))
             ((member r '("All" "A") :test #'string-equal)
              (if (projected-view-p) (zoom-extents)
@@ -54,7 +53,8 @@
              (let ((b (get-user-input :corner :base r :prompt "Specify opposite corner: ")))
                (when (pointp b)
                  (let ((r (w->uv r)) (b (w->uv b)))
-                   (zoom-to-box (min (px r) (px b)) (min (py r) (py b)) (max (px r) (px b)) (max (py r) (py b)) 1d0)))))))))
+                   (zoom-to-box (min (px r) (px b)) (min (py r) (py b)) (max (px r) (px b)) (max (py r) (py b)) 1d0)))))
+            ((stringp r) (out (format nil "Point or option keyword required.~%")))))))
 
 ;; scale factors such as 2x are typed at the ZOOM prompt; handled in the dispatcher hook below
 (defun zoom-scale-text-p (s)
@@ -232,6 +232,7 @@
                (p "lower" (pt (reduce #'min ps :key #'px) (reduce #'min ps :key #'py) (reduce #'min ps :key #'pz)))
                (p "upper" (pt (reduce #'max ps :key #'px) (reduce #'max ps :key #'py) (reduce #'max ps :key #'pz))))
              (row "" "(MASSPROP gives the centroid, moments of inertia ...)")))
+          ((equal type "IMAGE") (funcall 'describe-image data o))
           ((equal type "VIEWPORT")
            (p "center" (dxf 10 data))
            (row "Width: " "~A,  height: ~A" (fmt-len (vp-width data)) (fmt-len (vp-height data)))

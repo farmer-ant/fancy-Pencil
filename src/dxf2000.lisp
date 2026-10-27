@@ -45,6 +45,7 @@
            (n210 () (when off (wp out 210 nrm)))
            (thick () (let ((th (dxf 39 data))) (when (and (realp th) (/= th 0)) (w out 39 (d th))))))
       (cond
+        ((equal type "IMAGE") (funcall 'write-image-entity-2000 out data0 owner handle))
         ((equal type "LINE")
          (common) (w out 100 "AcDbLine") (thick) (wp out 10 (pt3 (dxf 10 data))) (wp out 11 (pt3 (dxf 11 data))))
         ((equal type "CIRCLE")
@@ -185,8 +186,11 @@
           (cons 77 (v :dimtad 1)) (cons 271 (v :dimdec 4)) (cons 176 (v :dimclrd 0))
           (cons 177 (v :dimclre 0)) (cons 178 (v :dimclrt 0)))))
 
+(defvar *image-defs-2000*)
+
 (defun %dxf-export-2000 (path)
   (let* ((*h2000* (+ (drawing-next-handle *dwg*) 16))
+         (*image-defs-2000* nil) (image-dict nil) (pdf-dict nil) (raster-vars nil)
          (ext (or (drawing-extents) (list 0d0 0d0 12d0 9d0)))
          (ents (live-entities))
          (all-ents (all-live-entities))
@@ -262,7 +266,9 @@
           (w out 9 (first h)) (w out (second h) (third h))))
       (w out 9 "$HANDSEED") (w out 5 "FFFFF")   ; patched below
       (w out 0 "ENDSEC")
-      (w out 0 "SECTION") (w out 2 "CLASSES") (w out 0 "ENDSEC")
+      (w out 0 "SECTION") (w out 2 "CLASSES")
+      (when (funcall 'drawing-has-images-p) (funcall 'write-image-classes-2000 out))
+      (w out 0 "ENDSEC")
       ;; TABLES
       (w out 0 "SECTION") (w out 2 "TABLES")
       (flet ((table (name h n) (w out 0 "TABLE") (w out 2 name) (w out 5 h) (w out 330 "0")
@@ -382,11 +388,15 @@
       (setf vp-id (write-layout-entities out active h-ps-br vp-id))
       (w out 0 "ENDSEC")
       ;; OBJECTS
+      (multiple-value-setq (image-dict pdf-dict raster-vars) (funcall 'image-dict-entries-2000))
       (w out 0 "SECTION") (w out 2 "OBJECTS")
       (w out 0 "DICTIONARY") (w out 5 h-root) (w out 330 "0") (w out 100 "AcDbDictionary") (w out 281 1)
       (w out 3 "ACAD_GROUP") (w out 350 h-group)
       (w out 3 "ACAD_LAYOUT") (w out 350 h-layout-dict)
       (w out 3 "ACAD_PLOTSTYLENAME") (w out 350 h-psn)
+      (when image-dict (w out 3 "ACAD_IMAGE_DICT") (w out 350 image-dict))
+      (when raster-vars (w out 3 "ACAD_IMAGE_VARS") (w out 350 raster-vars))
+      (when pdf-dict (w out 3 "ACAD_PDFDEFINITIONS") (w out 350 pdf-dict))
       (w out 0 "DICTIONARY") (w out 5 h-group) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
       (w out 0 "ACDBDICTIONARYWDFLT") (w out 5 h-psn) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
       (w out 3 "Normal") (w out 350 h-placeholder) (w out 100 "AcDbDictionaryWithDefault") (w out 340 h-placeholder)
@@ -405,6 +415,7 @@
         (loop for (h . k) in sort-keys do (w out 331 h) (w out 5 k)))
       (loop for ly in lays for tab from 1
             do (write-layout-object out (third ly) h-layout-dict (layout-name (first ly)) tab (second ly) nil (first ly)))
+      (funcall 'write-image-objects-2000 out h-root image-dict pdf-dict raster-vars)
       (w out 0 "ENDSEC")
       (w out 0 "EOF"))
     ;; patch $HANDSEED now that all handles are known

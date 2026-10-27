@@ -302,6 +302,8 @@
       (:fill (list :fill (mapcar (lambda (poly) (mapcar f poly)) (second p)) (third p)))
       (:text (destructuring-bind (str pos size rot ha va color font) (rest p)
                (list :text str (funcall f pos) (* size s) rot ha va color font)))
+      (:image (destructuring-bind (ppm w h ll ur &rest more) (rest p)
+                (list* :image ppm w h (funcall f ll) (funcall f ur) more)))
       (t p))))
 
 (defun vp-paper-prims (d &optional ppu)
@@ -397,6 +399,9 @@ coordinates: paper, unless TO-SCREEN maps others; PPX is pixels per unit)."
       (dolist (p prims)
         (case (first p)
           (:poly (destructuring-bind (pts color lw) (rest p) (line pts color lw)))
+          ;; a picture seen through a sheet viewport: its frame (the picture shows when plotted)
+          (:image (destructuring-bind (ll ur) (list (fifth p) (sixth p))
+                    (line (list ll (pt (px ur) (py ll)) ur (pt (px ll) (py ur)) ll) '(0.55d0 0.6d0 0.65d0) 0)))
           (:arc (destructuring-bind (c r a1 a2 color lw) (rest p)
                   (let* ((full (>= (abs (- a2 a1)) (- +2pi+ 1d-9)))
                          (sw (if full +2pi+ (arc-sweep a1 a2)))
