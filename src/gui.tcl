@@ -139,6 +139,9 @@ mcmd .mb.file "Save As..." SAVEAS
 mcmd .mb.file "Plot..." PLOT Ctrl+P
 .mb.file add separator
 mcmd .mb.file "Import DXF..." DXFIN
+mcmd .mb.file "Attach Image (JPEG, TIFF, PNG)..." IMAGEATTACH
+mcmd .mb.file "Attach PDF Page..." PDFATTACH
+mcmd .mb.file "Image Manager..." IMAGE
 mcmd .mb.file "Export DXF..." DXFOUT
 .mb.file add separator
 mcmd .mb.file "Exit" QUIT
@@ -309,6 +312,8 @@ mcmd .mb.format "Text Size" TEXTSIZE
 mcmd .mb.format "Point Style..." DDPTYPE
 mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Quick Properties" QUICKPROPERTIES
+mcmd .mb.tools "Command History  (F2)" HISTORY
+mcmd .mb.tools "Image Manager..." IMAGE
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
 menu .mb.tools.alias -tearoff 0
 .mb.tools add cascade -label "Command Aliases" -menu .mb.tools.alias
@@ -741,6 +746,7 @@ focus .cmd.e
 
 # ---------------------------------------------------------------- called from Lisp
 proc hist {s} {
+    if {[winfo exists .hd2]} { histdlg_append $s }
     .h configure -state normal
     .h insert end $s
     if {[.h count -lines 1.0 end] > 2000} { .h delete 1.0 500.0 }
@@ -2835,9 +2841,10 @@ proc filedlg {save title initial exts} {
     if {[llength $exts] > 1} {
         set globs {}; set tglobs {}
         foreach e $exts { lappend globs *.$e *.[string toupper $e]; lappend tglobs .$e .[string toupper $e] }
-        lappend zf --file-filter "Drawings ([join [lmap e $exts {string toupper $e}] ", "]) | [join $globs " "]"
-        lappend kf "[join $globs " "]|Drawings"
-        lappend types [list "Drawings" $tglobs]
+        set lab [expr {[lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : "Files")}]
+        lappend zf --file-filter "$lab ([join [lmap e $exts {string toupper $e}] ", "]) | [join $globs " "]"
+        lappend kf "[join $globs " "]|$lab"
+        lappend types [list $lab $tglobs]
     }
     foreach e $exts {
         set E [string toupper $e]
@@ -3272,4 +3279,227 @@ proc hatchdlg_done {action} {
     set ::hd_result [join [list $action [$f.pat get] [$f.sc get] [$f.ang get] [$f.ord get]] "\x1f"]
     catch {destroy .hpal}
     destroy .hd
+}
+
+# ---------------------------------------------------------------- attached pictures (IMAGE)
+# Each picture file is read once (::fpimg_src); each picture in the drawing has its own photo
+# holding just the part on the screen at the screen's scale, made again only when that changes.
+proc fpimg_src {png} {
+    if {![info exists ::fpimg_src($png)]} { set ::fpimg_src($png) [image create photo -file $png] }
+    return $::fpimg_src($png)
+}
+proc fpimg_show {key png x y fx0 fy0 fx1 fy1 z s bg fade tags} {
+    if {[catch {fpimg_src $png} src]} { puts stderr "Fancy Pencil: can't show $png: $src"; return }
+    set dst "fpv_[string map {" " _} $key]"
+    set ck [list $png $fx0 $fy0 $fx1 $fy1 $z $s]
+    if {![info exists ::fpimg_key($dst)] || $::fpimg_key($dst) ne $ck || [lsearch [image names] $dst] < 0} {
+        if {[lsearch [image names] $dst] < 0} { image create photo $dst } else { $dst blank; $dst configure -width 0 -height 0 }
+        if {[catch {$dst copy $src -from $fx0 $fy0 $fx1 $fy1 -subsample $s $s -zoom $z $z -shrink} err]} {
+            puts stderr "Fancy Pencil: picture copy failed: $err"; return
+        }
+        set ::fpimg_key($dst) $ck
+    }
+    .c create image $x $y -anchor nw -image $dst -tags $tags
+    if {$fade > 0} {
+        set st [expr {$fade >= 70 ? "gray75" : ($fade >= 40 ? "gray50" : ($fade >= 15 ? "gray25" : "gray12"))}]
+        set w [image width $dst]; set h [image height $dst]
+        .c create rectangle $x $y [expr {$x + $w}] [expr {$y + $h}] -fill $bg -outline {} -stipple $st -tags $tags
+    }
+}
+proc fpimg_forget_all {} {
+    foreach k [array names ::fpimg_src] { catch {image delete $::fpimg_src($k)} }
+    array unset ::fpimg_src
+    foreach n [image names] { if {[string match fpv_* $n]} { catch {image delete $n} } }
+    array unset ::fpimg_key
+}
+# a copy of a picture as a PPM file (for plotting), 1 pixel in S each way
+proc fpimg_ppm {png out s} {
+    set src [fpimg_src $png]
+    set t [image create photo]
+    $t copy $src -subsample $s $s
+    $t write $out -format ppm
+    image delete $t
+    return ok
+}
+
+# The Image Manager: ROWS are {name type status size refs shown fade path}. Returns
+# ACTION \x1f row \x1f value, or CLOSE.
+proc imagemgr {rows} {
+    set w .imgm
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Image Manager - attached pictures and PDF pages"
+    wm transient $w .
+    set f [ttk::frame $w.f -padding 10]
+    pack $f -fill both -expand 1
+    set cols {name type status size refs shown fade}
+    ttk::treeview $f.t -columns $cols -show headings -selectmode browse -height [expr {min(14, max(5, [llength $rows]))}]
+    foreach c $cols h {"File" "Type" "Status" "Pixels" "Used" "Shown" "Fade"} wd {200 100 80 90 50 60 50} {
+        $f.t heading $c -text $h -anchor w
+        $f.t column $c -width $wd -anchor w
+    }
+    set i 0
+    foreach r $rows {
+        $f.t insert {} end -id r$i -values [lrange $r 0 6]
+        incr i
+    }
+    set ::imgm_rows $rows
+    ttk::scrollbar $f.sb -command [list $f.t yview]
+    $f.t configure -yscrollcommand [list $f.sb set]
+    ttk::label $f.path -text "" -foreground "#8a94a3" -wraplength 640 -justify left
+    grid $f.t -row 0 -column 0 -sticky nsew
+    grid $f.sb -row 0 -column 1 -sticky ns
+    grid $f.path -row 1 -column 0 -columnspan 2 -sticky w -pady {6 0}
+    set b [ttk::frame $f.b]
+    ttk::button $b.att -text "Attach Image or PDF..." -command {imagemgr_done ATTACH}
+    ttk::button $b.det -text "Detach" -command {imagemgr_done DETACH}
+    ttk::button $b.rel -text "Reload" -command {imagemgr_done RELOAD}
+    ttk::button $b.tog -text "Show / Hide" -command {imagemgr_done TOGGLE}
+    ttk::button $b.path -text "Change Path..." -command {imagemgr_done PATH}
+    ttk::button $b.sel -text "Select in Drawing" -command {imagemgr_done SELECT}
+    ttk::label $b.lf -text "Fade:"
+    ttk::combobox $b.fade -values {0% 25% 50% 75% 90%} -width 5 -state readonly
+    pack $b.att -side top -fill x -pady {0 8}
+    foreach x {det rel tog path sel} { pack $b.$x -side top -fill x -pady 2 }
+    pack $b.lf -side top -anchor w -pady {10 0}
+    pack $b.fade -side top -fill x
+    grid $b -row 0 -column 2 -rowspan 2 -sticky n -padx {12 0}
+    ttk::label $f.note -text "Pictures are kept as links: the drawing remembers each file's name, so keep the files with the drawing.\nJPEG, TIFF and BMP need ImageMagick; PDF pages need poppler-utils." -foreground "#8a94a3" -justify left
+    grid $f.note -row 2 -column 0 -columnspan 3 -sticky w -pady {10 0}
+    ttk::button $f.close -text "Close" -command {imagemgr_done CLOSE}
+    grid $f.close -row 3 -column 2 -sticky e -pady {10 0}
+    grid columnconfigure $f 0 -weight 1
+    grid rowconfigure $f 0 -weight 1
+    bind $f.t <<TreeviewSelect>> imagemgr_sel
+    bind $f.t <Double-1> {imagemgr_done SELECT}
+    bind $b.fade <<ComboboxSelected>> {imagemgr_done FADE}
+    bind $w <Escape> {imagemgr_done CLOSE}
+    wm protocol $w WM_DELETE_WINDOW {imagemgr_done CLOSE}
+    set ::imgm_result CLOSE
+    if {[llength $rows] > 0} {
+        set k [expr {[info exists ::imgm_last] ? min($::imgm_last, [llength $rows] - 1) : 0}]
+        $f.t selection set r$k; $f.t focus r$k
+    }
+    imagemgr_sel
+    if {[info exists ::imgm_geom]} { wm geometry $w $::imgm_geom } else {
+        wm geometry $w +[expr {[winfo rootx .] + 140}]+[expr {[winfo rooty .] + 100}]
+    }
+    safegrab $w
+    tkwait window $w
+    return $::imgm_result
+}
+proc imagemgr_sel {} {
+    set f .imgm.f
+    set s [$f.t selection]
+    set on [expr {$s ne ""}]
+    foreach x {det rel tog path sel} { if {$on} { $f.b.$x state !disabled } else { $f.b.$x state disabled } }
+    if {$on} {
+        set r [lindex $::imgm_rows [string range $s 1 end]]
+        $f.path configure -text "Found at: [lindex $r 7]"
+        $f.b.fade set [lindex $r 6]
+        $f.b.fade state !disabled
+    } else {
+        $f.path configure -text ""
+        $f.b.fade set ""
+        $f.b.fade state disabled
+    }
+}
+proc imagemgr_done {action} {
+    set f .imgm.f
+    set s [$f.t selection]
+    set i [expr {$s eq "" ? "" : [string range $s 1 end]}]
+    if {$i ne ""} { set ::imgm_last $i }
+    if {$action ni {ATTACH CLOSE} && $i eq ""} return
+    set ::imgm_result [join [list $action $i [$f.b.fade get]] "\x1f"]
+    set ::imgm_geom +[winfo rootx .imgm]+[winfo rooty .imgm]
+    destroy .imgm
+}
+
+# ---------------------------------------------------------------- the session record (HISTORY, F2)
+# The whole session: every command typed, every prompt and answer, every message. The command line
+# below the drawing shows only its last lines; this window shows all of it, and can keep a log file.
+proc histdlg {text logon logdir started} {
+    set w .hd2
+    if {![winfo exists $w]} {
+        toplevel $w -background $::panel
+        wm title $w "Command History"
+        wm transient $w .
+        set top [ttk::frame $w.top -padding {8 6}]
+        ttk::label $top.l -text "Find:"
+        ttk::entry $top.e -width 24
+        ttk::button $top.n -text "Next" -command {histdlg_find 1}
+        ttk::button $top.p -text "Previous" -command {histdlg_find 0}
+        ttk::label $top.c -text "" -foreground "#8a94a3"
+        pack $top.l $top.e $top.n $top.p $top.c -side left -padx 2
+        bind $top.e <Return> {histdlg_find 1}
+        text $w.t -width 96 -height 34 -background "#1a1f26" -foreground "#d6dce4" -font {{DejaVu Sans Mono} 9} \
+            -borderwidth 0 -highlightthickness 0 -padx 8 -pady 6 -wrap word -yscrollcommand [list $w.sb set]
+        $w.t tag configure found -background "#5a4a10"
+        $w.t tag configure cmd -foreground "#8fc4ff"
+        ttk::scrollbar $w.sb -command [list $w.t yview]
+        set b [ttk::frame $w.b -padding {8 6}]
+        ttk::checkbutton $b.log -text "Keep a log file" -variable ::hd2_log -command {emit HISTACT "LOG $::hd2_log"}
+        ttk::button $b.folder -text "Open Log Folder" -command {emit HISTACT FOLDER}
+        ttk::button $b.copy -text "Copy All" -command {clipboard clear; clipboard append [.hd2.t get 1.0 end-1c]}
+        ttk::button $b.save -text "Save As..." -command {emit HISTACT SAVE}
+        ttk::button $b.clear -text "Clear" -command {emit HISTACT CLEAR}
+        ttk::button $b.close -text "Close" -command {destroy .hd2}
+        ttk::label $b.info -text "" -foreground "#8a94a3"
+        pack $b.log $b.folder -side left -padx 3
+        pack $b.close $b.clear $b.save $b.copy -side right -padx 3
+        pack $w.top -side top -fill x
+        pack $b -side bottom -fill x
+        ttk::label $w.info -text "" -foreground "#8a94a3" -padding {10 0}
+        pack $w.info -side bottom -fill x
+        pack $w.sb -side right -fill y
+        pack $w.t -side left -fill both -expand 1
+        bind $w <Escape> {destroy .hd2}
+        bind $w <Control-f> {focus .hd2.top.e}
+        wm geometry $w +[expr {[winfo rootx .] + 100}]+[expr {[winfo rooty .] + 60}]
+    }
+    set ::hd2_logdir $logdir
+    $w.info configure -text "This session began $started.   Log files (when kept): $logdir"
+    histdlg_set $text $logon
+    raise $w
+    focus $w.top.e
+}
+proc histdlg_set {text logon} {
+    set w .hd2
+    set ::hd2_log $logon
+    $w.t configure -state normal
+    $w.t delete 1.0 end
+    $w.t insert end $text
+    histdlg_mark 1.0
+    $w.t configure -state disabled
+    $w.t see end
+}
+# colour the lines where a command was given
+proc histdlg_mark {from} {
+    set w .hd2.t
+    foreach i [$w search -all -regexp {^Command: \S} $from end] { $w tag add cmd $i "$i lineend" }
+}
+proc histdlg_append {s} {
+    set w .hd2.t
+    set at [$w index "end-1c linestart"]
+    set bottom [expr {[lindex [$w yview] 1] >= 0.999}]
+    $w configure -state normal
+    $w insert end $s
+    histdlg_mark $at
+    $w configure -state disabled
+    if {$bottom} { $w see end }
+}
+proc histdlg_find {fwd} {
+    set w .hd2.t
+    set s [.hd2.top.e get]
+    $w tag remove found 1.0 end
+    if {$s eq ""} { .hd2.top.c configure -text ""; return }
+    set n [llength [$w search -all -nocase -- $s 1.0 end]]
+    set start [expr {[info exists ::hd2_at] ? $::hd2_at : ($fwd ? "1.0" : "end")}]
+    if {$fwd} { set i [$w search -nocase -forwards -- $s "$start + 1c" end] } else { set i [$w search -nocase -backwards -- $s $start 1.0] }
+    if {$i eq ""} { set i [$w search -nocase [expr {$fwd ? "-forwards" : "-backwards"}] -- $s [expr {$fwd ? "1.0" : "end"}]] }
+    if {$i eq ""} { .hd2.top.c configure -text "Not found"; return }
+    set ::hd2_at $i
+    $w tag add found $i "$i + [string length $s]c"
+    $w see $i
+    .hd2.top.c configure -text "$n found"
 }

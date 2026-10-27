@@ -231,6 +231,7 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
       (when (or (projected-view-p) (offplane-p data))
         (return-from plot-data (plot-data-3d data aci color lw xf depth parent-lt parent-lw parent-lts)))
       (cond
+        ((equal type "IMAGE") (mapc #'emit-prim (funcall 'image-plot-prims (if xf (xform-data data xf) data))))
         ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
          (unless (and (equal type "ATTDEF") (null xf))     ; attribute definitions show only inside blocks
            (plot-text (if xf (xform-data data xf) data) color)))
@@ -331,7 +332,7 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
 drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PAPER-H points."
   (destructuring-bind (wx0 wy0 wx1 wy1) window
     (let* ((ox (first offset)) (oy (second offset))
-           (fonts nil)
+           (fonts nil) (images nil)
            (content
              (with-output-to-string (o)
                (labels ((tx (p) (+ ox (* (- (px p) wx0) scale-ppu)))
@@ -368,6 +369,13 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                                   (pdf-num (* (- x1 x0) scale-ppu)) (pdf-num (* (- y1 y0) scale-ppu)))
                           (setf cur-stroke nil cur-fill nil cur-w nil)))
                        (:unclip (format o "Q~%") (setf cur-stroke nil cur-fill nil cur-w nil))
+                       ;; a picture: drawn as an image XObject over its rectangle
+                       (:image
+                        (destructuring-bind (ppm iw ih ll ur &optional (fade 0)) (rest p)
+                          (push (list ppm iw ih fade) images)
+                          (format o "q ~A 0 0 ~A ~A ~A cm /Im~D Do Q~%"
+                                  (pdf-num (* (- (px ur) (px ll)) scale-ppu)) (pdf-num (* (- (py ur) (py ll)) scale-ppu))
+                                  (pdf-num (tx ll)) (pdf-num (ty ll)) (length images))))
                        (:fill
                         (destructuring-bind (polys color) (rest p)
                           (unless (equal color cur-fill) (rgb color "rg") (setf cur-fill color))
@@ -394,18 +402,25 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                                       (pdf-string s)))))))))
                  (format o "Q~%"))))
            (font-list (reverse fonts))
+           (image-list (reverse images))
            (objects nil))
       ;; objects: 1 catalog, 2 pages, 3 page, 4 content, 5 info, 6.. fonts
       (flet ((obj (n body) (push (cons n body) objects)))
         (obj 1 "<< /Type /Catalog /Pages 2 0 R >>")
         (obj 2 "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-        (obj 3 (format nil "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ~A ~A] /Contents 4 0 R /Resources << /Font << ~{~A~^ ~} >> >> >>"
+        (obj 3 (format nil "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ~A ~A] /Contents 4 0 R /Resources << /Font << ~{~A~^ ~} >>~@[ /XObject << ~{~A~^ ~} >>~] >> >>"
                        (pdf-num paper-w) (pdf-num paper-h)
-                       (loop for f in font-list for i from 1 collect (format nil "/F~D ~D 0 R" i (+ 5 i)))))
+                       (loop for f in font-list for i from 1 collect (format nil "/F~D ~D 0 R" i (+ 5 i)))
+                       (loop for im in image-list for i from 1 collect (format nil "/Im~D ~D 0 R" i (+ 5 (length font-list) i)))))
         (obj 4 (format nil "<< /Length ~D >>~%stream~%~Aendstream" (length content) content))
         (obj 5 (format nil "<< /Producer (Fancy Pencil ~A) /Title ~A >>" *version* (pdf-string title)))
         (loop for f in font-list for i from 1
-              do (obj (+ 5 i) (format nil "<< /Type /Font /Subtype /Type1 /BaseFont /~A /Encoding /WinAnsiEncoding >>" f))))
+              do (obj (+ 5 i) (format nil "<< /Type /Font /Subtype /Type1 /BaseFont /~A /Encoding /WinAnsiEncoding >>" f)))
+        (loop for (ppm iw ih fade) in image-list for i from 1
+              do (let ((px (funcall 'ppm-pixel-string ppm fade)))
+                   (obj (+ 5 (length font-list) i)
+                        (format nil "<< /Type /XObject /Subtype /Image /Width ~D /Height ~D /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ~D >>~%stream~%~Aendstream"
+                                iw ih (length px) px)))))
       (setf objects (sort objects #'< :key #'car))
       (with-open-file (out path :direction :output :if-exists :supersede :external-format :latin-1)
         (let ((pos 0) (offsets nil))

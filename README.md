@@ -415,6 +415,37 @@ Select text, MText or dimensions with override text and choose **UPPER**, **lowe
 **Shift+F3** switches the selected words (or all the text) UPPER → lower → Title → Sentence, and the
 editor's right-click menu has Change Case.
 
+### Pictures and PDF pages (File → Attach Image / Attach PDF Page; IMAGEATTACH, PDFATTACH, ATTACH)
+
+Attach a JPEG, TIFF, PNG, GIF, BMP or WebP picture, or one page of a PDF, to trace over or to show on
+a sheet. Choose the file (and the page of a PDF), click where its lower-left corner goes, then give
+its width (Enter: its real size - 96 pixels to the inch for pictures, the page's own size for a
+PDF) or **Scale**. Pictures go behind the drawing (DRAWORDER brings one forward). They move, copy,
+scale and stretch like other objects and are picked by their frame; Properties sets their width,
+height, fade and whether they show. They show in the plan views; turned, or in the 3D views, only
+the frame shows. They plot (into the PDF), and are saved in DXF 2000 files as AutoCAD keeps them
+(IMAGE, and PDFUNDERLAY for PDF pages). The drawing keeps each file's name, not the picture, so keep
+the files with the drawing.
+
+PNG and GIF are read directly. JPEG, TIFF, BMP and WebP need ImageMagick (or GraphicsMagick, vips,
+ffmpeg or Python's PIL), and PDF pages need poppler-utils: on Fedora,
+`sudo dnf install ImageMagick poppler-utils`. Converted pictures are kept in
+~/.cache/fancypencil/images.
+
+**Image Manager** (IMAGE; File or Tools → Image Manager): every attached file with its type,
+status (Loaded / Not found), size and how many times it is used. Attach, **Detach** (removes
+every copy), **Reload** (after the file has been changed), **Show / Hide**, **Fade**, **Change
+Path** (when a file has moved) and **Select in Drawing**.
+
+### Command history (Tools → Command History, HISTORY / TEXTSCR, F2)
+
+Everything shown in the command line - every command, prompt, answer and message - is kept for the
+whole session; the command line itself shows only its last lines. The **Command History** window
+shows all of it, follows along as you work, and has **Find**, **Copy All**, **Save As** (a text
+file) and **Clear**. Tick **Keep a log file** (or type LOGFILEON / LOGFILEOFF) to have it written
+as it happens to ~/.local/share/fancypencil/logs, one file a day (LOGFILEPATH chooses another
+folder); **Open Log Folder** shows them. The setting is remembered.
+
 ### Mass properties (MASSPROP; Tools or Solids → Mass Properties)
 
 Select closed flat objects - closed polylines (arcs included), circles, ellipses, closed splines -
@@ -736,6 +767,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-massprop.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-draworder.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-tiles.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-snap3d.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-raster.lisp
 ```
 
 ## Layout
@@ -754,6 +786,8 @@ src/snap3d.lisp    snaps on solids: round edges, round walls, spheres; circles i
 src/tiles.lisp     VPORTS: the Model tab split into viewports
 src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
+src/raster.lisp    pictures and PDF pages: IMAGEATTACH, PDFATTACH, the Image Manager (IMAGE)
+src/history.lisp   the session record: HISTORY window, log files (LOGFILEON / LOGFILEOFF)
 src/layouts.lisp   paper space: layout tabs, sheets, viewports (MVIEW, MSPACE, VPSCALE), layout plots
 src/dxf2000.lisp   AutoCAD 2000 DXF writer
 src/alisp.lisp     AutoLISP reader, printer, evaluator and core functions

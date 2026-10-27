@@ -45,7 +45,9 @@
 ;;; ---------- output hook ----------
 
 (defvar *output-fn* (lambda (s) (write-string s *standard-output*) (force-output)))
-(defun out (s) (funcall *output-fn* s) s)
+(defun out (s)
+  (when (fboundp 'record-output) (funcall 'record-output s))   ; the session record (HISTORY)
+  (funcall *output-fn* s) s)
 
 ;;; ---------- reader ----------
 

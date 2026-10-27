@@ -360,18 +360,28 @@
     ;; the Model tab's viewports (VPORTS)
     (when replace (funcall 'import-tiles tables))
     ;; layouts (paper space): their names, sheets and the block records that own their objects
-    (let ((space-of (funcall 'import-layouts objects tables replace)))
+    (let ((space-of (funcall 'import-layouts objects tables replace))
+          (image-defs (funcall 'image-defs-from-objects objects)))
      (dolist (data (append (mapcar (lambda (x) (rem-dxf :src-handle x))
                                    (apply-draw-order (convert-entity-list ents) (sortents-map objects tables)))
                            paper-blocks))
       (when (equal (dxf 0 data) "3DFACE") (setf data (mesh-from-3dface data)))
+      ;; pictures and PDF underlays: linked to their files through IMAGEDEF / PDFDEFINITION objects
+      (when (member (dxf 0 data) '("IMAGE" "PDFUNDERLAY") :test #'equal)
+        (let ((im (funcall 'image-from-dxf data image-defs (directory-namestring (pathname path)))))
+          (if im
+              (setf data (append im (let ((p (assoc :paper data))) (and p (list p)))))
+              (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
+                (if c (incf (cdr c)) (push (cons (dxf 0 data) 1) *import-skipped*))
+                (setf data nil)))))
       (let ((owner (dxf :paper data)))
         (setf data (rem-dxf :paper data))
         (when (and owner (equal (dxf 0 data) "VIEWPORT")) (setf data (funcall 'vp-from-dxf data)))
         (setf data (and data (append data (list (cons :space (and owner (funcall space-of owner))))))))
       (if (and data
                (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
-                                      "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT")
+                                      "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT"
+                                      "IMAGE")
                        :test #'equal))
           (progn
             (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
@@ -419,6 +429,7 @@
   (let ((type (dxf 0 data)))
     (cond
       ((equal type "POLYFACE") (write-mesh-r12 out data))
+      ((equal type "IMAGE") nil)              ; R12 has no pictures
       ((offplane-p data)                    ; R12: an object in another plane goes out as its edges
        (dolist (pc (offplane-pieces data))
          (when (member (first pc) '(:seg :gseg))
