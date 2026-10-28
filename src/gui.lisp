@@ -408,10 +408,9 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
       (multiple-value-bind (x y) (w->s p)
         (cond
           ((< px-size 3)
-           (when (and (< -50 x (+ *full-cw* 50)) (< -50 y (+ *full-ch* 50)))
-             (list (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}"
-                           (fmtn x) (fmtn y) (fmtn (+ x (* (cos rot) (max 2 (* 0.6 h *vscale* (length s))))))
-                           (fmtn (- y (* (sin rot) (max 2 (* 0.6 h *vscale* (length s)))))) color tags))))
+           ;; too small to read: a short stroke for each line, inside the text's own box (so a
+           ;; long MTEXT note stays a block of lines where it is, not one streak across the sheet)
+           (text-greek-cmds data (if hl "#8fc4ff" color) tags))
           ((> px-size 3000) nil)
           ((or (< x -4000) (> x (+ *full-cw* 4000)) (< y -4000) (> y (+ *full-ch* 4000))) nil)
           (t (multiple-value-bind (anchor justify) (text-anchor data)
@@ -420,6 +419,35 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
                              (if hl "#8fc4ff" color) tags
                              (let ((w (and (equal (dxf 0 data) "MTEXT") (dxf 41 data))))
                                (if (and w (plusp w)) (format nil " -width ~D" (max 1 (round (* w *vscale*)))) "")))))))))))
+
+(defun text-greek-cmds (data color tags)
+  (let* ((c (text-box data)) (o (first c))
+         (ex (v- (second c) o)) (ey (v- (fourth c) o))
+         (w (dist2d (first c) (second c))) (hh (dist2d (first c) (fourth c)))
+         (lines (text-lines data)) (n (max 1 (length lines)))
+         (h (text-effective-height data))
+         (spacing-px (* (/ hh n) *vscale*))
+         (step (max 1 (ceiling 2 (max spacing-px 1d-9))))       ; keep strokes at least 2 pixels apart
+         (attach (or (and (equal (dxf 0 data) "MTEXT") (dxf 71 data)) 1))
+         (out nil))
+    (when (and (> w 0) (> hh 0))
+      (multiple-value-bind (bx0 by0 bx1 by1) (values (reduce #'min c :key #'px) (reduce #'min c :key #'py)
+                                                     (reduce #'max c :key #'px) (reduce #'max c :key #'py))
+        (multiple-value-bind (vx0 vy0 vx1 vy1) (view-rect 0)
+          (when (or (> bx0 vx1) (< bx1 vx0) (> by0 vy1) (< by1 vy0)) (return-from text-greek-cmds nil))))
+      (loop for line in lines for i from 0
+            when (and (zerop (mod i step)) (plusp (length (string-trim " " line))))
+              do (let* ((len (min 1d0 (/ (* 0.6d0 h (length line)) w)))
+                        (start (case (mod (1- attach) 3) (0 0d0) (1 (/ (- 1 len) 2)) (t (- 1 len))))
+                        (fy (- 1 (/ (+ i 0.6d0) n)))
+                        (a (v+ o (v+ (v* ex start) (v* ey fy))))
+                        (b (v+ a (v* ex len))))
+                   (multiple-value-bind (x1 y1) (w->s a)
+                     (multiple-value-bind (x2 y2) (w->s b)
+                       (push (format nil ".c create line ~A ~A ~A ~A -fill ~A -tags {~A}"
+                                     (fmtn x1) (fmtn y1) (fmtn (if (< (abs (- x2 x1)) 1) (+ x1 1) x2)) (fmtn y2) color tags)
+                             out))))))
+    (nreverse out)))
 
 (defun sub-color (sub parent-aci)
   (let ((c (dxf 62 sub)))
