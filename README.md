@@ -434,6 +434,17 @@ move it (base centre), set the base radius (start point), the height (top centre
 radius. **SWEEP** a small circle along it to make a spring or a thread. Saved in DXF 2000 files as
 AutoCAD's HELIX object (R12 files get short lines along it).
 
+### AutoCAD 3D solids, surfaces and regions
+
+Drawings from AutoCAD 2013 and later (DWG opened through ODA File Converter, or DXF) bring their
+3D solids, surfaces (revolved, extruded, lofted, swept, planar) and regions in as Fancy Pencil
+meshes. AutoCAD keeps their exact shape in its ACIS form; Fancy Pencil reads it and divides each
+face - flat, cylindrical or conical, spherical, toroidal or a spline surface - into triangles
+that follow it closely, showing the object's real edges (and the outline of curved sides). They
+can be viewed in every visual style, moved and copied, plotted, measured (MASSPROP) and saved for
+3D printing. Saving writes them as meshes: AutoCAD shows them but can't edit them as solids. Older
+files that keep ACIS as text (AutoCAD 2010 and before) are not read yet.
+
 ### Revolved surfaces (Solids → Revolved Surface; REVSURF, REVOLVE MOde)
 
 **REVSURF** makes AutoCAD's revolved surface mesh: select the path curve (line, arc, circle,
@@ -825,6 +836,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-helix.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-print3d.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-input.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-surfaces.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-acis.lisp
 ```
 
 ## Layout
@@ -844,6 +856,7 @@ src/tiles.lisp     VPORTS: the Model tab split into viewports
 src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/raster.lisp    pictures and PDF pages: IMAGEATTACH, PDFATTACH, the Image Manager (IMAGE)
+src/acis.lisp      AutoCAD 3D solids / surfaces / regions: ACIS (SAB) reader and face triangulation
 src/surfaces.lisp  REVSURF revolved surface meshes (SURFTAB1, SURFTAB2)
 src/imgview.lisp   drawing pictures on the screen: averaged copies, exact resampling, PNG views
 src/history.lisp   the session record: HISTORY window, log files (LOGFILEON / LOGFILEOFF)

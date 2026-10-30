@@ -174,6 +174,14 @@
                  (let ((c (assoc 62 head))) (and c (list c)))
                  (let ((n (assoc 210 (group-coords head)))) (and n (list n)))))))))
 
+(defvar *acis-data* nil "While reading a DXF: entity handle -> its ACIS bytes (from ACDSDATA).")
+(defvar *acis-converted* 0 "Solids, surfaces and regions read from the last file opened.")
+
+(defparameter *acis-types*
+  '("3DSOLID" "REGION" "SURFACE" "BODY" "EXTRUDEDSURFACE" "REVOLVEDSURFACE" "LOFTEDSURFACE"
+    "SWEPTSURFACE" "PLANESURFACE" "NURBSURFACE")
+  "Objects AutoCAD keeps in ACIS form: read as meshes (acis.lisp).")
+
 (defun convert-entity-list (groups)
   "Turn split entity groups (with POLYLINE/VERTEX/SEQEND and ATTRIBs) into alists."
   (let ((out nil))
@@ -201,6 +209,11 @@
            (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups)))
           ((equal type "3DFACE") (push (with-src-handle (mesh-from-3dface (convert-in g)) g) out))
           ((equal type "HELIX") (let ((hx (funcall 'helix-from-dxf g))) (when hx (push (with-src-handle hx g) out))))
+          ;; solids, surfaces and regions: their ACIS shape as a mesh (kept as they were if unreadable)
+          ((member type *acis-types* :test #'equal)
+           (let ((m (funcall 'acis-entity-from-group g)))
+             (when m (incf *acis-converted*))
+             (push (with-src-handle (or m (convert-in g)) g) out)))
           (t (push (with-src-handle (convert-in g) g) out)))
         (when paper
           (loop for cell on out until (eq cell start)
@@ -268,6 +281,7 @@
 
 (defun dxf-import-1 (path replace)
   (let* ((pairs (dxf-pairs (read-file-lines path)))
+         (*acis-data* (progn (setf *acis-converted* 0) (funcall 'acds-data (section-pairs pairs "ACDSDATA"))))
          (tables (split-entities (section-pairs pairs "TABLES")))
          (blocks (split-entities (section-pairs pairs "BLOCKS")))
          (ents (split-entities (section-pairs pairs "ENTITIES")))
