@@ -125,7 +125,7 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
          (ins (find-if (lambda (e) (equal (ent-type e) "INSERT")) sel))
          (last *last-command*)
          (head (append
-                (when last (list (list (format nil "Repeat ~A" (string-upcase last)) last)))
+                (when last (list (list (format nil "Repeat ~A" (string-upcase (or (ignore-errors (canonical-command-name last)) last))) last)))
                 (when *recent-commands*
                   (list (list :sub "Recent Input" (mapcar (lambda (c) (list c c)) *recent-commands*))))
                 (when (block-editor-p)
