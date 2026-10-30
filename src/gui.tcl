@@ -630,7 +630,7 @@ label .st.xy -text "0.0000, 0.0000, 0.0000" -background $panel -foreground $fg -
 pack .st.xy -side left
 ttk::label .st.model -text "MODEL" -style Dim.TLabel
 pack .st.model -side right -padx 6
-foreach {t k} {LWT LWT ISO ISO OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
+foreach {t k} {DYN F12 LWT LWT ISO ISO OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
     ttk::button .st.[string tolower $t] -text $t -style Toggle.TButton -takefocus 0 -command [list togglekey $k]
     pack .st.[string tolower $t] -side right -padx 1
 }
@@ -708,6 +708,76 @@ proc hist_fullname {word full} {
         set ::cmdhistfull($i) $full
     }
 }
+# ---- dynamic input (F12): the prompt and input boxes beside the cursor ----
+# Lisp sends what to show (dyn_show); what is typed on the command line is shown in the
+# active box as it is typed. Tab moves to the next box, keeping what was typed in this one.
+set ::dynon 0
+set ::dyn {}
+proc dyn_show {x y prompt fields active sep hide} {
+    set ::dyn [list $x $y $prompt $fields $active $sep $hide]
+    dyn_draw
+}
+proc dyn_clear {} { set ::dyn {}; .c delete dyn }
+proc dyn_draw {} {
+    .c delete dyn
+    if {$::dyn eq ""} return
+    lassign $::dyn x y prompt fields active sep hide
+    set t [.cmd.e get]
+    if {$hide && $t eq ""} return
+    set vals {}
+    foreach f $fields { lappend vals [lindex $f 1] }
+    set act $active
+    if {$active >= 0 && $active < [llength $vals] && $t ne ""} {
+        set k [expr {$sep eq "" ? -1 : [string first $sep $t]}]
+        if {$k >= 0 && $active + 1 < [llength $vals]} {
+            lset vals $active [string range $t 0 [expr {$k - 1}]]
+            lset vals [expr {$active + 1}] [string range $t [expr {$k + 1}] end]
+            set act [expr {$active + 1}]
+        } else {
+            lset vals $active $t
+        }
+    }
+    set cx [expr {$x + 20}]; set cy [expr {$y + 22}]
+    set font {Helvetica 9}
+    if {$prompt ne ""} {
+        set id [.c create text [expr {$cx + 5}] [expr {$cy + 3}] -text $prompt -anchor nw -font $font -fill "#e8ecf1" -tags {tmp dyn}]
+        lassign [.c bbox $id] a b c d
+        set bg [.c create rectangle [expr {$a - 5}] [expr {$b - 3}] [expr {$c + 5}] [expr {$d + 3}] -fill "#353d48" -outline "#6b7684" -tags {tmp dyn}]
+        .c lower $bg $id
+        set cy [expr {$d + 7}]
+    }
+    set fx $cx; set i 0
+    foreach f $fields v $vals {
+        lassign $f label def locked
+        if {$label ne ""} {
+            set id [.c create text $fx [expr {$cy + 3}] -text $label -anchor nw -font $font -fill "#e8ecf1" -tags {tmp dyn}]
+            lassign [.c bbox $id] a b c d
+            set bg [.c create rectangle [expr {$a - 2}] [expr {$b - 3}] [expr {$c + 2}] [expr {$d + 3}] -fill "#353d48" -outline "" -tags {tmp dyn}]
+            .c lower $bg $id
+            set fx [expr {$c + 4}]
+        }
+        if {$i == $act} {
+            set fill "#ffffff"; set tc "#101418"; set ol "#3d8bfd"
+        } elseif {$locked} {
+            set fill "#c9d1db"; set tc "#101418"; set ol "#7d8794"
+        } else {
+            set fill "#4a5361"; set tc "#e8ecf1"; set ol "#7d8794"
+        }
+        set id [.c create text [expr {$fx + 5}] [expr {$cy + 3}] -text $v -anchor nw -font $font -fill $tc -tags {tmp dyn}]
+        lassign [.c bbox $id] a b c d
+        if {$c - $a < 40} { set c [expr {$a + 40}] }
+        set bg [.c create rectangle [expr {$a - 5}] [expr {$b - 3}] [expr {$c + 5}] [expr {$d + 3}] -fill $fill -outline $ol -tags {tmp dyn}]
+        .c lower $bg $id
+        set fx [expr {$c + 12}]
+        incr i
+    }
+}
+bind .cmd.e <KeyRelease> {+if {$::dyn ne ""} dyn_draw}
+bind .cmd.e <Tab> {
+    if {$::dynon && $::dyn ne "" && [lindex $::dyn 4] >= 0 && [lindex $::dyn 5] ne ""} {
+        set t [.cmd.e get]; .cmd.e delete 0 end; emit DYNTAB $t; break
+    }
+}
 proc histmove {d} {
     set n [llength $::cmdhist]
     if {$n == 0} return
@@ -724,6 +794,7 @@ bind all <F8> {emit K F8; break}
 bind all <F5> {emit K F5; break}
 bind all <Control-e> {emit K F5; break}
 bind all <F9> {emit K F9; break}
+bind all <F12> {emit K F12; break}
 bind all <Control-z> {emit MENU U; break}
 bind all <Control-y> {emit MENU REDO; break}
 bind all <Control-s> {emit MENU QSAVE; break}
@@ -775,8 +846,9 @@ proc setprompt {s spaces} {
     focus .cmd.e
 }
 proc setxy {s} { .st.xy configure -text $s }
-proc settoggles {grid snap ortho osnap {lwt 0} {iso 0} {isolabel ISO}} {
-    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt iso $iso] {
+proc settoggles {grid snap ortho osnap {lwt 0} {iso 0} {isolabel ISO} {dyn 0}} {
+    set ::dynon $dyn
+    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt iso $iso dyn $dyn] {
         .st.$w configure -style [expr {$v ? "On.Toggle.TButton" : "Toggle.TButton"}]
     }
     .st.iso configure -text $isolabel

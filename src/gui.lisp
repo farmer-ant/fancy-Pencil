@@ -832,6 +832,98 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
         ".c create rectangle [.c bbox tip] -fill #f1e7a8 -outline #b9a95a -tags {tmp tipbg}"
         ".c lower tipbg tip"))
 
+;;; ---------- dynamic input (F12, DYNMODE) ----------
+;; Beside the cursor: the prompt (DYNPROMPT), and boxes showing where the cursor is -- X and Y
+;; for a first point, length and angle from the last point for the next one. What is typed shows
+;; in the active box; Tab keeps it there (the cursor is held to it) and moves to the other box.
+
+(defvar *dyn-lock* (list nil nil) "Values typed into the two dynamic input boxes and kept with Tab.")
+(defvar *dyn-active* 0 "Which dynamic input box takes what is typed.")
+
+(defun dyn-on-p () (plusp (or (sysvar "DYNMODE") 0)))
+(defun dyn-locked-p () (or (first *dyn-lock*) (second *dyn-lock*)))
+
+(defun dyn-mode (req)
+  (let ((kind (inreq-kind req)) (base (inreq-base req)))
+    (case kind
+      (:point (if (pointp base) :dim :pointer))
+      (:corner (cond ((inreq-nosnap req) :prompt) ((pointp base) :relative) (t :pointer)))
+      (:distance :distance)
+      (:angle :angle)
+      (:command :command)
+      ((:entity :select-point) :prompt)
+      (t :value))))
+
+(defun dyn-two-boxes-p (mode) (member mode '(:pointer :dim :relative)))
+
+(defun dyn-point (req cur)
+  "The point the dynamic input boxes give: the values kept with Tab, the cursor's for the rest."
+  (let ((l0 (first *dyn-lock*)) (l1 (second *dyn-lock*)) (base (inreq-base req)))
+    (case (dyn-mode req)
+      (:pointer (pt (or l0 (px cur)) (or l1 (py cur)) (pz cur)))
+      (:relative (pt (+ (px base) (or l0 (- (px cur) (px base)))) (+ (py base) (or l1 (- (py cur) (py base)))) (pz (pt3 base))))
+      (:dim (let* ((b (pt3 base))
+                   (a (or l1 (if (< (dist2d b cur) 1d-12) 0d0 (ang b cur))))
+                   (d (or l0 (dist2d b cur))))
+              (let ((q (polar b a d))) (pt (px q) (py q) (pz b)))))
+      (t nil))))
+
+(defun dyn-parse (mode index text)
+  (let ((text (string-trim " " text)))
+    (and (plusp (length text))
+         (if (and (eq mode :dim) (= index 1)) (angtof text) (distof text)))))
+
+(defun dyn-take-text (req text)
+  "Put TEXT into the active box (split at , or < into both). Returns NIL if it isn't a number."
+  (let* ((mode (dyn-mode req)) (sep (if (eq mode :dim) #\< #\,)) (k (position sep text)))
+    (if k
+        (let ((a (dyn-parse mode 0 (subseq text 0 k))) (b (dyn-parse mode 1 (subseq text (1+ k)))))
+          (when (and a b) (setf *dyn-lock* (list a b)) t))
+        (let ((v (dyn-parse mode *dyn-active* text)))
+          (when v (setf (nth *dyn-active* *dyn-lock*) v) t)))))
+
+(defun dyn-tab (req text)
+  (when (and (dyn-on-p) (dyn-two-boxes-p (dyn-mode req)))
+    (let ((text (string-trim " " text)))
+      (when (and (plusp (length text)) (not (dyn-take-text req text)))
+        (out (format nil "~A is not a number.~%" text))))
+    (setf *dyn-active* (- 1 *dyn-active*))))
+
+(defun dyn-enter-point (req text)
+  "Enter after values were kept with Tab: the point they give (what was just typed goes in the
+active box). NIL when the line should be read as usual."
+  (when (and req (dyn-on-p) (dyn-locked-p) (dyn-two-boxes-p (dyn-mode req)))
+    (let ((tx (string-trim " " text)))
+      (when (or (zerop (length tx)) (dyn-take-text req tx))
+        (dyn-point req *cursor-world*)))))
+
+(defun dyn-cmd (req)
+  "The Tk command that shows (or clears) the dynamic input boxes."
+  (if (not (and req *mouse-in* (dyn-on-p)))
+      "dyn_clear"
+      (let* ((mode (dyn-mode req)) (cur *cursor-world*) (base (inreq-base req))
+             (b (and (pointp base) (pt3 base)))
+             (l0 (first *dyn-lock*)) (l1 (second *dyn-lock*))
+             (prompt (if (and (eql (sysvar "DYNPROMPT") 1) (not (eq mode :command)))
+                         (string-trim '(#\Space #\Newline #\Tab) (inreq-prompt req)) ""))
+             (fields
+               (case mode
+                 (:pointer (list (list "" (fmt-len (or l0 (px cur))) (if l0 1 0))
+                                 (list "," (fmt-len (or l1 (py cur))) (if l1 1 0))))
+                 (:relative (list (list "" (fmt-len (or l0 (- (px cur) (px b)))) (if l0 1 0))
+                                  (list "," (fmt-len (or l1 (- (py cur) (py b)))) (if l1 1 0))))
+                 (:dim (list (list "" (fmt-len (or l0 (dist2d b cur))) (if l0 1 0))
+                             (list "<" (fmt-ang (or l1 (if (< (dist2d b cur) 1d-12) 0d0 (ang b cur)))) (if l1 1 0))))
+                 (:distance (list (list "" (if b (fmt-len (dist2d b cur)) "") 0)))
+                 (:angle (list (list "" (if b (fmt-ang (if (< (dist2d b cur) 1d-12) 0d0 (ang b cur))) "") 0)))
+                 ((:command :value) (list (list "" "" 0)))
+                 (t nil)))
+             (sep (case mode (:dim "<") ((:pointer :relative) ",") (t ""))))
+        (format nil "dyn_show ~D ~D ~A {~{~A~^ ~}} ~D ~A ~D"
+                *mouse-sx* (+ *mouse-sy* (if *snap-bit* 20 0)) (tq prompt)
+                (mapcar (lambda (f) (format nil "{~A ~A ~D}" (tq (first f)) (tq (second f)) (third f))) fields)
+                (if fields *dyn-active* -1) (tq sep) (if (eq mode :command) 1 0)))))
+
 (defun drag-item-cmds (item)
   (case (first item)
     (:rect (destructuring-bind (a b style) (rest item)
@@ -911,7 +1003,7 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
               (setf cmds (nconc cmds (snap-glyph x y *snap-bit*)
                                 (tooltip-cmds x y (cdr (assoc *snap-bit* *snap-names*)))))))))
       (when (and req (eq (inreq-kind req) :command)) (setf cmds (nconc cmds (grip-hover-cmds))))
-      (setf cmds (nconc cmds (cursor-cmds)))
+      (setf cmds (nconc cmds (cursor-cmds) (list (dyn-cmd req))))
       (tk-send-string (format nil "~{~A~%~}" cmds)))))
 
 (defun update-coords ()
@@ -923,10 +1015,11 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
   (let* ((names (mapcar #'layer-name (drawing-layers *dwg*))))
     (multiple-value-bind (shown color) (layer-box-display)
       (tk "setlayers {~{~A~^ ~}} ~A ~A" (mapcar #'tq names) (tq shown) color))
-    (tk "settoggles ~D ~D ~D ~D ~D ~D ~A" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
+    (tk "settoggles ~D ~D ~D ~D ~D ~D ~A ~D" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
         (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0))
         (sysvar "LWDISPLAY") (if (iso-mode-p) 1 0)
-        (tq (cond ((iso-mode-p) (format nil "ISO ~A" (string-upcase (isoplane-name)))) (t "ISO"))))
+        (tq (cond ((iso-mode-p) (format nil "ISO ~A" (string-upcase (isoplane-name)))) (t "ISO")))
+        (if (dyn-on-p) 1 0))
     (tk "setviewname ~A" (tq (if *view* (first *view*) "Top")))
     (tk "set ::keepprof ~D" (if (eql (sysvar "DELOBJ") 0) 1 0))
     (sync-current-props)
@@ -974,7 +1067,11 @@ several), else the current layer. Only shows it; the current layer is not change
              (unless bit
                (let ((dq (and *dimline-snap* (member kind '(:point)) (apply-dimline-snap q))))
                  (when dq (setf *cursor-world* dq *snap-bit* :dimline))))))
-          (t (setf *cursor-world* raw *snap-bit* nil)))))
+          (t (setf *cursor-world* raw *snap-bit* nil)))
+    ;; values typed into the dynamic input boxes (Tab) hold the cursor to them
+    (when (and *req* (dyn-locked-p))
+      (let ((q (dyn-point *req* *cursor-world*)))
+        (when q (setf *cursor-world* q *snap-bit* nil))))))
 
 (defun echo-input (text)
   (out (format nil "~:[~%~;~]~A~A~%" *at-line-start* (inreq-prompt *req*) text)))
@@ -994,6 +1091,13 @@ several), else the current layer. Only shows it; the current layer is not change
           ((string= k "F8") (flip "ORTHOMODE" "Ortho"))
           ((string= k "F9") (flip "SNAPMODE" "Snap"))
           ((string= k "F5") (cycle-isoplane))
+          ((string= k "F12")
+           ;; as in AutoCAD, off is the setting made negative, so turning it on again restores it
+           (let ((v (or (sysvar "DYNMODE") 3)))
+             (setf (sysvar "DYNMODE") (cond ((plusp v) (- v)) ((minusp v) (- v)) (t 3))))
+           (out (format nil "<Dynamic Input ~:[off~;on~]>~%" (dyn-on-p)))
+           (ignore-errors (save-prefs))
+           (draw-temp))
           ((string= k "ISO") (set-iso (not (iso-mode-p)))
            (out (format nil "<Isometric drafting ~:[off~;on, isoplane ~A~]>~%" (iso-mode-p) (isoplane-name))))
           ((string= k "LWT") (setf (sysvar "LWDISPLAY") (if (eql (sysvar "LWDISPLAY") 1) 0 1)) (gui-regen)))
@@ -1101,7 +1205,12 @@ several), else the current layer. Only shows it; the current layer is not change
                ((and (eq kind :command) rx (plusp (length *lisp-buffer*))) nil)
                ((and (eq kind :command) rx) (show-command-context-menu rx ry))
                (t (echo-input "") (setf *acq-result* (list :text ""))))))
-      ((string= ty "L") (let ((s (event-rest ev))) (echo-input s) (setf *acq-result* (list :text s))))
+      ((string= ty "L") (let* ((s (event-rest ev)) (p (dyn-enter-point *req* s)))
+                          (echo-input s)
+                          (setf *acq-result* (if p (list :point p) (list :text s)))))
+      ((string= ty "DYNTAB") (dyn-tab *req* (event-rest ev))
+                             (when *mouse-in* (update-cursor *mouse-sx* *mouse-sy*))
+                             (draw-temp))
       ((string= ty "E")
        (if (eq kind :command)
            (progn (when *pickfirst* (take-pickfirst) (refresh-grips) (refresh-palette))
@@ -1154,7 +1263,7 @@ several), else the current layer. Only shows it; the current layer is not change
               (refresh-grips) (refresh-palette)))))))
 
 (defun gui-acquire (req)
-  (let ((*req* req) (*acq-result* nil))
+  (let ((*req* req) (*acq-result* nil) (*dyn-lock* (list nil nil)) (*dyn-active* 0))
     (when (/= *drawn-modcount* (drawing-modcount *dwg*)) (gui-regen) (gui-sync))
     (when (eq (inreq-kind req) :command)
       (setf *pickfirst* (remove-if-not #'ent-live-p *pickfirst*))
