@@ -507,7 +507,7 @@ proc textwin {title text} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w $title
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     text $w.t -width 72 -height 32 -background "#1a1f26" -foreground "#d6dce4" -font {{DejaVu Sans Mono} 9} \
         -borderwidth 0 -highlightthickness 0 -padx 8 -pady 6 -yscrollcommand [list $w.sb set]
     ttk::scrollbar $w.sb -command [list $w.t yview]
@@ -530,7 +530,7 @@ proc qpanel_set {rows types current} {
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Quick Properties"
-        wm transient $w .
+        wm transient $w [dlg_owner $w]
         wm resizable $w 0 0
         ttk::combobox $w.type -state readonly -takefocus 0 -width 26
         bind $w.type <<ComboboxSelected>> {typepicked .qp.type}
@@ -955,9 +955,25 @@ proc ask {id script} {
     emit A $id [string map {"\n" " "} $r]
 }
 # take the keyboard/mouse for a dialog once the desktop has actually shown it
+# The window a new dialog belongs to: the dialog it was opened from (the Layer Properties
+# Manager for its Color... button, say), else the main window. Tied to that one, the desktop
+# keeps the new dialog in front of it instead of behind.
+proc dlg_owner {w} {
+    set f [focus]
+    if {$f eq ""} { set f [grab current] }
+    if {$f ne "" && [winfo exists $f]} {
+        set t [winfo toplevel $f]
+        if {$t ne $w && [winfo viewable $t] && [winfo class $t] ne "Menu" && ![wm overrideredirect $t]} {
+            return $t
+        }
+    }
+    return .
+}
 proc safegrab {w} {
     if {![winfo exists $w]} return
     if {![winfo viewable $w]} { catch {tkwait visibility $w} }
+    catch {raise $w}
+    catch {focus $w}
     if {[catch {grab $w}]} {
         # refused (e.g. a mouse button is still held): try again shortly
         after 150 [list catch [list grab $w]]
@@ -1476,7 +1492,7 @@ proc styledlg {records current} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Text Style"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     array unset ::sty
     array unset ::stydata
     set ::sty(order) {}
@@ -1690,7 +1706,7 @@ proc dimstyledlg {records current arrows} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Dimension Style Manager"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set ::dimarrows $arrows
     array unset ::dsdata
     array unset ::dsv
@@ -1975,7 +1991,7 @@ proc osnapdlg {mode} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Drafting Settings - Object Snap"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
     set ::osd(on) [expr {($mode & 16384) == 0}]
@@ -2033,7 +2049,7 @@ proc matchpropdlg {items} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Property Settings"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
     set ::mpd(keys) {}
@@ -2091,7 +2107,7 @@ proc unitsdlg {ltypes atypes instypes lprec aprec lsamp asamp lu lp au ap ins} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Drawing Units"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
     array unset ::ud
@@ -2179,7 +2195,7 @@ proc blockdlg {names name x y count mode} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Block Definition"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
     set ::bd(mode) $mode
@@ -2239,7 +2255,7 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Options - Cursor & Selection"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
     array unset ::cud
@@ -2393,7 +2409,7 @@ proc colordlg {current by hex} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Select Color"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     wm resizable $w 0 0
     set ::cold(hex) $hex
     set ::cold(result) CANCEL
@@ -2527,7 +2543,7 @@ proc ptypedlg {mode size relative} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Point Style"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     wm resizable $w 0 0
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
@@ -2600,7 +2616,7 @@ proc limitsdlg {x0 y0 x1 y1 papers scales gridin check paper scale land} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Drawing Limits"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     wm resizable $w 0 0
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
@@ -2665,7 +2681,7 @@ proc layerpickdlg {title layers current} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w $title
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 10]
     pack $f -fill both -expand 1
     set ::lpk(result) CANCEL
@@ -2751,7 +2767,7 @@ proc plotdlg {devices device papers paper landscape area scales scale units cent
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Plot"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     array unset ::pl
     array set ::pl [list device $device paper $paper landscape $landscape area $area scale $scale units $units \
                         center $center mono $mono lw $lw copies $copies result CANCEL]
@@ -2915,7 +2931,7 @@ proc spelldlg {word context suggestions dictname} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Check Spelling"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set ::spl(result) CANCEL
     set ::spl(new) [expr {[llength $suggestions] ? [lindex $suggestions 0] : $word}]
     set f [ttk::frame $w.f -padding 12]
@@ -3004,7 +3020,7 @@ proc extdlg_hint {title} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Fancy Pencil - choosing a file"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     wm resizable $w 0 0
     set f [ttk::frame $w.f -padding 14]
     pack $f -fill both -expand 1
@@ -3101,7 +3117,7 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         toplevel $w -background $::panel
         wm title $w "Layer Properties Manager"
         wm geometry $w 790x420+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
-        wm transient $w .
+        wm transient $w [dlg_owner $w]
         ttk::frame $w.tb -padding 6
         foreach {lbl act} {"New Layer" new "Rename" rename "Delete" delete "Set Current" current} {
             ttk::button $w.tb.[string map {" " ""} [string tolower $lbl]] -text $lbl -command [list layeract $act]
@@ -3230,7 +3246,7 @@ proc formdlg {title rows oklabel} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w $title
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 10]
     pack $f -fill both -expand 1
     set i 0
@@ -3282,7 +3298,7 @@ proc aliasdlg {pairs} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Edit Command Aliases"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     wm geometry $w 520x520+[expr {[winfo rootx .] + 160}]+[expr {[winfo rooty .] + 80}]
     set f [ttk::frame $w.f -padding 8]
     pack $f -fill both -expand 1
@@ -3421,7 +3437,7 @@ proc hatchdlg {patterns current scale angle order orders nbound mode} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w [expr {$mode eq "edit" ? "Hatch Edit" : "Hatch"}]
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set ::hd_patterns $patterns
     set f [ttk::frame $w.f -padding 10]
     pack $f -fill both -expand 1
@@ -3552,7 +3568,7 @@ proc imagemgr {rows} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Image Manager - attached pictures and PDF pages"
-    wm transient $w .
+    wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 10]
     pack $f -fill both -expand 1
     set cols {name type status size refs shown fade}
@@ -3646,7 +3662,7 @@ proc histdlg {text logon logdir started} {
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Command History"
-        wm transient $w .
+        wm transient $w [dlg_owner $w]
         set top [ttk::frame $w.top -padding {8 6}]
         ttk::label $top.l -text "Find:"
         ttk::entry $top.e -width 24
