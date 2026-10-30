@@ -832,6 +832,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
         ".c create rectangle [.c bbox tip] -fill #f1e7a8 -outline #b9a95a -tags {tmp tipbg}"
         ".c lower tipbg tip"))
 
+(defvar *polar-hit* nil "The polar tracking angle the cursor is on, or NIL.")
+
 ;;; ---------- dynamic input (F12, DYNMODE) ----------
 ;; Beside the cursor: the prompt (DYNPROMPT), and boxes showing where the cursor is -- X and Y
 ;; for a first point, length and angle from the last point for the next one. What is typed shows
@@ -920,7 +922,7 @@ active box). NIL when the line should be read as usual."
                  (t nil)))
              (sep (case mode (:dim "<") ((:pointer :relative) ",") (t ""))))
         (format nil "dyn_show ~D ~D ~A {~{~A~^ ~}} ~D ~A ~D"
-                *mouse-sx* (+ *mouse-sy* (if *snap-bit* 20 0)) (tq prompt)
+                *mouse-sx* (+ *mouse-sy* (if (or *snap-bit* *polar-hit*) 20 0)) (tq prompt)
                 (mapcar (lambda (f) (format nil "{~A ~A ~D}" (tq (first f)) (tq (second f)) (third f))) fields)
                 (if fields *dyn-active* -1) (tq sep) (if (eq mode :command) 1 0)))))
 
@@ -998,6 +1000,11 @@ active box). NIL when the line should be read as usual."
           (when (and (eq *snap-bit* :dimline) *dimline-match*)
             ;; a dashed guide along the dimension line it lines up with
             (setf cmds (nconc cmds (screen-line (list (first *dimline-match*) cur) "#3fd25f" "tmp" :dash t))))
+          (when (and *polar-hit* base (member kind '(:point :distance :angle)))
+            (let* ((b (pt3 base)) (far (polar b *polar-hit* (gui-pixels->world (* 3 (+ *cw* *ch*))))))
+              (setf cmds (nconc cmds (screen-line (list b far) "#3fd25f" "tmp" :dash t)))
+              (multiple-value-bind (x y) (w->s cur)
+                (setf cmds (nconc cmds (tooltip-cmds x y (format nil "Polar: ~A < ~A" (fmt-len (dist2d b cur)) (fmt-ang *polar-hit*))))))))
           (when (and *snap-bit* (member kind '(:point :corner :distance :angle)))
             (multiple-value-bind (x y) (w->s cur)
               (setf cmds (nconc cmds (snap-glyph x y *snap-bit*)
@@ -1015,11 +1022,11 @@ active box). NIL when the line should be read as usual."
   (let* ((names (mapcar #'layer-name (drawing-layers *dwg*))))
     (multiple-value-bind (shown color) (layer-box-display)
       (tk "setlayers {~{~A~^ ~}} ~A ~A" (mapcar #'tq names) (tq shown) color))
-    (tk "settoggles ~D ~D ~D ~D ~D ~D ~A ~D" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
+    (tk "settoggles ~D ~D ~D ~D ~D ~D ~A ~D ~D" (sysvar "GRIDMODE") (sysvar "SNAPMODE") (sysvar "ORTHOMODE")
         (if (logtest (sysvar "OSMODE") 16384) 0 (if (plusp (sysvar "OSMODE")) 1 0))
         (sysvar "LWDISPLAY") (if (iso-mode-p) 1 0)
         (tq (cond ((iso-mode-p) (format nil "ISO ~A" (string-upcase (isoplane-name)))) (t "ISO")))
-        (if (dyn-on-p) 1 0))
+        (if (dyn-on-p) 1 0) (if (polar-on-p) 1 0))
     (tk "setviewname ~A" (tq (if *view* (first *view*) "Top")))
     (tk "set ::keepprof ~D" (if (eql (sysvar "DELOBJ") 0) 1 0))
     (sync-current-props)
@@ -1048,7 +1055,7 @@ several), else the current layer. Only shows it; the current layer is not change
 ;;; ---------- event handling ----------
 
 (defun update-cursor (sx sy)
-  (setf *mouse-sx* sx *mouse-sy* sy *mouse-in* t)
+  (setf *mouse-sx* sx *mouse-sy* sy *mouse-in* t *polar-hit* nil)
   (let* ((kind (and *req* (inreq-kind *req*)))
          ;; in a 3D view, points land on the work plane through the base point (if there is one)
          (raw (cond ((and (projected-view-p) (member kind '(:point :corner :distance :angle)))
@@ -1066,12 +1073,19 @@ several), else the current layer. Only shows it; the current layer is not change
              ;; no object snap here: line up with another dimension's line if close to one
              (unless bit
                (let ((dq (and *dimline-snap* (member kind '(:point)) (apply-dimline-snap q))))
-                 (when dq (setf *cursor-world* dq *snap-bit* :dimline))))))
+                 (when dq (setf *cursor-world* dq *snap-bit* :dimline))))
+             ;; polar tracking: close to one of the tracking directions from the base point,
+             ;; the cursor goes onto it
+             (let ((base (inreq-base *req*)))
+               (when (and (null *snap-bit*) (polar-on-p) (pointp base) (not (eq kind :corner))
+                          (not (eql (sysvar "ORTHOMODE") 1)) (not (projected-view-p)) (not (iso-mode-p)))
+                 (multiple-value-bind (tp ta) (polar-track raw (pt3 base) (gui-pixels->world 10))
+                   (when tp (setf *cursor-world* tp *polar-hit* ta)))))))
           (t (setf *cursor-world* raw *snap-bit* nil)))
     ;; values typed into the dynamic input boxes (Tab) hold the cursor to them
     (when (and *req* (dyn-locked-p))
       (let ((q (dyn-point *req* *cursor-world*)))
-        (when q (setf *cursor-world* q *snap-bit* nil))))))
+        (when q (setf *cursor-world* q *snap-bit* nil *polar-hit* nil))))))
 
 (defun echo-input (text)
   (out (format nil "~:[~%~;~]~A~A~%" *at-line-start* (inreq-prompt *req*) text)))
@@ -1088,7 +1102,23 @@ several), else the current layer. Only shows it; the current layer is not change
              (out (format nil "<Osnap ~A>~%" (if (logtest (sysvar "OSMODE") 16384) "off" "on")))
              (ignore-errors (save-prefs))))
           ((string= k "F7") (flip "GRIDMODE" "Grid") (ignore-errors (save-prefs)) (gui-regen))
-          ((string= k "F8") (flip "ORTHOMODE" "Ortho"))
+          ((string= k "F8") (flip "ORTHOMODE" "Ortho")
+           ;; ortho and polar tracking take turns, as in AutoCAD
+           (when (and (eql (sysvar "ORTHOMODE") 1) (polar-on-p))
+             (setf (sysvar "AUTOSNAP") (logandc2 (sysvar "AUTOSNAP") 8))
+             (ignore-errors (save-prefs))))
+          ((string= k "F10")
+           (setf (sysvar "AUTOSNAP") (logxor (or (sysvar "AUTOSNAP") 0) 8))
+           (when (polar-on-p) (setf (sysvar "ORTHOMODE") 0))
+           (out (format nil "<Polar ~:[off~;on~]>~%" (polar-on-p)))
+           (ignore-errors (save-prefs)))
+          ((and (> (length k) 9) (string= (subseq k 0 9) "POLARANG "))
+           (let ((v (ignore-errors (distof (subseq k 9) 2))))
+             (when (and v (> v 0))
+               (setf (sysvar "POLARANG") (d v) (sysvar "AUTOSNAP") (logior (or (sysvar "AUTOSNAP") 0) 8)
+                     (sysvar "ORTHOMODE") 0)
+               (out (format nil "<Polar on, every ~A degrees>~%" (fmt-plain v)))
+               (ignore-errors (save-prefs)))))
           ((string= k "F9") (flip "SNAPMODE" "Snap"))
           ((string= k "F5") (cycle-isoplane))
           ((string= k "F12")

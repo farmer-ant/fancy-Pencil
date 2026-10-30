@@ -630,13 +630,24 @@ label .st.xy -text "0.0000, 0.0000, 0.0000" -background $panel -foreground $fg -
 pack .st.xy -side left
 ttk::label .st.model -text "MODEL" -style Dim.TLabel
 pack .st.model -side right -padx 6
-foreach {t k} {DYN F12 LWT LWT ISO ISO OSNAP F3 ORTHO F8 SNAP F9 GRID F7} {
+foreach {t k} {DYN F12 LWT LWT ISO ISO OSNAP F3 POLAR F10 ORTHO F8 SNAP F9 GRID F7} {
     ttk::button .st.[string tolower $t] -text $t -style Toggle.TButton -takefocus 0 -command [list togglekey $k]
     pack .st.[string tolower $t] -side right -padx 1
 }
 proc togglekey {k} { emit K $k; focus .cmd.e }
 # open on release: while the button is held the desktop keeps the mouse, so a dialog couldn't take it
 bind .st.osnap <ButtonRelease-3> {emit MENU 'OSNAP}
+# right-click POLAR: the angle step to track
+bind .st.polar <ButtonRelease-3> {polarmenu %X %Y}
+proc polarmenu {X Y} {
+    set m .polarpop
+    catch {destroy $m}
+    menu $m -tearoff 0
+    foreach a {90 45 30 22.5 18 15 10 5} {
+        $m add command -label "$a degrees" -command [list emit K POLARANG $a]
+    }
+    fp_popup $m $X $Y
+}
 
 pack .st -in .bottom -side bottom -fill x
 pack .cmd -in .bottom -side bottom -fill x
@@ -795,6 +806,7 @@ bind all <F5> {emit K F5; break}
 bind all <Control-e> {emit K F5; break}
 bind all <F9> {emit K F9; break}
 bind all <F12> {emit K F12; break}
+bind all <F10> {emit K F10; break}
 bind all <Control-z> {emit MENU U; break}
 bind all <Control-y> {emit MENU REDO; break}
 bind all <Control-s> {emit MENU QSAVE; break}
@@ -846,9 +858,9 @@ proc setprompt {s spaces} {
     focus .cmd.e
 }
 proc setxy {s} { .st.xy configure -text $s }
-proc settoggles {grid snap ortho osnap {lwt 0} {iso 0} {isolabel ISO} {dyn 0}} {
+proc settoggles {grid snap ortho osnap {lwt 0} {iso 0} {isolabel ISO} {dyn 0} {polar 0}} {
     set ::dynon $dyn
-    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt iso $iso dyn $dyn] {
+    foreach {w v} [list grid $grid snap $snap ortho $ortho osnap $osnap lwt $lwt iso $iso dyn $dyn polar $polar] {
         .st.$w configure -style [expr {$v ? "On.Toggle.TButton" : "Toggle.TButton"}]
     }
     .st.iso configure -text $isolabel
