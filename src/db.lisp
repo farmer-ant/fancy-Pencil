@@ -308,6 +308,15 @@ and is only redrawn by Fancy Pencil once it is edited.")
                             (setf i (1+ semi))
                             (incf i 2)))))))
               ((member ch '(#\{ #\})) (incf i))
+              ;; DXF's way of writing control characters in text: ^J is a new line (often left in
+              ;; notes by DWG converters), ^I a tab, ^M a carriage return; "^ " is a caret itself
+              ((and (char= ch #\^) (< (1+ i) n) (find (char s (1+ i)) "JIM @"))
+               (case (char s (1+ i))
+                 (#\J (write-char #\Newline out))
+                 (#\I (write-string "    " out))
+                 (#\Space (write-char #\^ out))
+                 (t nil))
+               (incf i 2))
               (t (write-char ch out) (incf i)))))
     (let ((r (get-output-stream-string out)))
       ;; %%c %%d %%p control codes
