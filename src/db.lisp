@@ -86,7 +86,7 @@
               "DIMSTYLE" "Standard" "DIMSCALE" 1d0 "DIMASZ" 0.18d0 "DIMTXT" 0.18d0 "DIMEXO" 0.0625d0
               "DIMEXE" 0.18d0 "DIMGAP" 0.09d0 "DIMDEC" 4 "DIMTAD" 1 "DIMTSZ" 0d0 "DIMCLRD" 0 "DIMCLRE" 0
               "DIMCLRT" 0 "DIMLFAC" 1d0 "DIMPOST" "" "DIMCEN" 0.09d0 "DIMDLI" 0.38d0 "DIMTIH" 0 "DIMADEC" 0
-              "DIMBLK" "" "LOGFILEMODE" 0 "LOGFILEPATH" "" "DYNPICOORDS" 0 "SURFTAB1" 6 "SURFTAB2" 6)
+              "DIMBLK" "" "LOGFILEMODE" 0 "LOGFILEPATH" "" "DYNPICOORDS" 0 "DYNMODE" 3 "DYNPROMPT" 1 "SURFTAB1" 6 "SURFTAB2" 6)
         by #'cddr do (setf (gethash k *sysvars*) v)))
 (reset-sysvars)
 

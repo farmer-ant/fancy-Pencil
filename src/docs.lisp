@@ -21,7 +21,7 @@
 
 (defparameter *app-sysvars*
   '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "PICKBOX" "APERTURE" "FILEDIA" "CMDECHO" "PICKFIRST"
-    "HIGHLIGHT" "LWDISPLAY" "SAVEFORMAT" "GRIPS" "POLARMODE" "AUTOSNAP" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS")
+    "HIGHLIGHT" "LWDISPLAY" "SAVEFORMAT" "GRIPS" "POLARMODE" "AUTOSNAP" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS" "DYNMODE" "DYNPROMPT")
   "Settings that belong to the program rather than to one drawing: they carry over between tabs.")
 
 (defun app-sysvar-values ()
