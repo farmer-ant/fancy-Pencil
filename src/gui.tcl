@@ -91,8 +91,9 @@ option add *Menu.relief flat
 option add *tearOff 0
 
 # ---------------------------------------------------------------- menus
+# .mb holds the menus; they are shown by Fancy Pencil's own menu bar (mbar_build), so they open
+# like the right-click menus: flat submenu arrows, closed when the program loses the focus
 menu .mb
-. configure -menu .mb
 proc mcmd {m label cmd {accel ""}} {
     $m add command -label $label -accelerator $accel -command [list menucmd $cmd]
 }
@@ -1411,30 +1412,53 @@ proc fp_arrow_image {w} {
     return $name
 }
 proc flat_cascades {m} {
+    if {![winfo exists $m] || [winfo class $m] ne "Menu"} return
     set last [$m index end]
     if {$last eq "none"} return
-    set font [$m cget -font]
-    set fake {}
     for {set i 0} {$i <= $last} {incr i} {
         if {[$m type $i] ne "cascade"} continue
         set sub [$m entrycget $i -menu]
         set label [$m entrycget $i -label]
+        set state [$m entrycget $i -state]
         $m delete $i
-        $m insert $i command -label $label -command [list fakecas_post $m $i]
-        lappend fake $i $sub
-        flat_cascades $sub
+        $m insert $i command -label $label -state $state -command [list fakecas_post_label $m $label]
+        set ::fakecasl($m,$label) $sub
+    }
+    # which entries open which submenu (entries may have been added or removed since)
+    array unset ::fakecas "$m,*"
+    set fake {}
+    for {set i 0} {$i <= $last} {incr i} {
+        if {[$m type $i] ne "command"} continue
+        set label [$m entrycget $i -label]
+        if {[info exists ::fakecasl($m,$label)] && [lindex [$m entrycget $i -command] 0] eq "fakecas_post_label"} {
+            set ::fakecas($m,$i) $::fakecasl($m,$label)
+            lappend fake $i
+            flat_cascades $::fakecasl($m,$label)
+        }
     }
     if {![llength $fake]} return
     # the arrow at the right edge: an image as wide as the room left after the label
+    foreach i $fake { $m entryconfigure $i -image {} }
     update idletasks
     set width [winfo reqwidth $m]
-    foreach {i sub} $fake {
+    set font [$m cget -font]
+    foreach i $fake {
         set tw [font measure $font [$m entrycget $i -label]]
         set iw [expr {max(14, $width - $tw - 18)}]
         $m entryconfigure $i -image [fp_arrow_image $iw] -compound right
-        set ::fakecas($m,$i) $sub
     }
     bind $m <<MenuSelect>> {fakecas_select %W}
+    # a click on such an entry only opens its submenu (it mustn't close the menu)
+    bind $m <ButtonRelease> {if {[fakecas_active %W]} { fakecas_post %W [%W index active]; break }}
+    bind $m <Unmap> {fakecas_unpost %W}
+}
+proc fakecas_active {m} {
+    set i [$m index active]
+    expr {$i ne "none" && [info exists ::fakecas($m,$i)]}
+}
+proc fakecas_post_label {m label} {
+    set i [$m index $label]
+    if {$i ne "none"} { fakecas_post $m $i }
 }
 proc fakecas_post {m i} {
     if {![info exists ::fakecas($m,$i)]} return
@@ -1461,6 +1485,47 @@ proc fakecas_select {m} {
         fakecas_unpost $m
     }
 }
+# ---- the menu bar: a row of titles, each opening its menu from .mb
+set ::mbar_open -1
+proc mbar_build {} {
+    catch {destroy .mbar}
+    frame .mbar -background $::panel
+    set last [.mb index end]
+    for {set i 0} {$i <= $last} {incr i} {
+        if {[.mb type $i] ne "cascade"} continue
+        set l [label .mbar.l$i -text [.mb entrycget $i -label] -background $::panel -foreground $::fg \
+                   -font TkMenuFont -padx 7 -pady 3]
+        pack $l -side left
+        bind $l <ButtonPress-1> [list mbar_click $i]
+        bind $l <Enter> [list mbar_enter $i]
+        bind $l <Leave> [list mbar_leave $i]
+    }
+    set first [lindex [pack slaves .] 0]
+    if {$first ne ""} { pack .mbar -side top -fill x -before $first } else { pack .mbar -side top -fill x }
+}
+proc mbar_open {i} {
+    set m [.mb entrycget $i -menu]
+    set l .mbar.l$i
+    mbar_reset
+    fp_popup $m [winfo rootx $l] [expr {[winfo rooty $l] + [winfo height $l]}]
+    set ::mbar_open $i
+    $l configure -background $::accent -foreground white
+}
+proc mbar_reset {} {
+    if {$::mbar_open >= 0 && [winfo exists .mbar.l$::mbar_open]} {
+        .mbar.l$::mbar_open configure -background $::panel -foreground $::fg
+    }
+    set ::mbar_open -1
+}
+proc mbar_click {i} { mbar_open $i }
+proc mbar_enter {i} {
+    if {$::mbar_open >= 0 && $::mbar_open != $i && $::fp_popup_menu ne ""} { mbar_open $i; return }
+    if {$::mbar_open != $i} { .mbar.l$i configure -background "#46505e" }
+}
+proc mbar_leave {i} {
+    if {$::mbar_open != $i} { .mbar.l$i configure -background $::panel }
+}
+after idle mbar_build
 proc fp_popup {m X Y} {
     popup_close
     if {[tk windowingsystem] eq "x11"} { flat_cascades $m }
@@ -1496,6 +1561,7 @@ proc popup_close {} {
         }
     }
     set ::fp_popup_tagged {}
+    mbar_reset
     if {$m ne "" && [winfo exists $m]} { fakecas_unpost $m }
     if {$m ne "" && [winfo exists $m] && [winfo ismapped $m]} {
         catch {tk::MenuUnpost $m}
@@ -1512,8 +1578,19 @@ proc popup_unpost {} {
         catch {$m unpost}
     }
 }
-bind FpPopupOff <ButtonPress> {set ::fp_popup_eat 1; popup_unpost; break}
-bind FpPopupOff <ButtonRelease> {if {$::fp_popup_eat} {set ::fp_popup_eat 0; popup_close}; break}
+set ::fp_popup_then ""
+bind FpPopupOff <ButtonPress> {
+    set ::fp_popup_then ""
+    if {[regexp {^\.mbar\.l(\d+)$} %W -> i] && $i != $::mbar_open} { set ::fp_popup_then [list mbar_open $i] }
+    set ::fp_popup_eat 1; popup_unpost; break
+}
+bind FpPopupOff <ButtonRelease> {
+    if {$::fp_popup_eat} {
+        set ::fp_popup_eat 0; popup_close
+        if {$::fp_popup_then ne ""} { set c $::fp_popup_then; set ::fp_popup_then ""; eval $c }
+    }
+    break
+}
 proc cmdline_popup {X Y} {
     set m .cmdpop
     catch {destroy $m}
