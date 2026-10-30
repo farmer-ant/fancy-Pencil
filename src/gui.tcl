@@ -701,6 +701,13 @@ proc cmdsubmit {} {
     set ::cmdhistpos [llength $::cmdhist]
     emit L $t
 }
+# Lisp: the line just typed (WORD) started the command FULL; Recent Input shows FULL
+proc hist_fullname {word full} {
+    set i [expr {[llength $::cmdhist] - 1}]
+    if {$i >= 0 && [string equal -nocase [string trim [lindex $::cmdhist $i]] $word]} {
+        set ::cmdhistfull($i) $full
+    }
+}
 proc histmove {d} {
     set n [llength $::cmdhist]
     if {$n == 0} return
@@ -1297,7 +1304,14 @@ proc cmdline_popup {X Y} {
         $m add separator
         $m add cascade -label "Recent Input" -menu $m.recent
         menu $m.recent -tearoff 0
-        foreach h [lrange [lreverse [lsort -unique $::cmdhist]] 0 11] {
+        # newest first, each once; a command typed by its alias shows its full name
+        set seen {}
+        for {set i [expr {[llength $::cmdhist] - 1}]} {$i >= 0 && [llength $seen] < 12} {incr i -1} {
+            set h [lindex $::cmdhist $i]
+            if {[info exists ::cmdhistfull($i)]} { set h $::cmdhistfull($i) }
+            if {[lsearch -exact $seen $h] < 0} { lappend seen $h }
+        }
+        foreach h $seen {
             $m.recent add command -label $h -command [list apply {{h} {.cmd.e delete 0 end; .cmd.e insert 0 $h; focus .cmd.e}} $h]
         }
     }
