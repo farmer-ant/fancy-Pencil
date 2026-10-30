@@ -27,7 +27,9 @@
 (defun remember-command (word name)
   (unless (member name *no-repeat-commands* :test #'string-equal)
     (setf *last-command* word)
-    (note-recent-command word)))
+    ;; Recent Input lists show the command's full name (LINE), not the alias typed (L)
+    (note-recent-command name)
+    (when (gui-p) (tk "hist_fullname ~A ~A" (tq word) (tq (string-upcase name))))))
 
 (defparameter *no-undo-commands* '("U" "UNDO" "REDO" "MREDO" "ZOOM" "PAN" "REGEN" "HELP" "ABOUT" "LIST" "DIST" "ID" "AREA"
                                     "QSAVE" "SAVE" "SAVEAS" "DXFOUT" "NEW" "OPEN" "QUIT" "COPYCLIP" "SELECTALL"
