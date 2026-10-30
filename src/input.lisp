@@ -370,6 +370,40 @@
      (pt (px p) (py base) (pz base)))
     (t (pt (px base) (py p) (pz base)))))
 
+;;; ---------- polar tracking (F10, AUTOSNAP bit 8) ----------
+
+(defun polar-on-p () (logtest (or (sysvar "AUTOSNAP") 0) 8))
+
+(defun polar-increment ()
+  "POLARANG, in degrees (as AutoCAD keeps it)."
+  (let ((a (sysvar "POLARANG"))) (if (and (realp a) (> a 0.01)) (d a) 90d0)))
+
+(defun polar-angles ()
+  "The tracking directions, radians: every multiple of POLARANG, plus POLARADDANG's angles
+(when POLARMODE has bit 4)."
+  (let* ((inc (polar-increment))
+         (n (max 1 (round 360 inc)))
+         (as (loop for i below n collect (* i inc))))
+    (when (logtest (or (sysvar "POLARMODE") 0) 4)
+      (dolist (s (loop with str = (or (sysvar "POLARADDANG") "") with start = 0
+                             for k = (position #\; str :start start)
+                             collect (subseq str start k) while k do (setf start (1+ k))))
+        (let ((v (ignore-errors (distof (string-trim " " s) 2))))
+          (when (realp v) (push (d v) as)))))
+    (mapcar (lambda (deg) (* (/ deg 180d0) +pi+)) as)))
+
+(defun polar-track (p base tol)
+  "P drawn onto the nearest tracking ray from BASE, if it is within TOL of one:
+(values point angle) or NIL."
+  (let ((v (v- p base)) best bd ba)
+    (dolist (a (polar-angles))
+      (let* ((ux (cos a)) (uy (sin a))
+             (along (+ (* (px v) ux) (* (py v) uy)))
+             (off (abs (- (* (py v) ux) (* (px v) uy)))))
+        (when (and (> along 0) (<= off tol) (or (null bd) (< off bd)))
+          (setf bd off ba a best (pt (+ (px base) (* along ux)) (+ (py base) (* along uy)) (pz base))))))
+    (when best (values best ba))))
+
 (defun iso-lattice-point (p s)
   "The nearest point of the isometric snap lattice with spacing S (steps along 30 and 150 degrees)."
   (let* ((c (cos (/ pi 6))) (sn 0.5d0)
