@@ -1394,8 +1394,76 @@ proc mted_done {how} {
 # and a click anywhere else in Fancy Pencil takes it down (that click is used for nothing else).
 set ::fp_popup_menu ""
 set ::fp_popup_tagged {}
+# Submenu arrows: Tk draws them in the menu's own color with a raised (shadowed) edge, and no
+# option changes that. So a popup's cascade entries become plain entries showing a flat arrow
+# (color 92), and their submenus are opened on hover or click here.
+set ::fp_arrow_color "#00CC00"
+array set ::fakecas {}
+proc fp_arrow_image {w} {
+    set name fp_arrow_$w
+    if {[lsearch -exact [image names] $name] >= 0} { return $name }
+    image create photo $name -width $w -height 12
+    set x0 [expr {$w - 7}]
+    for {set r 0} {$r < 9} {incr r} {
+        set half [expr {$r <= 4 ? $r : 8 - $r}]
+        $name put $::fp_arrow_color -to $x0 [expr {$r + 2}] [expr {$x0 + $half + 1}] [expr {$r + 3}]
+    }
+    return $name
+}
+proc flat_cascades {m} {
+    set last [$m index end]
+    if {$last eq "none"} return
+    set font [$m cget -font]
+    set fake {}
+    for {set i 0} {$i <= $last} {incr i} {
+        if {[$m type $i] ne "cascade"} continue
+        set sub [$m entrycget $i -menu]
+        set label [$m entrycget $i -label]
+        $m delete $i
+        $m insert $i command -label $label -command [list fakecas_post $m $i]
+        lappend fake $i $sub
+        flat_cascades $sub
+    }
+    if {![llength $fake]} return
+    # the arrow at the right edge: an image as wide as the room left after the label
+    update idletasks
+    set width [winfo reqwidth $m]
+    foreach {i sub} $fake {
+        set tw [font measure $font [$m entrycget $i -label]]
+        set iw [expr {max(14, $width - $tw - 18)}]
+        $m entryconfigure $i -image [fp_arrow_image $iw] -compound right
+        set ::fakecas($m,$i) $sub
+    }
+    bind $m <<MenuSelect>> {fakecas_select %W}
+}
+proc fakecas_post {m i} {
+    if {![info exists ::fakecas($m,$i)]} return
+    set sub $::fakecas($m,$i)
+    fakecas_unpost $m
+    set x [expr {[winfo rootx $m] + [winfo width $m] - 3}]
+    set y [expr {[winfo rooty $m] + [$m yposition $i]}]
+    $sub post $x $y
+    set ::fakecas_open($m) $sub
+}
+proc fakecas_unpost {m} {
+    if {[info exists ::fakecas_open($m)]} {
+        set sub $::fakecas_open($m)
+        unset ::fakecas_open($m)
+        if {[winfo exists $sub]} { fakecas_unpost $sub; catch {$sub unpost} }
+    }
+}
+proc fakecas_select {m} {
+    set i [$m index active]
+    if {$i eq "none"} return
+    if {[info exists ::fakecas($m,$i)]} {
+        if {![info exists ::fakecas_open($m)] || $::fakecas_open($m) ne $::fakecas($m,$i)} { fakecas_post $m $i }
+    } else {
+        fakecas_unpost $m
+    }
+}
 proc fp_popup {m X Y} {
     popup_close
+    if {[tk windowingsystem] eq "x11"} { flat_cascades $m }
     tk_popup $m $X $Y
     if {[tk windowingsystem] ne "x11" || ![winfo ismapped $m]} return
     catch {grab release $m}
@@ -1428,6 +1496,7 @@ proc popup_close {} {
         }
     }
     set ::fp_popup_tagged {}
+    if {$m ne "" && [winfo exists $m]} { fakecas_unpost $m }
     if {$m ne "" && [winfo exists $m] && [winfo ismapped $m]} {
         catch {tk::MenuUnpost $m}
         catch {$m unpost}
@@ -1437,6 +1506,7 @@ proc popup_close {} {
 set ::fp_popup_eat 0
 proc popup_unpost {} {
     set m $::fp_popup_menu
+    if {$m ne "" && [winfo exists $m]} { fakecas_unpost $m }
     if {$m ne "" && [winfo exists $m] && [winfo ismapped $m]} {
         catch {tk::MenuUnpost $m}
         catch {$m unpost}
