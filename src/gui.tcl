@@ -248,6 +248,8 @@ mcmd .mb.solid "3D Print (STL / 3MF / OBJ)..." 3DPRINT
 mcmd .mb.solid "Import STL / OBJ Model..." STLIN
 .mb.solid add separator
 foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull PRESSPULL} { mcmd .mb.solid $l $c }
+mcmd .mb.solid "Revolved Surface (smooth)" "REVOLVE MO SU"
+mcmd .mb.solid "Revolved Surface Mesh (REVSURF)" REVSURF
 .mb.solid add separator
 foreach {l c} {Union UNION Subtract SUBTRACT Intersect INTERSECT Slice SLICE} { mcmd .mb.solid $l $c }
 .mb.solid add separator

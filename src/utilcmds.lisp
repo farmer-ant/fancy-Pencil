@@ -136,7 +136,7 @@
   (let* ((data (ent-data e)) (type (dxf 0 data)))
     (with-output-to-string (o)
       (format o "~&~20@A      Layer: \"~A\"~%~26TSpace: ~A~%~20THandle = ~(~A~)~%"
-              (if (equal type "POLYFACE") "3DSOLID (mesh)" type) (dxf 8 data)
+              (if (equal type "POLYFACE") (if (dxf :kind data) (format nil "~:@(~A~) (mesh)" (dxf :kind data)) "3DSOLID (mesh)") type) (dxf 8 data)
               (let ((l (entity-space (ename-data e)))) (if l (format nil "Paper space (~A)" l) "Model space"))
               (ename-handle e))
       (when (dxf 62 data) (format o "~26TColor: ~A~%" (color-label (dxf 62 data))))

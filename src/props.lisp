@@ -14,7 +14,7 @@
 (defun type-display-name (type)
   (cond ((equal type "LWPOLYLINE") "Polyline") ((equal type "INSERT") "Block Reference")
         ((equal type "MTEXT") "MText") ((equal type "DIMENSION") "Dimension") ((equal type "LEADER") "Leader")
-        ((equal type "POLYFACE") "3D Solid (mesh)") ((equal type "VIEWPORT") "Viewport")
+        ((equal type "POLYFACE") "3D Solid / Surface (mesh)") ((equal type "VIEWPORT") "Viewport")
         (t (string-capitalize type))))
 
 (defun common-value (sel fn)

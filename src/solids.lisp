@@ -374,7 +374,9 @@ smooth shape."
 
 ;;; ---------- REVOLVE ----------
 
-(defun revolve-mesh (pts closed origin axis angle)
+(defun revolve-mesh (pts closed origin axis angle &key surface)
+  "PTS revolved ANGLE about the line through ORIGIN along AXIS. SURFACE: no flat ends, even for
+a closed shape (a revolved surface rather than a solid)."
   (let* ((full (> (abs angle) (- +2pi+ 1d-9)))
          (steps (max 4 (ceiling (* *solid-segments* (/ (abs angle) +2pi+)))))
          (k (unit3 axis))
@@ -383,16 +385,25 @@ smooth shape."
                                 (mapcar (lambda (p) (v+ (pt3 origin) (rotate-about (v- (pt3 p) (pt3 origin)) k a))) pts))))
          (show (sharp-indices pts closed)))
     (rings-mesh rings :closed-ring closed :closed-path full
-                :cap-start (and closed (not full)) :cap-end (and closed (not full))
+                :cap-start (and closed (not full) (not surface)) :cap-end (and closed (not full) (not surface))
                 :ring-visible (let ((iso (isoline-indices (length rings) 4 full)))
                                 (lambda (i) (or (member i iso) (and (not full) (or (= i 0) (= i (1- (length rings))))))))
                 :long-visible (let ((s (if (or show (not closed)) show (isoline-indices (length pts) 4 t))))
                                 (lambda (j) (member j s))))))
 
+(defvar *revolve-surface* nil "REVOLVE makes surfaces, not solids, from closed shapes (its MOde option).")
+
 (defcmd "REVOLVE" ("REV") "Revolves shapes about an axis to make solids (or surfaces from open shapes)."
   (let ((ents (pick-shapes "Select objects to revolve: ")))
     (when ents
-      (let* ((r (gpoint "Specify axis start point or define axis by [Object/X/Y/Z] <Object>: " :keywords '("Object" "X" "Y" "Z")))
+      (let* ((r (loop
+                  (let ((r (gpoint (format nil "Specify axis start point or define axis by [Object/X/Y/Z/MOde] <Object>: ")
+                                   :keywords '("Object" "X" "Y" "Z" "MOde"))))
+                    (if (equal r "MOde")
+                        (let ((k (gkw (format nil "Closed profiles creation mode [SOlid/SUrface] <~:[Solid~;Surface~]>: " *revolve-surface*)
+                                      '("SOlid" "SUrface") (if *revolve-surface* "SUrface" "SOlid"))))
+                          (setf *revolve-surface* (equal k "SUrface")))
+                        (return r)))))
              (axis (cond ((pointp r)
                           (let ((b (gpoint "Specify axis endpoint: " :base r)))
                             (and (pointp b) (list (pt3 r) (v- (pt3 b) (pt3 r))))))
@@ -409,7 +420,10 @@ smooth shape."
                  (n 0))
             (dolist (e ents)
               (multiple-value-bind (pts closed) (shape-of e)
-                (when (cdr pts) (add (revolve-mesh pts closed (first axis) (second axis) angle)) (incf n))))
+                (when (cdr pts)
+                  (add (let ((m (revolve-mesh pts closed (first axis) (second axis) angle :surface *revolve-surface*)))
+                         (if (or *revolve-surface* (not closed)) (append m (list (cons :kind "Revolved surface"))) m)))
+                  (incf n))))
             (delete-profiles ents)
             (out (format nil "~D object~:P revolved.~%" n))
             (when (gui-p) (gui-regen))))))))
