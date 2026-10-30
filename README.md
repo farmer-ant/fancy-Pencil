@@ -434,6 +434,18 @@ move it (base centre), set the base radius (start point), the height (top centre
 radius. **SWEEP** a small circle along it to make a spring or a thread. Saved in DXF 2000 files as
 AutoCAD's HELIX object (R12 files get short lines along it).
 
+### Revolved surfaces (Solids → Revolved Surface; REVSURF, REVOLVE MOde)
+
+**REVSURF** makes AutoCAD's revolved surface mesh: select the path curve (line, arc, circle,
+polyline, ellipse, spline or helix), then the axis (a line or polyline - it points away from the
+end you pick nearest), the start angle and the included angle (+ counterclockwise, - clockwise,
+360 all round). **SURFTAB1** sets the faces around (default 6) and **SURFTAB2** the faces along a
+curve (default 6); every line of the mesh shows.
+
+**REVOLVE** makes the smooth kind: at its axis prompt, **MOde** chooses **SOlid** (closed shapes
+become solids, the default) or **SUrface** (they become open surfaces, without ends). Open shapes
+always give surfaces. LIST and Properties call them revolved surfaces.
+
 ### 3D printing (File or Solids → 3D Print; 3DPRINT, STLOUT, STLIN)
 
 **3DPRINT** saves the solids you select as a file for a 3D printer's slicer (Cura, PrusaSlicer,
@@ -812,6 +824,7 @@ sbcl --non-interactive --load load.lisp --load tests/test-raster.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-helix.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-print3d.lisp
 sbcl --non-interactive --load load.lisp --load tests/test-input.lisp
+sbcl --non-interactive --load load.lisp --load tests/test-surfaces.lisp
 ```
 
 ## Layout
@@ -831,6 +844,7 @@ src/tiles.lisp     VPORTS: the Model tab split into viewports
 src/draworder.lisp DRAWORDER, TEXTTOFRONT, HATCHTOBACK, text case (TCASE)
 src/massprop.lisp  MASSPROP: area and mass properties of regions and solids
 src/raster.lisp    pictures and PDF pages: IMAGEATTACH, PDFATTACH, the Image Manager (IMAGE)
+src/surfaces.lisp  REVSURF revolved surface meshes (SURFTAB1, SURFTAB2)
 src/imgview.lisp   drawing pictures on the screen: averaged copies, exact resampling, PNG views
 src/history.lisp   the session record: HISTORY window, log files (LOGFILEON / LOGFILEOFF)
 src/helix.lisp     HELIX: springs, thread paths and flat spirals
