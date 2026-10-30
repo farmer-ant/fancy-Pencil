@@ -682,7 +682,7 @@ proc layouttabmenu {i x y} {
     .ltm add command -label "Move Right" -command [list emit MENU "LAYOUTMOVE $i 1"]
     .ltm add separator
     .ltm add command -label "New Layout" -command {emit MENU LAYOUTNEW}
-    tk_popup .ltm $x $y
+    fp_popup .ltm $x $y
 }
 
 bind .cmd.e <Return> {cmdsubmit; break}
@@ -1199,7 +1199,7 @@ proc mted_popup {X Y} {
     $m add separator
     $m add command -label "OK" -command {mted_done ok}
     $m add command -label "Cancel" -command {mted_done cancel}
-    tk_popup $m $X $Y
+    fp_popup $m $X $Y
 }
 proc case_convert {s fn} {
     switch $fn {
@@ -1288,6 +1288,62 @@ proc mted_done {how} {
 }
 
 # right-click menu for the command line
+# Pop up a right-click menu. Tk normally holds a grab while a menu is up, and that grab
+# hides the focus moving to another program (so under Wayland the menu stayed floating over
+# that program). Instead the menu goes up without the grab: losing the focus takes it down,
+# and a click anywhere else in Fancy Pencil takes it down (that click is used for nothing else).
+set ::fp_popup_menu ""
+set ::fp_popup_tagged {}
+proc fp_popup {m X Y} {
+    popup_close
+    tk_popup $m $X $Y
+    if {[tk windowingsystem] ne "x11" || ![winfo ismapped $m]} return
+    catch {grab release $m}
+    set ::fp_popup_menu $m
+    set ::fp_popup_tagged {}
+    set todo [list .]
+    while {[llength $todo]} {
+        set w [lindex $todo 0]; set todo [lrange $todo 1 end]
+        if {[winfo class $w] eq "Menu"} continue
+        bindtags $w [linsert [bindtags $w] 0 FpPopupOff]
+        lappend ::fp_popup_tagged $w
+        foreach c [winfo children $w] { lappend todo $c }
+    }
+    after 100 popup_watch
+}
+proc popup_watch {} {
+    set m $::fp_popup_menu
+    if {$m eq ""} return
+    if {[focus] eq ""} { set ::fp_popup_eat 0; popup_close; return }
+    if {(![winfo exists $m] || ![winfo ismapped $m]) && !$::fp_popup_eat} { popup_close; return }
+    after 100 popup_watch
+}
+proc popup_close {} {
+    set m $::fp_popup_menu
+    set ::fp_popup_menu ""
+    foreach w $::fp_popup_tagged {
+        if {[winfo exists $w]} {
+            set t [bindtags $w]; set i [lsearch -exact $t FpPopupOff]
+            if {$i >= 0} { bindtags $w [lreplace $t $i $i] }
+        }
+    }
+    set ::fp_popup_tagged {}
+    if {$m ne "" && [winfo exists $m] && [winfo ismapped $m]} {
+        catch {tk::MenuUnpost $m}
+        catch {$m unpost}
+    }
+}
+# the click that takes the menu down is eaten, release and all
+set ::fp_popup_eat 0
+proc popup_unpost {} {
+    set m $::fp_popup_menu
+    if {$m ne "" && [winfo exists $m] && [winfo ismapped $m]} {
+        catch {tk::MenuUnpost $m}
+        catch {$m unpost}
+    }
+}
+bind FpPopupOff <ButtonPress> {set ::fp_popup_eat 1; popup_unpost; break}
+bind FpPopupOff <ButtonRelease> {if {$::fp_popup_eat} {set ::fp_popup_eat 0; popup_close}; break}
 proc cmdline_popup {X Y} {
     set m .cmdpop
     catch {destroy $m}
@@ -1315,7 +1371,7 @@ proc cmdline_popup {X Y} {
             $m.recent add command -label $h -command [list apply {{h} {.cmd.e delete 0 end; .cmd.e insert 0 $h; focus .cmd.e}} $h]
         }
     }
-    tk_popup $m $X $Y
+    fp_popup $m $X $Y
 }
 # right-click menu for the command history: copy
 proc hist_popup {X Y} {
@@ -1325,7 +1381,7 @@ proc hist_popup {X Y} {
     $m add command -label "Copy" -command {catch {clipboard clear; clipboard append [.h get sel.first sel.last]}}
     $m add command -label "Copy All" -command {clipboard clear; clipboard append [.h get 1.0 end-1c]}
     $m add command -label "Select All" -command {.h tag add sel 1.0 end}
-    tk_popup $m $X $Y
+    fp_popup $m $X $Y
 }
 
 # ---------------------------------------------------------------- text style dialog (STYLE)
@@ -2587,7 +2643,7 @@ proc ctxmenu_build {m items} {
 }
 proc ctxmenu {X Y items} {
     ctxmenu_build .ctx $items
-    tk_popup .ctx $X $Y
+    fp_popup .ctx $X $Y
 }
 # Shift + right-click while picking a point: one-time object snap
 proc osnapmenu {X Y} {
@@ -2600,7 +2656,7 @@ proc osnapmenu {X Y} {
         if {$word in {INT QUA PER NEA}} { $m add separator }
     }
     $m add command -label "Osnap Settings..." -command {emit MENU 'OSNAP}
-    tk_popup $m $X $Y
+    fp_popup $m $X $Y
 }
 
 # ---------------------------------------------------------------- plot dialog
