@@ -736,6 +736,26 @@ point pairs."
 
 ;;; ---------- whole bodies ----------
 
+(defun whole-surface-triangles (surf tol)
+  "Triangles covering all of a closed surface: a sphere (pole to pole) or a torus."
+  (let* ((r (or (asurf-scale surf) 1d0))
+         (step (* 2 (acos (max -1d0 (min 1d0 (- 1 (/ tol (max r 1d-12))))))))
+         (nu (max 12 (min 192 (ceiling (* 2 pi) step))))
+         (sphere (eq (asurf-kind surf) :sphere))
+         (v0 (if sphere (- (/ pi 2)) 0d0)) (v1 (if sphere (/ pi 2) (* 2 pi)))
+         (nv (max 6 (min 192 (ceiling (- v1 v0) step))))
+         (grid (make-array (list (1+ nu) (1+ nv)))))
+    (dotimes (i (1+ nu))
+      (dotimes (j (1+ nv))
+        (setf (aref grid i j) (funcall (asurf-eval surf) (* 2 pi (/ (mod i nu) nu)) (+ v0 (* (- v1 v0) (/ (if sphere j (mod j nv)) nv)))))))
+    (let ((out nil))
+      (dotimes (i nu out)
+        (dotimes (j nv)
+          (let ((a (aref grid i j)) (b (aref grid (1+ i) j)) (c (aref grid (1+ i) (1+ j))) (e (aref grid i (1+ j))))
+            ;; at a sphere's poles the four corners close up into a triangle
+            (unless (< (dist a b) 1d-12) (push (list a b c) out))
+            (unless (< (dist c e) 1d-12) (push (list a c e) out))))))))
+
 (defun sab-faces ()
   "Every face record of the body (all lumps and shells)."
   (loop for k from 0 below (length *sab*)
@@ -759,7 +779,14 @@ point pairs."
   (let ((*sab* (sab-records bytes)))
     (when (and *sab* (plusp (length *sab*)))
       (let* ((pts (loop for k below (length *sab*) when (equal (rec-name (rec k)) "point") collect (tokv (rec k) 4)))
-             (size (if pts (max 1d-6 (loop for p in pts maximize (dist p (first pts)))) 1d0))
+             (size (if pts
+                       (max 1d-6 (loop for p in pts maximize (dist p (first pts))))
+                       ;; no corners at all (a whole ball or ring): its own size
+                       (or (loop for k below (length *sab*)
+                                 for r = (rec k)
+                                 when (equal (rec-name r) "sphere-surface") return (* 2 (abs (d (tokv r 5))))
+                                 when (equal (rec-name r) "torus-surface") return (* 2 (+ (abs (d (tokv r 6))) (abs (d (tokv r 7))))))
+                           1d0)))
              (*acis-tol* (* size 0.0015))
              (*edge-points* (make-hash-table))
              (tris nil) (edges nil))
@@ -770,6 +797,11 @@ point pairs."
                  ;; a loop that is only a point (the tip of a cone) adds nothing to lay out
                  (loops (remove-if (lambda (l) (< (length (remove-duplicates (segments-points l) :test #'equalp)) 2)) loops))
                  (outlines (mapcar #'segments-points loops)))
+            ;; a face with no edges at all: the whole of a closed surface (a ball, a ring)
+            (unless loops
+              (let ((surf (ignore-errors (surface-of (rec (tokp f 8)) nil))))
+                (when (and surf (member (asurf-kind surf) '(:sphere :torus)))
+                  (setf tris (nconc tris (whole-surface-triangles surf *acis-tol*))))))
             (when loops
               (let ((surf (or (ignore-errors (surface-of (rec (tokp f 8)) outlines)) (flat-asurf outlines))))
                 (multiple-value-bind (ts es) (face-triangles loops surf *acis-tol*)

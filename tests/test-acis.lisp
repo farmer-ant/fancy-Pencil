@@ -40,4 +40,11 @@
 (dxf-export-2000 "/tmp/fp-acis.dxf")
 (dxf-import "/tmp/fp-acis.dxf")
 (chk "saved and read back" (count "POLYFACE" (live-entities) :key #'ent-type :test #'equal) 5)
+;; a whole ball: one face with no edges at all
+(dxf-import (namestring (merge-pathnames "tests/data/acis-ball.dxf" (truename "."))))
+(let ((b (find "POLYFACE" (live-entities) :key #'ent-type :test #'equal)))
+  (chk "ball read" (and b t) t)
+  (when b
+    (chk "ball closed" (check (ename-data b)) '(0 0 0))
+    (chk "ball volume within 2%" (< (abs (- (mesh-volume (ename-data b)) (* 4/3 pi (expt 13.5 3)))) (* 0.02 (* 4/3 pi (expt 13.5 3)))) t)))
 (format t "~%ACIS tests: ~D passed, ~D failed.~%" *pass* *fail*)
