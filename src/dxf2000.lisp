@@ -4,6 +4,9 @@
 (in-package :fancy-pencil)
 
 (defvar *h2000* 0 "Handle counter while writing.")
+(defvar *ml-handles* nil
+  "While writing DXF 2000: a plist of handle lookups for multileaders
+(:style fn name->handle, :ltype fn, :block fn, :arrow fn code->handle, :mlstyle handle).")
 (defun h2 () (format nil "~X" (incf *h2000*)))
 
 (defun dxf-escape (s)
@@ -119,6 +122,7 @@
         ((equal type "HATCH") (common) (write-hatch-body out data))
         ((equal type "DIMENSION") (common) (write-dimension-body out data))
         ((equal type "LEADER") (common) (write-leader-2000 out data))
+        ((equal type "MULTILEADER") (common) (funcall 'write-mleader-2000 out data))
         ((equal type "POLYFACE") (write-mesh-2000 out data handle owner))
         (t nil)))))
 
@@ -191,7 +195,7 @@
 
 (defun %dxf-export-2000 (path)
   (let* ((*h2000* (+ (drawing-next-handle *dwg*) 16))
-         (*image-defs-2000* nil) (image-dict nil) (pdf-dict nil) (raster-vars nil)
+         (*image-defs-2000* nil) (image-dict nil) (pdf-dict nil) (raster-vars nil) (*ml-handles* nil)
          (ext (or (drawing-extents) (list 0d0 0d0 12d0 9d0)))
          (ents (live-entities))
          (all-ents (all-live-entities))
@@ -204,6 +208,9 @@
                                              (loop for b in blocks append (mapcar (lambda (dd) (dxf 6 dd)) (block-def-entities b))))))
                   :test #'string-equal))
          (styles (styles-for-export))
+         (mleaders (funcall 'drawing-has-mleaders-p))
+         (style-hs (make-hash-table :test #'equalp)) (ltype-hs (make-hash-table :test #'equalp))
+         (h-mlsd (and mleaders (h2))) (h-mls (and mleaders (h2)))
          ;; fixed handles for tables and objects
          (h-vport-t (h2)) (h-ltype-t (h2)) (h-layer-t (h2)) (h-style-t (h2)) (h-view-t (h2)) (h-ucs-t (h2))
          (h-appid-t (h2)) (h-dimstyle-t (h2)) (h-br-t (h2))
@@ -225,7 +232,7 @@
          (h-ms-xdict (and sort-keys (h2))) (h-sortents (and sort-keys (h2)))
          (block-brs (mapcar (lambda (b) (cons b (h2))) blocks))
          ;; arrowhead blocks the dimension styles point to (unless the drawing already has them)
-         (arrow-blocks (loop for code in (arrow-codes-in-use)
+         (arrow-blocks (loop for code in (union (arrow-codes-in-use) (funcall 'mleader-arrow-codes) :test #'string=)
                              for name = (arrow-block-name code)
                              when (and name (not (find-block name)))
                                collect (list name (arrow-block-entities code) (h2))))
@@ -269,13 +276,14 @@
       (w out 0 "ENDSEC")
       (w out 0 "SECTION") (w out 2 "CLASSES")
       (when (funcall 'drawing-has-images-p) (funcall 'write-image-classes-2000 out))
+      (when mleaders (funcall 'write-mleader-classes-2000 out))
       (w out 0 "ENDSEC")
       ;; TABLES
       (w out 0 "SECTION") (w out 2 "TABLES")
       (flet ((table (name h n) (w out 0 "TABLE") (w out 2 name) (w out 5 h) (w out 330 "0")
                (w out 100 "AcDbSymbolTable") (w out 70 n))
-             (rec (type owner sub) (w out 0 type) (w out 5 (h2)) (w out 330 owner)
-               (w out 100 "AcDbSymbolTableRecord") (w out 100 sub)))
+             (rec (type owner sub) (let ((h (h2))) (w out 0 type) (w out 5 h) (w out 330 owner)
+                                     (w out 100 "AcDbSymbolTableRecord") (w out 100 sub) h)))
         ;; the Model tab's view, or one *ACTIVE record per viewport when it is split (VPORTS)
         (let ((recs (funcall 'tile-dxf-records)))
           (table "VPORT" h-vport-t (length recs))
@@ -293,11 +301,11 @@
         (w out 0 "ENDTAB")
         (table "LTYPE" h-ltype-t (+ 3 (length ltypes)))
         (dolist (n '("ByBlock" "ByLayer" "Continuous"))
-          (rec "LTYPE" h-ltype-t "AcDbLinetypeTableRecord")
+          (setf (gethash n ltype-hs) (rec "LTYPE" h-ltype-t "AcDbLinetypeTableRecord"))
           (w out 2 n) (w out 70 0) (w out 3 (if (string= n "Continuous") "Solid line" "")) (w out 72 65) (w out 73 0) (w out 40 0d0))
         (dolist (n ltypes)
           (let* ((lt (or (find-ltype n) (library-linetype n))) (pat (and lt (ltype-pattern lt))))
-            (rec "LTYPE" h-ltype-t "AcDbLinetypeTableRecord")
+            (setf (gethash n ltype-hs) (rec "LTYPE" h-ltype-t "AcDbLinetypeTableRecord"))
             (w out 2 n) (w out 70 0) (w out 3 (if lt (ltype-desc lt) n)) (w out 72 65) (w out 73 (length pat))
             (w out 40 (d (reduce #'+ (mapcar #'abs pat))))
             (dolist (x pat) (w out 49 (d x)) (w out 74 0))))
@@ -315,7 +323,7 @@
         (w out 0 "ENDTAB")
         (table "STYLE" h-style-t (length styles))
         (dolist (st styles)
-          (rec "STYLE" h-style-t "AcDbTextStyleTableRecord")
+          (setf (gethash (textstyle-name st) style-hs) (rec "STYLE" h-style-t "AcDbTextStyleTableRecord"))
           (w out 2 (textstyle-name st)) (w out 70 0) (w out 40 (d (textstyle-height st))) (w out 41 (d (textstyle-width st)))
           (w out 50 (d (* (textstyle-oblique st) (/ 180 pi)))) (w out 71 (style-gen-flags st)) (w out 42 0.2d0)
           (w out 3 (style-font-file st)) (w out 4 (textstyle-bigfont st))
@@ -353,6 +361,13 @@
           (dolist (ab arrow-blocks) (br (first ab) (third ab))))
         (w out 0 "ENDTAB"))
       (w out 0 "ENDSEC")
+      ;; multileaders point at text styles, linetypes, blocks and arrowheads by handle
+      (setf *ml-handles*
+            (list :style (lambda (n) (or (gethash n style-hs) (gethash "Standard" style-hs)))
+                  :ltype (lambda (n) (gethash n ltype-hs))
+                  :block (lambda (n) (cdr (find n block-brs :key (lambda (bb) (block-def-name (car bb))) :test #'string-equal)))
+                  :arrow arrow-handle
+                  :mlstyle h-mls))
       ;; BLOCKS
       (w out 0 "SECTION") (w out 2 "BLOCKS")
       (flet ((block-begin (name br base flags)
@@ -398,7 +413,13 @@
       (when image-dict (w out 3 "ACAD_IMAGE_DICT") (w out 350 image-dict))
       (when raster-vars (w out 3 "ACAD_IMAGE_VARS") (w out 350 raster-vars))
       (when pdf-dict (w out 3 "ACAD_PDFDEFINITIONS") (w out 350 pdf-dict))
+      (when mleaders (w out 3 "ACAD_MLEADERSTYLE") (w out 350 h-mlsd))
       (w out 0 "DICTIONARY") (w out 5 h-group) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
+      (when mleaders
+        (w out 0 "DICTIONARY") (w out 5 h-mlsd) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
+        (w out 3 "Standard") (w out 350 h-mls)
+        (funcall 'write-mleaderstyle-2000 out h-mls h-mlsd (gethash "ByBlock" ltype-hs)
+                 (or (gethash "Standard" style-hs) (and styles (gethash (textstyle-name (first styles)) style-hs)))))
       (w out 0 "ACDBDICTIONARYWDFLT") (w out 5 h-psn) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
       (w out 3 "Normal") (w out 350 h-placeholder) (w out 100 "AcDbDictionaryWithDefault") (w out 340 h-placeholder)
       (w out 0 "ACDBPLACEHOLDER") (w out 5 h-placeholder) (w out 330 h-psn)

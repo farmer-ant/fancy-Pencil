@@ -85,6 +85,8 @@
                                     (if (= (logand (or (dxf 70 data) 0) 7) 2) (fmt-ang (dxf 42 data)) (fmt-len (dxf 42 data)))
                                     "-"))
          (add "Style  ~A" (or (dxf 3 data) "Standard")))
+        ((equal type "MULTILEADER") (add "Multileader")
+         (let ((tx (funcall 'ml data :text))) (when (plusp (length (or tx ""))) (add "~A" (text-string-display tx)))))
         ((equal type "LEADER") (add "Leader") (add "Style  ~A" (or (dxf 3 data) "Standard")))
         ((equal type "INSERT")
          (add "Block  ~A" (dxf 2 data))
