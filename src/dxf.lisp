@@ -208,6 +208,9 @@
                               out))))
            (when (and groups (equal (cdr (first (first groups))) "SEQEND")) (pop groups)))
           ((equal type "3DFACE") (push (with-src-handle (mesh-from-3dface (convert-in g)) g) out))
+          ((equal type "MULTILEADER")
+           (let ((m (ignore-errors (funcall 'mleader-from-dxf g))))
+             (push (with-src-handle (or m (convert-in g)) g) out)))
           ((equal type "HELIX") (let ((hx (funcall 'helix-from-dxf g))) (when hx (push (with-src-handle hx g) out))))
           ;; solids, surfaces and regions: their ACIS shape as a mesh (kept as they were if unreadable)
           ((member type *acis-types* :test #'equal)
@@ -267,6 +270,7 @@
                  (lambda (a b) (or (< (first a) (first b))
                                    (and (= (first a) (first b)) (< (second a) (second b))))))))))
 
+(defvar *dxf-tables* nil "While reading a DXF: its table records (for looking up handles).")
 (defvar *import-skipped* nil "Object types the last DXF import could not keep: ((type . count) ...).")
 
 (defun block-record-name (tables handle)
@@ -283,6 +287,7 @@
   (let* ((pairs (dxf-pairs (read-file-lines path)))
          (*acis-data* (progn (setf *acis-converted* 0) (funcall 'acds-data (section-pairs pairs "ACDSDATA"))))
          (tables (split-entities (section-pairs pairs "TABLES")))
+         (*dxf-tables* tables)
          (blocks (split-entities (section-pairs pairs "BLOCKS")))
          (ents (split-entities (section-pairs pairs "ENTITIES")))
          (objects (split-entities (section-pairs pairs "OBJECTS")))
@@ -396,8 +401,9 @@
       (if (and data
                (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
                                       "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT"
-                                      "IMAGE" "HELIX")
-                       :test #'equal))
+                                      "IMAGE" "HELIX" "MULTILEADER")
+                       :test #'equal)
+               (or (not (equal (dxf 0 data) "MULTILEADER")) (assoc :ml data)))
           (progn
             (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
               (let ((name (block-record-name tables (dxf :ldr-blk-handle data))))
@@ -473,6 +479,9 @@
                do (write-entity out (list (cons 0 "TEXT") (cons 8 (dxf 8 data))
                                           (cons 10 (polar p (- rot (/ +pi+ 2)) (* i h 1.6d0)))
                                           (cons 40 h) (cons 1 line) (cons 50 rot))))))
+      ((equal type "MULTILEADER")                           ; no R12 equivalent: its lines, arrows and note
+       (dolist (sub (funcall 'mleader-display-entities data))
+         (write-entity out (if (assoc 62 data) (append (rem-dxf 62 sub) (list (assoc 62 data))) sub))))
       ((equal type "LEADER")                                ; no R12 equivalent: its lines and arrowhead
        (dolist (sub (leader-display-entities data))
          (write-entity out (append (rem-dxf 62 (rem-dxf 8 sub)) (list (cons 8 (or (dxf 8 data) "0")))

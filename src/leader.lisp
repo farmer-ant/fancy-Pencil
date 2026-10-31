@@ -172,7 +172,7 @@ The note sits to the right of the last point when the leader runs rightward, els
 (defun leader-status ()
   (out (format nil "Leader: ~:[straight~;spline~], ~:[no arrowhead~;arrowhead~].~%" *leader-spline* *leader-arrow*)))
 
-(defcmd "LEADER" ("LE" "LEAD" "QLEADER" "QL" "MLEADER" "MLD")
+(defcmd "LEADER" ("LE" "LEAD" "QLEADER" "QL")
     "Creates a leader: an arrow and a straight or spline line pointing at a note."
   (leader-status)
   (let ((start (gpoint "Specify leader start point (arrow tip) or [Spline/STraight/Arrow/None]: "

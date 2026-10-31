@@ -68,9 +68,9 @@ Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT u
 ### What survives opening an AutoCAD drawing
 
 Dimensions keep the appearance AutoCAD saved with them (and are only redrawn by Fancy Pencil when you
-edit one); leaders (callout arrows) are kept and editable; draw order ("Send to Back") is honoured; hatches
+edit one); leaders and multileaders (callout arrows) are kept and editable; draw order ("Send to Back") is honoured; hatches
 keep their island style and full-circle boundaries. Not yet supported: raster images, PDF/DWF/DGN
-underlays, regions, 3D solids, tables, multileaders and paper-space layouts. When a drawing contains
+underlays, regions, 3D solids, tables and paper-space layouts. When a drawing contains
 any of these, opening it says so, and saving over that file asks first.
 
 ### Several drawings at once
@@ -282,6 +282,16 @@ dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LE
 * For the next leaders you draw: type `DIMASZ` and enter a size (or `DIMSCALE` for arrow and
   text together). Each new leader keeps that size, as an override on that leader only.
 * For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
+
+### Multileaders (MLEADER, alias MLD)
+
+Multileaders are AutoCAD's newer callouts (AutoCAD 2008 and later): the arrow, its line, the short
+landing and the note are one object. Type MLEADER, click the arrowhead, then where the landing goes,
+and type the note. Drawings from AutoCAD show their multileaders as AutoCAD does: every leader
+line and arrowhead (open, dot, tick ... arrows included), the landing, and the note or block.
+They move, copy, rotate, scale and mirror as one object, EXPLODE breaks one into its lines,
+arrowheads and note (MTEXT), and LIST describes it. They are saved as MULTILEADER objects, so
+AutoCAD opens them as multileaders again (a DXF R12 copy gets their lines and note instead).
 
 ### Grid
 
