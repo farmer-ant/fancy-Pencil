@@ -1126,6 +1126,15 @@ proc mted_families {} {
     }
     return $::mt_families
 }
+proc mted_box_colors {color} {
+    set lum 1.0
+    catch {
+        lassign [winfo rgb . $color] r g b
+        set lum [expr {(0.299 * $r + 0.587 * $g + 0.114 * $b) / 65535.0}]
+    }
+    if {$lum < 0.45} { return {"#f3f5f8" "#101418"} }
+    return {"#171c23" "#ffffff"}
+}
 proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     lassign $opts style font bold italic underline height k styles
     if {$k eq "" || $k <= 0} { set k 1; set height $fpx }
@@ -1139,7 +1148,9 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     catch {destroy $f}
     frame $f -background $::accent -borderwidth 0
     set t $f.t
-    text $t -font $font -foreground $color -background "#171c23" -insertbackground "#ffffff" \
+    # the box behind the text: light behind dark text (black on a light drawing), dark behind light
+    lassign [mted_box_colors $color] boxbg caret
+    text $t -font $font -foreground $color -background $boxbg -insertbackground $caret \
         -insertwidth 2 -relief flat -borderwidth 0 -highlightthickness 0 -padx 3 -pady 1 \
         -undo 1 -selectbackground $::accent -wrap [expr {$mode eq "mtext" && $width > 0 ? "word" : "none"}]
     $t tag configure all -justify $justify
