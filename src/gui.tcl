@@ -987,6 +987,12 @@ proc setgrread {v} { set ::grread $v }
 # items: list of {id label modified}; current: id of the active drawing
 # File > Recent Files. items: list of {name folder}, most recent first
 proc setrecent {items} {
+    # their folders are offered under Recent in the file chooser
+    set ::fd_recent {}
+    foreach it $items {
+        set dd [string trimright [lindex $it 1] /]
+        if {$dd ne "" && [lsearch -exact $::fd_recent $dd] < 0} { lappend ::fd_recent $dd }
+    }
     set m .mb.file.recent
     $m delete 0 end
     if {[llength $items] == 0} {
@@ -3124,18 +3130,20 @@ proc spelldlg {word context suggestions dictname} {
 proc spl_done {act} { set ::spl(result) $act; destroy .spl }
 
 # ---------------------------------------------------------------- file dialog
-# Uses the desktop's own file chooser when one is available (zenity = GNOME/GTK, kdialog = KDE),
-# so the sidebar shows Home, Recent, bookmarks and every mounted drive. Falls back to Tk's dialog.
+# Fancy Pencil's own file chooser (fpfiledlg, below): being part of the program it always opens in
+# front of the drawing. The desktop's chooser (zenity, kdialog) is used only when asked for with
+# FANCYPENCIL_FILEDIALOG=zenity (or kdialog): it is a separate program, and Ubuntu often opens it
+# behind Fancy Pencil. FANCYPENCIL_FILEDIALOG=tk gives Tk's plain dialog.
 set ::lastdir [pwd]
-set ::filedlg_tool ""
-if {[auto_execok zenity] ne ""} {
-    set ::filedlg_tool zenity
-    set ::zenity_major 4
-    catch { regexp {^(\d+)} [exec zenity --version 2>/dev/null] -> ::zenity_major }
-} elseif {[auto_execok kdialog] ne ""} {
-    set ::filedlg_tool kdialog
+set ::fd_recent {}
+set ::filedlg_tool fp
+set ::zenity_major 4
+if {[info exists env(FANCYPENCIL_FILEDIALOG)]} {
+    set ::filedlg_tool $env(FANCYPENCIL_FILEDIALOG)
+    if {$::filedlg_tool eq "zenity"} {
+        catch { regexp {^(\d+)} [exec zenity --version 2>/dev/null] -> ::zenity_major }
+    }
 }
-if {[info exists env(FANCYPENCIL_FILEDIALOG)]} { set ::filedlg_tool $env(FANCYPENCIL_FILEDIALOG) }
 
 proc run_external_dialog {cmd {title ""}} {
     # run the chooser without blocking Tk, so the drawing keeps repainting behind it
@@ -3241,7 +3249,9 @@ proc filedlg {save title initial exts} {
                      [file join $dir $name] [join $kf "\n"]]
         if {[catch {set r [run_external_dialog $cmd $title]}]} { set tool tk }
     }
-    if {$tool ne "zenity" && $tool ne "kdialog"} {
+    if {$tool eq "fp"} {
+        set r [fpfiledlg $save $title $dir $name $types $ext]
+    } elseif {$tool ne "zenity" && $tool ne "kdialog"} {
         if {$save} {
             set r [tk_getSaveFile -parent . -title $title -initialdir $dir -initialfile $name \
                        -filetypes $types -defaultextension .$ext]
@@ -3255,6 +3265,213 @@ proc filedlg {save title initial exts} {
     }
     focus .cmd.e
     return $r
+}
+
+# ---- Fancy Pencil's file chooser
+# Places down the left (home folders, drives, recent folders), the folder's contents on the
+# right (folders first), a type filter and the file name below. Returns the path or "".
+proc fd_places {} {
+    set home $::env(HOME)
+    set out [list [list "Home" $home]]
+    foreach {lbl sub} {Desktop Desktop Documents Documents Downloads Downloads Pictures Pictures} {
+        if {[file isdirectory [file join $home $sub]]} { lappend out [list $lbl [file join $home $sub]] }
+    }
+    set user [file tail $home]
+    catch { set user $::tcl_platform(user) }
+    set drives {}
+    foreach root [list /run/media/$user /media/$user /mnt] {
+        foreach d [lsort -dictionary [glob -nocomplain -type d -directory $root *]] {
+            lappend drives [list [file tail $d] $d]
+        }
+    }
+    if {[llength $drives]} {
+        lappend out [list "-" "Drives"]
+        set out [concat $out $drives]
+    }
+    lappend out [list "Computer" /]
+    set rec {}
+    foreach d $::fd_recent { if {[file isdirectory $d]} { lappend rec [list [file tail $d] $d] } }
+    if {[llength $rec]} {
+        lappend out [list "-" "Recent folders"]
+        set out [concat $out [lrange $rec 0 7]]
+    }
+    return $out
+}
+proc fd_size {n} {
+    if {$n < 1024} { return "$n bytes" }
+    if {$n < 1048576} { return "[format %.0f [expr {$n / 1024.0}]] KB" }
+    return "[format %.1f [expr {$n / 1048576.0}]] MB"
+}
+proc fd_load {dir} {
+    set w .fd
+    if {![file isdirectory $dir]} return
+    set dir [file normalize $dir]
+    set ::fd(dir) $dir
+    $w.top.path delete 0 end; $w.top.path insert 0 $dir
+    set t $w.main.list
+    $t delete [$t children {}]
+    set pats [lindex $::fd(types) [lsearch -exact [lmap x $::fd(types) {lindex $x 0}] $::fd(type)] 1]
+    set dirs {}; set files {}
+    foreach f [glob -nocomplain -directory $dir *] {
+        set n [file tail $f]
+        if {[file isdirectory $f]} { lappend dirs $n; continue }
+        set ok [expr {$pats eq "*" || $pats eq ""}]
+        foreach e $pats { if {$e eq "*" || [string equal -nocase [file extension $n] $e]} { set ok 1; break } }
+        if {$ok} { lappend files $n }
+    }
+    foreach n [lsort -dictionary $dirs] {
+        $t insert {} end -id "D:$n" -text "  $n" -values [list "Folder" ""] -tags dir
+    }
+    foreach n [lsort -dictionary $files] {
+        set f [file join $dir $n]
+        set sz ""; set mt ""
+        catch { set sz [fd_size [file size $f]] }
+        catch { set mt [clock format [file mtime $f] -format "%Y-%m-%d %H:%M"] }
+        $t insert {} end -id "F:$n" -text "  $n" -values [list $sz $mt] -tags file
+    }
+    # the place it is in, highlighted on the left
+    set pl $w.side.list
+    $pl selection clear 0 end
+    set i 0
+    foreach p $::fd(places) {
+        if {[lindex $p 0] ne "-" && [lindex $p 1] eq $dir} { $pl selection set $i }
+        incr i
+    }
+}
+proc fd_place_pick {} {
+    set i [.fd.side.list curselection]
+    if {$i eq ""} return
+    set p [lindex $::fd(places) $i]
+    if {[lindex $p 0] eq "-"} { .fd.side.list selection clear $i; return }
+    fd_load [lindex $p 1]
+}
+proc fd_select {} {
+    set t .fd.main.list
+    set id [lindex [$t selection] 0]
+    if {[string match "F:*" $id]} {
+        .fd.bot.name delete 0 end; .fd.bot.name insert 0 [string range $id 2 end]
+    }
+}
+proc fd_activate {} {
+    set t .fd.main.list
+    set id [lindex [$t selection] 0]
+    if {[string match "D:*" $id]} { fd_load [file join $::fd(dir) [string range $id 2 end]]; return }
+    if {[string match "F:*" $id]} { fd_ok }
+}
+proc fd_up {} { fd_load [file dirname $::fd(dir)] }
+proc fd_path_enter {} {
+    set p [string trim [.fd.top.path get]]
+    if {[string match "~*" $p]} { set p [file join $::env(HOME) [string range $p 2 end]] }
+    if {[file isdirectory $p]} { fd_load $p; return }
+    if {[file isfile $p] && !$::fd(save)} { set ::fd(result) [file normalize $p]; destroy .fd; return }
+    bell
+}
+proc fd_ok {} {
+    set n [string trim [.fd.bot.name get]]
+    if {$n eq ""} {
+        set id [lindex [.fd.main.list selection] 0]
+        if {[string match "D:*" $id]} { fd_load [file join $::fd(dir) [string range $id 2 end]] }
+        return
+    }
+    set f [expr {[file pathtype $n] eq "absolute" ? $n : [file join $::fd(dir) $n]}]
+    if {[file isdirectory $f]} { fd_load $f; .fd.bot.name delete 0 end; return }
+    if {$::fd(save)} {
+        if {[file extension $f] eq ""} { append f .$::fd(ext) }
+        if {[file exists $f]} {
+            set a [tk_messageBox -parent .fd -icon warning -type yesno -default no -title "Replace file?" \
+                       -message "[file tail $f] already exists.\nReplace it?"]
+            if {$a ne "yes"} return
+        }
+        if {![file isdirectory [file dirname $f]]} { bell; return }
+    } elseif {![file isfile $f]} {
+        tk_messageBox -parent .fd -icon info -title "Fancy Pencil" -message "[file tail $f] isn't in this folder."
+        return
+    }
+    set ::fd(result) [file normalize $f]
+    destroy .fd
+}
+proc fpfiledlg {save title dir name types ext} {
+    set w .fd
+    catch {destroy $w}
+    set ::fd(result) ""
+    set ::fd(save) $save
+    set ::fd(ext) $ext
+    set ::fd(types) $types
+    set ::fd(type) [lindex $types 0 0]
+    set ::fd(places) [fd_places]
+    toplevel $w -background $::panel
+    wm title $w $title
+    wm transient $w [dlg_owner $w]
+    wm minsize $w 620 380
+    set gw 820; set gh 520
+    wm geometry $w ${gw}x${gh}+[expr {max(0, [winfo rootx .] + ([winfo width .] - $gw) / 2)}]+[expr {max(0, [winfo rooty .] + ([winfo height .] - $gh) / 3)}]
+    # path bar
+    ttk::frame $w.top -padding {8 8 8 4}
+    ttk::button $w.top.up -text "Up" -width 4 -command fd_up
+    ttk::entry $w.top.path
+    pack $w.top.up -side left -padx {0 6}
+    pack $w.top.path -side left -fill x -expand 1
+    bind $w.top.path <Return> {fd_path_enter; break}
+    # places
+    ttk::frame $w.side -padding {8 4 4 4}
+    listbox $w.side.list -width 22 -activestyle none -exportselection 0 -borderwidth 0 -highlightthickness 0 \
+        -background $::panel2 -foreground $::fg -selectbackground $::accent -selectforeground white \
+        -font TkDefaultFont
+    set i 0
+    foreach p $::fd(places) {
+        if {[lindex $p 0] eq "-"} {
+            $w.side.list insert end " [lindex $p 1]"
+            $w.side.list itemconfigure $i -foreground $::dim -selectbackground $::panel2 -selectforeground $::dim
+        } else {
+            $w.side.list insert end "   [lindex $p 0]"
+        }
+        incr i
+    }
+    pack $w.side.list -fill both -expand 1
+    bind $w.side.list <<ListboxSelect>> fd_place_pick
+    # contents
+    ttk::frame $w.main -padding {4 4 8 4}
+    ttk::treeview $w.main.list -columns {size mod} -selectmode browse -yscrollcommand [list $w.main.sb set]
+    $w.main.list heading #0 -text "Name" -anchor w
+    $w.main.list heading size -text "Size" -anchor w
+    $w.main.list heading mod -text "Modified" -anchor w
+    $w.main.list column #0 -width 380 -stretch 1
+    $w.main.list column size -width 90 -stretch 0
+    $w.main.list column mod -width 130 -stretch 0
+    $w.main.list tag configure dir -foreground "#9cc7ff"
+    ttk::scrollbar $w.main.sb -orient vertical -command [list $w.main.list yview]
+    pack $w.main.sb -side right -fill y
+    pack $w.main.list -side left -fill both -expand 1
+    bind $w.main.list <<TreeviewSelect>> fd_select
+    bind $w.main.list <Double-1> {fd_activate}
+    bind $w.main.list <Return> {fd_activate; break}
+    bind $w.main.list <BackSpace> {fd_up}
+    # name, type and buttons
+    ttk::frame $w.bot -padding {8 4 8 8}
+    ttk::label $w.bot.nl -text "File name:"
+    ttk::entry $w.bot.name
+    ttk::label $w.bot.tl -text "Type:"
+    ttk::combobox $w.bot.type -state readonly -values [lmap x $types {lindex $x 0}] -textvariable ::fd(type) -width 28
+    ttk::button $w.bot.ok -text [expr {$save ? "Save" : "Open"}] -command fd_ok
+    ttk::button $w.bot.cancel -text "Cancel" -command {destroy .fd}
+    grid $w.bot.nl $w.bot.name $w.bot.ok -sticky ew -pady 2 -padx 3
+    grid $w.bot.tl $w.bot.type $w.bot.cancel -sticky ew -pady 2 -padx 3
+    grid configure $w.bot.nl $w.bot.tl -sticky w
+    grid columnconfigure $w.bot 1 -weight 1
+    bind $w.bot.type <<ComboboxSelected>> {fd_load $::fd(dir)}
+    bind $w.bot.name <Return> {fd_ok; break}
+    bind $w <Escape> {destroy .fd; break}
+    pack $w.top -side top -fill x
+    pack $w.bot -side bottom -fill x
+    pack $w.side -side left -fill y
+    pack $w.main -side left -fill both -expand 1
+    $w.bot.name insert 0 $name
+    if {![file isdirectory $dir]} { set dir $::env(HOME) }
+    fd_load $dir
+    safegrab $w
+    if {$save} { focus $w.bot.name; $w.bot.name selection range 0 end } else { focus $w.main.list }
+    tkwait window $w
+    return $::fd(result)
 }
 
 # ---------------------------------------------------------------- layer dialog
