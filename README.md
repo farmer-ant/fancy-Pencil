@@ -26,9 +26,12 @@ Nothing else is needed: no Quicklisp, no libraries. The GUI is Tk, driven over a
 If `wish` isn't on your PATH, set `FANCYPENCIL_WISH=/path/to/wish`.
 When started from the app launcher, error messages go to `~/.cache/fancypencil.log`.
 
-Open/Save dialogs use your desktop's own file chooser (`zenity` on GNOME/Ubuntu, `kdialog` on KDE),
-so every mounted drive, bookmark and Recent is in the sidebar. Without either, Tk's simpler dialog is
-used (`sudo apt install zenity` to get the full one). Set `FANCYPENCIL_FILEDIALOG=tk` to force Tk's.
+Open/Save dialogs use Fancy Pencil's own file chooser, which always opens in front of the drawing:
+your home folders, every mounted drive and your recent folders down the left, the folder's files
+(with size and date) on the right, and a type filter. Type a path in the bar at the top and press
+Enter to go straight there. (The desktop's chooser can be had with `FANCYPENCIL_FILEDIALOG=zenity`
+or `kdialog`, but it is a separate program and Ubuntu often opens it behind Fancy Pencil;
+`FANCYPENCIL_FILEDIALOG=tk` gives Tk's plain dialog.)
 
 ### Add it to the application launcher
 
