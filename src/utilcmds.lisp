@@ -573,18 +573,36 @@
   "Write F as DWG through ODA File Converter (keeping the previous file as .bak); without it, save
 a DXF next to it instead and leave the DWG untouched."
   (if (eq (find-dwg-converter) :oda)
-      (let* ((tmp (concatenate 'string (temp-dir "out") "drawing.dxf")))
+      (let* ((old-name (drawing-filename *dwg*))
+             (tmp (concatenate 'string (temp-dir "out") "drawing.dxf"))
+             (pieces nil))
         (dxf-export-2000 tmp)
+        ;; writing the temporary DXF names the drawing after it: put its own name back
+        (setf (drawing-filename *dwg*) old-name)
         (when (probe-file f)
           (copy-file f (make-pathname :type "bak" :defaults (pathname f))))
         (multiple-value-bind (ok msg) (dxf->dwg tmp f)
+          ;; refused: try again with the multileaders written as their lines and notes
+          (when (and (not ok) (funcall 'drawing-has-mleaders-p))
+            (let ((tmp2 (concatenate 'string (temp-dir "out") "drawing.dxf")))
+              (let ((*mleaders-as-pieces* t)) (dxf-export-2000 tmp2))
+              (setf (drawing-filename *dwg*) old-name)
+              (when (dxf->dwg tmp2 f) (setf ok t pieces t))))
           (if ok
               (progn (setf (drawing-filename *dwg*) (namestring f)
                            (drawing-saved-modcount *dwg*) (drawing-modcount *dwg*))
                      (note-recent f)
-                     (out (format nil "Saved ~A (AutoCAD 2018 DWG)~%" f)))
+                     (out (format nil "Saved ~A (AutoCAD 2018 DWG)~%" f))
+                     (when pieces
+                       (tell-user (format nil "~A is saved. The DWG converter refused this drawing's multileaders, ~
+                                               so they were saved as plain leader lines, arrowheads and notes (MTEXT): ~
+                                               everything shows the same, but in AutoCAD they are no longer single multileaders.~%~%~
+                                               A DXF save keeps them as multileaders."
+                                          (file-namestring f)))))
               (progn (setf (drawing-saved-modcount *dwg*) -1)
-                     (tell-user msg)))))
+                     (tell-user (format nil "~A was NOT saved.~%~%~A~%~%Your drawing is still open and unchanged in Fancy Pencil: ~
+                                             use Save As and choose a .dxf name to keep your work."
+                                        (file-namestring f) msg))))))
       (let ((dxf (namestring (make-pathname :type "dxf" :defaults (pathname f)))))
         (if (and (gui-p) (not (from-lisp-p)))
             ;; let the person pick (and confirm overwriting) the DXF name
@@ -614,6 +632,13 @@ a DXF next to it instead and leave the DWG untouched."
                (let ((n (dxf-import dxf)))
                  (setf (drawing-filename *dwg*) (namestring (truename f)))
                  (after-open f n)
+                 ;; an AutoCAD backup (.bak): saving makes "<name> recovered.dwg" beside it
+                 (unless (dwg-name-p f)
+                   (let ((nf (namestring (make-pathname :name (format nil "~A recovered" (pathname-name (pathname f)))
+                                                        :type "dwg" :defaults (pathname f)))))
+                     (setf (drawing-filename *dwg*) nf)
+                     (out (format nil "~A is a backup copy of a DWG drawing; saving it makes ~A.~%"
+                                  (file-namestring f) (file-namestring nf)))))
                  (out (format nil "(converted from DWG with ~A)~%"
                               (if (eq (find-dwg-converter) :oda) "ODA File Converter" "LibreDWG")))
                  (when (zerop n)
