@@ -4,6 +4,8 @@
 (in-package :fancy-pencil)
 
 (defvar *h2000* 0 "Handle counter while writing.")
+(defvar *mleaders-as-pieces* nil
+  "When true, multileaders are written as their lines, arrowheads and notes (a fallback for converters that refuse them).")
 (defvar *ml-handles* nil
   "While writing DXF 2000: a plist of handle lookups for multileaders
 (:style fn name->handle, :ltype fn, :block fn, :arrow fn code->handle, :mlstyle handle).")
@@ -122,6 +124,9 @@
         ((equal type "HATCH") (common) (write-hatch-body out data))
         ((equal type "DIMENSION") (common) (write-dimension-body out data))
         ((equal type "LEADER") (common) (write-leader-2000 out data))
+        ((and (equal type "MULTILEADER") *mleaders-as-pieces*)
+         (loop for sub in (explode-data data) for i from 0
+               do (write-entity-2000 out sub owner (if (= i 0) handle (h2)))))
         ((equal type "MULTILEADER") (common) (funcall 'write-mleader-2000 out data))
         ((equal type "POLYFACE") (write-mesh-2000 out data handle owner))
         (t nil)))))
@@ -208,7 +213,7 @@
                                              (loop for b in blocks append (mapcar (lambda (dd) (dxf 6 dd)) (block-def-entities b))))))
                   :test #'string-equal))
          (styles (styles-for-export))
-         (mleaders (funcall 'drawing-has-mleaders-p))
+         (mleaders (and (not *mleaders-as-pieces*) (funcall 'drawing-has-mleaders-p)))
          (style-hs (make-hash-table :test #'equalp)) (ltype-hs (make-hash-table :test #'equalp))
          (h-mlsd (and mleaders (h2))) (h-mls (and mleaders (h2)))
          ;; fixed handles for tables and objects

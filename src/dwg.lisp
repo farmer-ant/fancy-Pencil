@@ -104,7 +104,18 @@ To save .dwg, install ODA File Converter (free from opendesign.com):~%    sudo a
             (let ((out (concatenate 'string outd "drawing.dwg")))
               (if (probe-file out)
                   (progn (copy-file out dwg) t)
-                  (values nil (format nil "ODA File Converter could not write the DWG (exit ~A).~%~A" code (last-lines text 6))))))))))
+                  ;; ODA leaves its reasons in a .err file next to the output
+                  (let ((err (format nil "~{~A~^~%~}"
+                                     (loop for e in (append (directory (concatenate 'string outd "*.err"))
+                                                            (directory (concatenate 'string in "*.err")))
+                                           collect (last-lines (ignore-errors (read-text-file e)) 12)))))
+                    (format *error-output* "~&DWG save failed (exit ~A):~%~A~%~A~%" code text err)
+                    (values nil (format nil "ODA File Converter could not write the DWG (exit ~A).~%~A~@[~%~A~]"
+                                        code (last-lines text 6) (and (plusp (length err)) err)))))))))))
+
+(defun read-text-file (path)
+  (with-open-file (s path :external-format :latin-1)
+    (let ((str (make-string (file-length s)))) (subseq str 0 (read-sequence str s)))))
 
 (defun copy-file (from to)
   (with-open-file (i from :element-type '(unsigned-byte 8))
