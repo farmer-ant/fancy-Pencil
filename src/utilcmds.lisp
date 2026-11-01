@@ -561,13 +561,55 @@
                                                       (file-namestring f) (skipped-summary (drawing-skipped *dwg*)))))
             (setf f (ask-file t "Save Drawing As" (drawing-filename *dwg*) "dxf dwg")))
           (out (format nil "Note: ~A had ~A that are not kept.~%" (file-namestring f) (skipped-summary (drawing-skipped *dwg*))))))
+    ;; a name ending in something other than .dxf or .dwg (a slip such as .dFX): saved as .dxf
+    (when f (setf f (drawing-save-name f)))
+    ;; a folder that can't be written to (a read-only drive or backup folder): say so, offer another
+    (loop while (and f (not (folder-writable-p f)))
+          do (let ((msg (format nil "Fancy Pencil can't save in this folder:~%~A~%~%The folder doesn't allow ~
+                                     writing (it may be on a read-only drive or a backup folder owned by ~
+                                     another user). Choose another folder, such as your Documents."
+                                (directory-namestring (pathname f)))))
+               (if (and (gui-p) (not (from-lisp-p)))
+                   (progn (tell-user msg)
+                          (setf f (ask-file t "Save Drawing As" (namestring (merge-pathnames (file-namestring f) (user-documents-dir)))
+                                            "dxf dwg"))
+                          (when f (setf f (drawing-save-name f))))
+                   (progn (tell-user msg) (setf f nil)))))
     (when f
-      (if (dwg-name-p f)
-          (save-as-dwg f)
-          (let ((f (ensure-ext f "dxf")))
-            (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
-            (note-recent f)
-            (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000"))))))))
+      (handler-case
+          (if (dwg-name-p f)
+              (save-as-dwg f)
+              (progn
+                (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
+                (note-recent f)
+                (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000")))))
+        (file-error (c)
+          (setf (drawing-saved-modcount *dwg*) -1)
+          (tell-user (format nil "~A was NOT saved: ~A~%~%Your drawing is still open in Fancy Pencil. ~
+                                  Use Save As to save it somewhere else." (file-namestring f) (cl-error-text c))))))))
+
+(defun drawing-save-name (f)
+  "F with .dxf added, or put in place of an ending that is neither .dxf nor .dwg (any case)."
+  (let ((ty (pathname-type (pathname f))))
+    (cond ((null ty) (concatenate 'string f ".dxf"))
+          ((member ty '("dxf" "dwg") :test #'string-equal) f)
+          (t (let ((nf (namestring (make-pathname :type "dxf" :defaults (pathname f)))))
+               (out (format nil "\".~A\" isn't a drawing file ending; saving as ~A.~%" ty (file-namestring nf)))
+               nf)))))
+
+(defun folder-writable-p (f)
+  "True when a file can be made in F's folder."
+  (let ((probe (format nil "~A.fancypencil-write-test-~D" (directory-namestring (pathname f)) (random 1000000))))
+    (handler-case
+        (progn (with-open-file (o probe :direction :output :if-exists :supersede) (write-char #\x o))
+               (delete-file probe)
+               t)
+      (error () nil))))
+
+(defun user-documents-dir ()
+  (let* ((home (concatenate 'string (string-right-trim "/" (or (getenv "HOME") "/tmp")) "/"))
+         (docs (concatenate 'string home "Documents/")))
+    (if (probe-file docs) docs home)))
 
 (defun save-as-dwg (f)
   "Write F as DWG through ODA File Converter (keeping the previous file as .bak); without it, save
