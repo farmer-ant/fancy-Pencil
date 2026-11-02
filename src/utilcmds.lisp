@@ -739,7 +739,8 @@ a DXF next to it instead and leave the DWG untouched."
                       Saving keeps them as meshes: AutoCAD will show them, but not edit them as solids.~%"
                  *acis-converted*)))
   (when (fboundp 'tiles-after-open) (funcall 'tiles-after-open))
-  (when (gui-p) (zoom-extents) (gui-sync))
+  ;; the view it had when last closed, else the whole drawing
+  (when (gui-p) (unless (restore-drawing-view f) (zoom-extents)) (gui-sync))
   (when *import-skipped*
     (tell-user (format nil "~A also contains ~A, which Fancy Pencil can't show or keep yet.~%~%~
                             The file itself is unchanged. Saving over it would leave these out, so use ~
@@ -936,7 +937,9 @@ a DXF next to it instead and leave the DWG untouched."
 
 (defvar *quit-requested* nil)
 (defcmd "QUIT" ("EXIT") "Exits the program (offering to save each changed drawing)."
-  (when (quit-all-docs) (setf *quit-requested* t)))
+  (when (quit-all-docs)
+    (when (gui-p) (dolist (d (copy-list (symbol-value '*docs*))) (unless (doc-block-edit d) (ignore-errors (remember-doc-view d)))))
+    (setf *quit-requested* t)))
 
 ;;; ---------- AutoLISP: entity access ----------
 

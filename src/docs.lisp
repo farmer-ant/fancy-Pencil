@@ -165,6 +165,7 @@
   "CLOSE: offer to save, then close. Returns NIL if cancelled."
   (when (ask-save-changes)
     (let ((d (current-doc)))
+      (unless (doc-block-edit d) (ignore-errors (remember-drawing-view)))
       (out (format nil "Closed ~A.~%" (doc-name d)))
       (remove-doc d (and (doc-block-edit d) (first (doc-block-edit d)))))
     t))

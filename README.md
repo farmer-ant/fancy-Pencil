@@ -76,6 +76,14 @@ keep their island style and full-circle boundaries. Not yet supported: raster im
 underlays, regions, 3D solids, tables and paper-space layouts. When a drawing contains
 any of these, opening it says so, and saving over that file asks first.
 
+### Each drawing opens where you left it
+
+When you close a drawing (its tab, or Fancy Pencil), its view is remembered: where you were zoomed
+and panned, which tab (Model or a layout) was showing, and any 3D view. The next time you open
+that file it comes back the same way; a drawing opened for the first time shows all of it. The
+views are kept in `~/.config/fancypencil/views.lisp` (the last 300 drawings), not in the drawing,
+so this works for DWG files, read-only folders and drawings closed without saving.
+
 ### Several drawings at once
 
 Every drawing opens in its own tab above the drawing area, as in AutoCAD. OPEN and NEW add a tab
