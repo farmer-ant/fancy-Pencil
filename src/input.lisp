@@ -305,12 +305,35 @@
         (dolist (e near-ents)
           (when (member (ent-type e) '("TEXT" "MTEXT" "INSERT") :test #'equal)
             (add (pt3 (text-insertion (ent-data e))) 64))))
+      ;; the middle of a polygon, rectangle or other closed polyline (AutoCAD's geometric center)
+      (when (logtest bits 4)
+        (dolist (e near-ents)
+          (let ((c (closed-poly-center (ent-data e))))
+            (when (and c (or (<= (dist2d c p) tol)
+                             (some (lambda (pc) (<= (piece-dist pc p) tol)) (snap-pieces e))))
+              (push (cons c 4) cands)))))
       ;; solids and circles in other planes: centres and quadrants of their round shapes
       (when (fboundp 'round-snap-candidates)
         (dolist (e near-ents)
           (when (member (ent-type e) '("POLYFACE" "CIRCLE" "ARC") :test #'equal)
             (setf cands (append (funcall 'round-snap-candidates e p bits tol (lambda (w) (pt (px w) (py w)))) cands))))))
     cands))
+
+(defun closed-poly-center (data)
+  "The geometric center (centroid of the area) of a closed LWPOLYLINE in the drawing plane, or NIL."
+  (when (and (equal (dxf 0 data) "LWPOLYLINE") (logtest 1 (or (dxf 70 data) 0)) (not (offplane-p data)))
+    (let* ((vs (loop for p in data when (and (consp p) (eql (car p) 10)) collect (pt3 (cdr p))))
+           (n (length vs)))
+      (when (>= n 3)
+        (let ((a 0d0) (cx 0d0) (cy 0d0) (z (pz (first vs))))
+          (loop for (p q) on (append vs (list (first vs))) while q
+                do (let ((cr (- (* (px p) (py q)) (* (px q) (py p)))))
+                     (incf a cr)
+                     (incf cx (* (+ (px p) (px q)) cr))
+                     (incf cy (* (+ (py p) (py q)) cr))))
+          (if (> (abs a) 1d-12)
+              (pt (/ cx (* 3 a)) (/ cy (* 3 a)) z)
+              (pt (/ (reduce #'+ vs :key #'px) n) (/ (reduce #'+ vs :key #'py) n) z)))))))
 
 (defun find-osnap (p &optional base (bits nil) (tol (aperture-world)))
   "Best snap near P: (values point bit) or NIL."

@@ -26,4 +26,17 @@
 (alisp-eval-string "(command \"rectang\" '(2 3) '(11 8.5))")
 (chk "(command) RECTANG absolute" (mapcar #'xy (mapcar #'car (lwpoly-vertices (ename-data (car (last (live-entities)))))))
      '((2 3) (11 3) (11 8.5d0) (2 8.5d0)))
+;; Center snap: the middle of polygons, rectangles and other closed polylines
+(alisp-eval-string "(command \"erase\" (ssget \"x\") \"\")")
+(alisp-eval-string "(command \"polygon\" 6 '(10 10) \"i\" 5)")
+(alisp-eval-string "(command \"rectang\" '(30 0) '(40 6))")
+(alisp-eval-string "(command \"pline\" '(50 0) '(60 0) '(50 9) \"c\")")
+(flet ((snap (x y) (multiple-value-bind (q b) (find-osnap (pt x y) nil 4 0.3)
+                     (list (and q (list (/ (round (* 100 (px q))) 100) (/ (round (* 100 (py q))) 100))) b))))
+  (chk "hexagon: on an edge, its center" (snap 8.93 5.87) '((10 10) 4))
+  (chk "hexagon: near its center" (snap 10.1 10.1) '((10 10) 4))
+  (chk "hexagon: inside but away from both, nothing" (snap 12 9) '(nil nil))
+  (chk "rectangle: its center" (snap 35 6.1) '((35 3) 4))
+  (chk "triangle: its centroid" (snap 55 0.1) (list (list (/ (round (* 100 (/ 160 3))) 100) 3) 4)))
+
 (format t "~%Typed point tests: ~D passed, ~D failed.~%" *pass* *fail*)
