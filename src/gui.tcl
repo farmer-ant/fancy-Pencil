@@ -124,6 +124,9 @@ proc menu_watch {} {
     after 400 menu_watch
 }
 after 1000 menu_watch
+# about once a minute Fancy Pencil checks whether a drawing needs a safety copy (SAVETIME)
+proc autosave_tick {} { emit AUTOSAVE; after 60000 autosave_tick }
+after 60000 autosave_tick
 
 foreach {name label} {file File edit Edit view View layout Layout draw Draw solid Solids dim Dimension modify Modify format Format tools Tools express Express window Window help Help} {
     menu .mb.$name
@@ -137,6 +140,7 @@ mcmd .mb.file "Close" CLOSE Ctrl+F4
 mcmd .mb.file "Close All" CLOSEALL
 mcmd .mb.file "Save" QSAVE Ctrl+S
 mcmd .mb.file "Save As..." SAVEAS
+mcmd .mb.file "Recover Safety Copies..." DRAWINGRECOVERY
 mcmd .mb.file "Plot..." PLOT Ctrl+P
 .mb.file add separator
 mcmd .mb.file "Import DXF..." DXFIN

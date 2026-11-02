@@ -189,6 +189,8 @@ AutoCAD menu macros: \"MVIEW 4 Standard\" answers two prompts)."
   ;; every drawing named on the command line opens in its own tab
   (dolist (f (append (and file (list file)) files)) (open-in-tab f))
   (when (gui-p) (refresh-tabs t))
+  ;; safety copies left by a crash: offer them back
+  (when (gui-p) (ignore-errors (funcall 'offer-recovery)))
   (install-startup-functions)
   (dolist (f lisp-files) (run-lisp-file f))
   (setf *quit-requested* nil)
