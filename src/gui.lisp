@@ -1182,6 +1182,7 @@ several), else the current layer. Only shows it; the current layer is not change
                                 (funcall 'history-action (if sp (subseq r 0 sp) r) (and sp (subseq r (1+ sp)))))
                               t)
       ((string= ty "A") t)
+      ((string= ty "AUTOSAVE") (ignore-errors (funcall 'autosave-tick)) t)
       ((string= ty "H") (destructuring-bind (x y) (event-ints ev) (handle-rollover x y)) t)
       ((string= ty "TCLERR") (out (format nil "; window error: ~A~%" (event-rest ev))) t)
       ((string= ty "PALETTE") (setf *palette-shown* (string= (event-rest ev) "1")) (refresh-palette) t)

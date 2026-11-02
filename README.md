@@ -76,6 +76,19 @@ keep their island style and full-circle boundaries. Not yet supported: raster im
 underlays, regions, 3D solids, tables and paper-space layouts. When a drawing contains
 any of these, opening it says so, and saving over that file asks first.
 
+### Safety copies (automatic save) and recovery
+
+Every 10 minutes, each open drawing with unsaved changes is copied to
+`~/.local/share/fancypencil/autosave/`. Your own file is not touched, and nothing is copied while a
+drawing has no changes. The copies are deleted when you save or close normally, so any left behind
+mean Fancy Pencil stopped unexpectedly (crash, power cut, forced quit): the next start lists them
+and offers to open them. A recovered drawing opens under its own name, marked as changed, so Save
+puts it back where it belongs. File > Recover Safety Copies (DRAWINGRECOVERY) opens or deletes them
+any time. Type `SAVETIME` to change the minutes between copies (0 turns them off).
+
+Saving over a drawing also keeps the version it replaces as a `.bak` file beside it (rename it to
+.dxf or .dwg to open it; Fancy Pencil also opens .bak files directly).
+
 ### Each drawing opens where you left it
 
 When you close a drawing (its tab, or Fancy Pencil), its view is remembered: where you were zoomed

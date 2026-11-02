@@ -580,9 +580,14 @@
           (if (dwg-name-p f)
               (save-as-dwg f)
               (progn
+                ;; the version being replaced is kept as .bak (as AutoCAD does)
+                (when (probe-file f)
+                  (ignore-errors (copy-file f (make-pathname :type "bak" :defaults (pathname f)))))
                 (if (eq fmt :r12) (dxf-export f) (dxf-export-2000 f))
                 (note-recent f)
                 (out (format nil "Saved ~A (~A DXF)~%" f (if (eq fmt :r12) "R12" "AutoCAD 2000")))))
+        (:no-error (&rest r) (declare (ignore r))
+          (unless (drawing-modified-p) (ignore-errors (funcall 'autosave-forget (current-doc)))))
         (file-error (c)
           (setf (drawing-saved-modcount *dwg*) -1)
           (tell-user (format nil "~A was NOT saved: ~A~%~%Your drawing is still open in Fancy Pencil. ~
@@ -939,6 +944,7 @@ a DXF next to it instead and leave the DWG untouched."
 (defcmd "QUIT" ("EXIT") "Exits the program (offering to save each changed drawing)."
   (when (quit-all-docs)
     (when (gui-p) (dolist (d (copy-list (symbol-value '*docs*))) (unless (doc-block-edit d) (ignore-errors (remember-doc-view d)))))
+    (ignore-errors (funcall 'autosave-forget-all))
     (setf *quit-requested* t)))
 
 ;;; ---------- AutoLISP: entity access ----------

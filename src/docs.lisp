@@ -21,7 +21,7 @@
 
 (defparameter *app-sysvars*
   '("OSMODE" "ORTHOMODE" "SNAPMODE" "GRIDMODE" "PICKBOX" "APERTURE" "FILEDIA" "CMDECHO" "PICKFIRST"
-    "HIGHLIGHT" "LWDISPLAY" "SAVEFORMAT" "GRIPS" "POLARMODE" "AUTOSNAP" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS" "DYNMODE" "DYNPROMPT" "POLARANG" "POLARADDANG")
+    "HIGHLIGHT" "LWDISPLAY" "SAVEFORMAT" "GRIPS" "POLARMODE" "AUTOSNAP" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS" "DYNMODE" "DYNPROMPT" "SAVETIME" "POLARANG" "POLARADDANG")
   "Settings that belong to the program rather than to one drawing: they carry over between tabs.")
 
 (defun app-sysvar-values ()
@@ -166,6 +166,7 @@
   (when (ask-save-changes)
     (let ((d (current-doc)))
       (unless (doc-block-edit d) (ignore-errors (remember-drawing-view)))
+      (ignore-errors (funcall 'autosave-forget d))
       (out (format nil "Closed ~A.~%" (doc-name d)))
       (remove-doc d (and (doc-block-edit d) (first (doc-block-edit d)))))
     t))
