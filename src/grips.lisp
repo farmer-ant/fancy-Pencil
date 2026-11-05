@@ -62,6 +62,9 @@
                  (let ((b (entity-pieces-bbox data)))
                    (and b (list (cons (pt (/ (+ (first b) (third b)) 2) (/ (+ (second b) (fourth b)) 2)) :move)))))
                 ((equal type "HELIX") (funcall 'helix-grips data))
+                ;; a fit spline: grips on the points it passes through
+                ((and (equal type "SPLINE") (funcall 'spline-fit-points data))
+                 (loop for f in (funcall 'spline-fit-points data) for i from 0 collect (cons f (list :fit i))))
                 ((member type '("SPLINE" "LEADER") :test #'equal)
                  (loop for p in data for i from 0
                        when (and (consp p) (eql (car p) 10)) collect (cons (pt3 (cdr p)) (list :ctrl i))))
@@ -125,9 +128,16 @@
               (k (/ h (d (or (dxf 41 data) h)))))
          (set-dxf 45 (* (d (or (dxf 45 data) (dxf 41 data) h)) k)
                   (set-dxf 41 h (set-dxf 40 w (set-dxf 10 (pt (/ (+ (px to) (px opp)) 2) (/ (+ (py to) (py opp)) 2) 0) data))))))
+      ((and (consp id) (eq (first id) :fit))
+       ;; a fit point moved: the spline is fitted again through the new points
+       (let ((fit (funcall 'spline-fit-points data)))
+         (setf (nth (second id) fit) (pt3 to))
+         (funcall 'refit-spline data fit)))
       ((and (consp id) (eq (first id) :ctrl))
        (let ((target (second id)))
-         (loop for p in data for j from 0 collect (if (= j target) (cons 10 (pt3 to)) p))))
+         ;; a control vertex moved: the curve no longer passes through its fit points (AutoCAD drops them)
+         (remove-if (lambda (p) (and (consp p) (member (car p) '(11 12 13))))
+                    (loop for p in data for j from 0 collect (if (= j target) (cons 10 (pt3 to)) p)))))
       (t data))))
 
 (defun pickfirst-grips ()

@@ -307,6 +307,22 @@ dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LE
   text together). Each new leader keeps that size, as an override on that leader only.
 * For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
 
+### Splines (SPLINE, alias SPL)
+
+Draw > Spline, or SPLINE: pick points and press Enter. As in AutoCAD 2012 and later:
+
+* **Method Fit** (the default): the curve passes through every point picked. **Knots** sets how the
+  points are spaced along it: Chord (by distance), Square root, or Uniform. **start Tangency** /
+  **end Tangency** set the direction it leaves the first point and reaches the last; **Close** joins
+  it smoothly back to the start; **Undo** takes back the last point; **toLerance** is kept for AutoCAD.
+* **Method CV**: the points are control vertices; the curve is pulled toward them. **Degree** 1 to 10
+  (3 to start with).
+* **Object**: turns polylines into splines through their vertices.
+
+A fit spline's grips are its fit points: dragging one reshapes the curve through the new point. A
+CV spline's grips are its control vertices. Splines move, copy, rotate, scale, mirror and offset
+like other objects and are saved as AutoCAD SPLINE objects.
+
 ### QuickCalc and CAL (Ctrl+8)
 
 Tools > QuickCalc (QUICKCALC, QC or Ctrl+8) opens a calculator beside the drawing. Type an
