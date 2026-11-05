@@ -381,7 +381,8 @@
     (when replace (funcall 'import-tiles tables))
     ;; layouts (paper space): their names, sheets and the block records that own their objects
     (let ((space-of (funcall 'import-layouts objects tables replace))
-          (image-defs (funcall 'image-defs-from-objects objects)))
+          (image-defs (funcall 'image-defs-from-objects objects))
+          (underlay-defs (funcall 'underlay-defs-from-objects objects)))
      (dolist (data (append (mapcar (lambda (x) (rem-dxf :src-handle x))
                                    (apply-draw-order (convert-entity-list ents) (sortents-map objects tables)))
                            paper-blocks))
@@ -394,6 +395,14 @@
               (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
                 (if c (incf (cdr c)) (push (cons (dxf 0 data) 1) *import-skipped*))
                 (setf data nil)))))
+      ;; DWF and DGN underlays: linked through DWFDEFINITION / DGNDEFINITION objects
+      (when (member (dxf 0 data) '("DWFUNDERLAY" "DGNUNDERLAY") :test #'equal)
+        (let ((u (funcall 'underlay-from-dxf data underlay-defs (directory-namestring (pathname path)))))
+          (if u
+              (setf data (append u (let ((p (assoc :paper data))) (and p (list p)))))
+              (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
+                (if c (incf (cdr c)) (push (cons (dxf 0 data) 1) *import-skipped*))
+                (setf data nil)))))
       (let ((owner (dxf :paper data)))
         (setf data (rem-dxf :paper data))
         (when (and owner (equal (dxf 0 data) "VIEWPORT")) (setf data (funcall 'vp-from-dxf data)))
@@ -401,7 +410,7 @@
       (if (and data
                (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
                                       "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT"
-                                      "IMAGE" "HELIX" "MULTILEADER")
+                                      "IMAGE" "HELIX" "MULTILEADER" "UNDERLAY")
                        :test #'equal)
                (or (not (equal (dxf 0 data) "MULTILEADER")) (assoc :ml data)))
           (progn
@@ -451,6 +460,7 @@
     (cond
       ((equal type "POLYFACE") (write-mesh-r12 out data))
       ((equal type "IMAGE") nil)              ; R12 has no pictures
+      ((equal type "UNDERLAY") nil)           ; nor underlays
       ((equal type "HELIX")                   ; R12 has no helix: short lines along it
        (dolist (pc (data-pieces data))
          (write-entity out (append (list (cons 0 "LINE") (cons 8 (or (dxf 8 data) "0")) (cons 10 (second pc)) (cons 11 (third pc)))

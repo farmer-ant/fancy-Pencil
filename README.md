@@ -307,6 +307,23 @@ dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LE
   text together). Each new leader keeps that size, as an override on that leader only.
 * For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
 
+### DWF and DGN underlays (DWFATTACH, DGNATTACH)
+
+File > Attach DWF / DWFx... and Attach DGN (MicroStation)... place another file's drawing in this
+one as an underlay, as AutoCAD's DWFATTACH and DGNATTACH do: pick the insertion point, scale and
+rotation. It shows inside its frame, is picked by its frame, and moves, scales and rotates as one
+object; it is saved as a DWFUNDERLAY / DGNUNDERLAY, so AutoCAD shows it too, and the underlays in
+AutoCAD drawings come in the same way. What can be shown:
+
+* **DWFx** (AutoCAD 2009 and later): its lines, curves and text, in inches of the sheet.
+* **DGN V7** (MicroStation up to V7): lines, line strings, shapes, arcs, ellipses and text, in the
+  file's master units, in its colours.
+* **Classic DWF** (version 6) and **DGN V8** (MicroStation V8 and later) are closed binary formats:
+  the underlay keeps its place and file and shows its frame and file name.
+
+Pictures (IMAGEATTACH: PNG, JPEG, TIFF, GIF, BMP) and PDF pages (PDFATTACH) are attached the same
+way; see the Image Manager.
+
 ### Multileaders (MLEADER, alias MLD)
 
 Multileaders are AutoCAD's newer callouts (AutoCAD 2008 and later): the arrow, its line, the short
