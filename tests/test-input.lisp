@@ -61,4 +61,22 @@
 (alisp-eval-string "(command \"trim\" \"\" '(-1 6) '(-6 4) \"\")")
 (chk "TRIM crossing box, every object an edge" (hlines) '((0 5 15)))
 
+;; Hatch Edit: offered in the right-click menu for a selected hatch, and works on the selection
+(alisp-eval-string "(command \"erase\" (ssget \"x\") \"\")")
+(alisp-eval-string "(command \"rectang\" '(0 0) '(10 10))")
+(alisp-eval-string "(command \"hatch\" \"p\" \"ansi31\" 1 0 \"s\" (entlast) \"\" \"\")")
+(alisp-eval-string "(command \"rectang\" '(20 0) '(30 10))")
+(alisp-eval-string "(command \"hatch\" \"p\" \"ansi31\" 1 0 \"s\" (entlast) \"\" \"\")")
+(flet ((hatches () (remove-if-not (lambda (e) (equal (ent-type e) "HATCH")) (live-entities)))
+       (offered () (and (find "Hatch Edit..." (command-context-items) :key (lambda (it) (and (consp it) (first it))) :test #'equal) t)))
+  (setf *pickfirst* (list (find "LWPOLYLINE" (live-entities) :key #'ent-type :test #'equal)))
+  (chk "right-click on a rectangle: no Hatch Edit" (offered) nil)
+  (setf *pickfirst* (hatches))
+  (chk "right-click on hatches: Hatch Edit offered" (offered) t)
+  (alisp-eval-string "(command \"hatchedit\" \"ansi37\" 2 45)")
+  (chk "HATCHEDIT changes the selected hatches" (mapcar (lambda (e) (list (dxf 2 (ename-data e)) (dxf 41 (ename-data e)))) (hatches))
+       '(("ANSI37" 2d0) ("ANSI37" 2d0)))
+  (alisp-eval-string "(command \"hatchedit\" (entlast) \"ansi31\" 1 0)")
+  (chk "or the one picked" (mapcar (lambda (e) (dxf 2 (ename-data e))) (hatches)) '("ANSI37" "ANSI31")))
+
 (format t "~%Typed point tests: ~D passed, ~D failed.~%" *pass* *fail*)
