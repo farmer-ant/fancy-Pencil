@@ -411,6 +411,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
        (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
          (loop for (a b) on (append c (list (first c))) while b collect (list :seg (pt3 a) (pt3 b)))))
       ((equal type "IMAGE") (funcall 'image-pieces data))
+      ((equal type "UNDERLAY") (funcall 'underlay-pieces data))
       ((equal type "HELIX") (funcall 'helix-pieces data))   ; a picture: its frame
       ((equal type "VIEWPORT")                ; a layout's window onto model space: its border
        (let* ((c (pt3 (dxf 10 data))) (hw (/ (d (or (dxf 40 data) 1)) 2)) (hh (/ (d (or (dxf 41 data) 1)) 2))
@@ -590,6 +591,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
       ((equal type "SPLINE") (map-points data '(10 11 12 13) fp))
       ((equal type "LEADER") (xform-leader data xf))
       ((equal type "MULTILEADER") (funcall 'xform-mleader data xf))
+      ((equal type "UNDERLAY") (funcall 'xform-underlay data xf))
       (t (map-points data '(10 11) fp)))))
 
 ;;; ---------- explode ----------

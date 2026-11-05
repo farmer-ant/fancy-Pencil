@@ -51,6 +51,7 @@
            (thick () (let ((th (dxf 39 data))) (when (and (realp th) (/= th 0)) (w out 39 (d th))))))
       (cond
         ((equal type "IMAGE") (funcall 'write-image-entity-2000 out data0 owner handle))
+        ((equal type "UNDERLAY") (funcall 'write-underlay-2000 out data0 owner handle))
         ((equal type "HELIX") (funcall 'write-helix-2000 out data0 handle owner))
         ((equal type "LINE")
          (common) (w out 100 "AcDbLine") (thick) (wp out 10 (pt3 (dxf 10 data))) (wp out 11 (pt3 (dxf 11 data))))
@@ -197,10 +198,12 @@
           (cons 177 (v :dimclre 0)) (cons 178 (v :dimclrt 0)))))
 
 (defvar *image-defs-2000*)
+(defvar *underlay-defs-2000* nil "While writing: (kind file sheet handle) per underlay file and sheet.")
 
 (defun %dxf-export-2000 (path)
   (let* ((*h2000* (+ (drawing-next-handle *dwg*) 16))
-         (*image-defs-2000* nil) (image-dict nil) (pdf-dict nil) (raster-vars nil) (*ml-handles* nil)
+         (*image-defs-2000* nil) (image-dict nil) (pdf-dict nil) (raster-vars nil)
+         (*underlay-defs-2000* nil) (dwf-dict nil) (dgn-dict nil) (*ml-handles* nil)
          (ext (or (drawing-extents) (list 0d0 0d0 12d0 9d0)))
          (ents (live-entities))
          (all-ents (all-live-entities))
@@ -281,6 +284,7 @@
       (w out 0 "ENDSEC")
       (w out 0 "SECTION") (w out 2 "CLASSES")
       (when (funcall 'drawing-has-images-p) (funcall 'write-image-classes-2000 out))
+      (when (funcall 'drawing-has-underlays-p) (funcall 'write-underlay-classes-2000 out))
       (when mleaders (funcall 'write-mleader-classes-2000 out))
       (w out 0 "ENDSEC")
       ;; TABLES
@@ -410,6 +414,7 @@
       (w out 0 "ENDSEC")
       ;; OBJECTS
       (multiple-value-setq (image-dict pdf-dict raster-vars) (funcall 'image-dict-entries-2000))
+      (multiple-value-setq (dwf-dict dgn-dict) (funcall 'underlay-dict-entries-2000))
       (w out 0 "SECTION") (w out 2 "OBJECTS")
       (w out 0 "DICTIONARY") (w out 5 h-root) (w out 330 "0") (w out 100 "AcDbDictionary") (w out 281 1)
       (w out 3 "ACAD_GROUP") (w out 350 h-group)
@@ -418,6 +423,8 @@
       (when image-dict (w out 3 "ACAD_IMAGE_DICT") (w out 350 image-dict))
       (when raster-vars (w out 3 "ACAD_IMAGE_VARS") (w out 350 raster-vars))
       (when pdf-dict (w out 3 "ACAD_PDFDEFINITIONS") (w out 350 pdf-dict))
+      (when dwf-dict (w out 3 "ACAD_DWFDEFINITIONS") (w out 350 dwf-dict))
+      (when dgn-dict (w out 3 "ACAD_DGNDEFINITIONS") (w out 350 dgn-dict))
       (when mleaders (w out 3 "ACAD_MLEADERSTYLE") (w out 350 h-mlsd))
       (w out 0 "DICTIONARY") (w out 5 h-group) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
       (when mleaders
@@ -443,6 +450,7 @@
       (loop for ly in lays for tab from 1
             do (write-layout-object out (third ly) h-layout-dict (layout-name (first ly)) tab (second ly) nil (first ly)))
       (funcall 'write-image-objects-2000 out h-root image-dict pdf-dict raster-vars)
+      (funcall 'write-underlay-objects-2000 out h-root dwf-dict dgn-dict)
       (w out 0 "ENDSEC")
       (w out 0 "EOF"))
     ;; patch $HANDSEED now that all handles are known

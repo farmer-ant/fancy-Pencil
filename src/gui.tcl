@@ -146,6 +146,8 @@ mcmd .mb.file "Plot..." PLOT Ctrl+P
 mcmd .mb.file "Import DXF..." DXFIN
 mcmd .mb.file "Attach Image (JPEG, TIFF, PNG)..." IMAGEATTACH
 mcmd .mb.file "Attach PDF Page..." PDFATTACH
+mcmd .mb.file "Attach DWF / DWFx..." DWFATTACH
+mcmd .mb.file "Attach DGN (MicroStation)..." DGNATTACH
 mcmd .mb.file "Image Manager..." IMAGE
 .mb.file add separator
 mcmd .mb.file "3D Print: Save STL / 3MF / OBJ..." 3DPRINT
@@ -3235,7 +3237,7 @@ proc filedlg {save title initial exts} {
     if {[llength $exts] > 1} {
         set globs {}; set tglobs {}
         foreach e $exts { lappend globs *.$e *.[string toupper $e]; lappend tglobs .$e .[string toupper $e] }
-        set lab [expr {[lsearch $exts dxf] >= 0 && [lsearch $exts stl] >= 0 ? "Drawings and 3D models" : [lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : ([lsearch $exts stl] >= 0 ? "3D models" : "Files"))}]
+        set lab [expr {[lsearch $exts dxf] >= 0 && [lsearch $exts stl] >= 0 ? "Drawings and 3D models" : [lsearch $exts dxf] >= 0 || [lsearch $exts dwg] >= 0 ? "Drawings" : ([lsearch $exts pdf] >= 0 || [lsearch $exts png] >= 0 ? "Pictures and PDFs" : ([lsearch $exts stl] >= 0 ? "3D models" : ([lsearch $exts dwf] >= 0 ? "DWF files" : ([lsearch $exts dgn] >= 0 ? "MicroStation DGN files" : "Files"))))}]
         lappend zf --file-filter "$lab ([join [lmap e $exts {string toupper $e}] ", "]) | [join $globs " "]"
         lappend kf "[join $globs " "]|$lab"
         lappend types [list $lab $tglobs]
