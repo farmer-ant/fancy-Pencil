@@ -359,6 +359,39 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
                (let ((ents (select-objects :prompt "Select objects to erase: ")))
                  (push (take-snapshot) undo)
                  (dolist (e ents) (delete-entity e))))
+              ((and (consp r) (null (sel-entity r)) (pointp (sel-point r)))
+               ;; empty space: a window (left to right, blue) or crossing (right to left, green) box;
+               ;; every object it catches is trimmed or extended as if picked at its part in the box
+               (let* ((p1 (sel-point r))
+                      (p2 (get-user-input :corner :base p1 :prompt "Specify opposite corner: "
+                                                  :drag (window-selection-drag p1) :nosnap t)))
+                 (when (pointp p2)
+                   (let* ((ents (entities-in-window p1 p2 (< (px p2) (px p1))))
+                          (snap (take-snapshot)) (n 0))
+                     (dolist (e (remove-if (lambda (e) (member e edges)) ents))
+                       (when (ent-live-p e)
+                         (let ((pick (entity-point-in-box e p1 p2)))
+                           (when pick
+                             (when (eq (if trimming
+                                           (trim-entity e pick (cutting-pieces edges e))
+                                           (extend-entity e pick (cutting-pieces edges e)))
+                                       :done)
+                               (incf n))))))
+                     ;; objects that are cutting edges themselves are trimmed too, when nothing else was
+                     (when (zerop n)
+                       (dolist (e (remove-if-not (lambda (e) (member e edges)) ents))
+                         (when (ent-live-p e)
+                           (let ((pick (entity-point-in-box e p1 p2)))
+                             (when (and pick (eq (if trimming
+                                                     (trim-entity e pick (cutting-pieces edges e))
+                                                     (extend-entity e pick (cutting-pieces edges e)))
+                                                 :done))
+                               (incf n))))))
+                     (if (plusp n)
+                         (progn (push snap undo)
+                                (setf edges (remove-if-not #'ent-live-p (append edges (live-entities-after snap))))
+                                (out (format nil "~D object~:P ~A.~%" n (if trimming "trimmed" "extended"))))
+                         (out (format nil "~:[No objects in the box~;Nothing in the box meets an edge~].~%" ents)))))))
               ((consp r)
                (let* ((pick (sel-point r)) (e (sel-entity r)))
                  (if (null e) (out (format nil "No object found.~%"))
@@ -371,6 +404,32 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
                           (setf edges (remove-if-not #'ent-live-p (append edges (live-entities-after snap)))))
                          (:no-intersection (out (format nil "Object does not intersect an edge.~%")))
                          (t (out (format nil "Cannot ~A this object.~%" (if trimming "trim" "extend"))))))))))))))
+
+(defun entity-point-in-box (e p1 p2)
+  "A point on E inside the box P1-P2: the middle of E's longest stretch inside it, or NIL."
+  (let* ((x0 (min (px p1) (px p2))) (x1 (max (px p1) (px p2)))
+         (y0 (min (py p1) (py p2))) (y1 (max (py p1) (py p2)))
+         (best nil) (best-n 0))
+    (flet ((inside (q) (and (<= x0 (px q) x1) (<= y0 (py q) y1))))
+      (dolist (pc (entity-pieces e))
+        (let ((samples
+                (case (first pc)
+                  ((:seg :gseg) (loop for i from 0 to 64 collect (v+ (second pc) (v* (v- (third pc) (second pc)) (/ i 64d0)))))
+                  (:arc (destructuring-bind (c r a1 a2) (rest pc)
+                          (let ((sw (arc-sweep a1 a2)))
+                            (loop for i from 0 to 64 collect (polar c (+ a1 (* sw (/ i 64d0))) r)))))
+                  (:circle (destructuring-bind (c r) (rest pc)
+                             (loop for i from 0 below 128 collect (polar c (* 2 +pi+ (/ i 128d0)) r))))
+                  (t nil)))
+              (run nil))
+          (dolist (q (append samples (list nil)))
+            (if (and q (inside q))
+                (push q run)
+                (progn
+                  (when (> (length run) best-n)
+                    (setf best-n (length run) best (nth (floor (length run) 2) run)))
+                  (setf run nil)))))))
+    best))
 
 (defun live-entities-after (snap)
   (let ((n (length (first snap))))
