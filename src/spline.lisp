@@ -83,12 +83,10 @@ given, are the directions it leaves the first point and reaches the last."
            (let ((inner
                    (if (zerop ndv)
                        (loop for j from 1 to (- n p) collect (/ (loop for i from j below (+ j p) sum (aref tv i)) p))
-                       ;; with end tangents: averages over the parameters (P&T 9.22), as many as needed
+                       ;; with end tangents (P&T 9.22): u(j+p+1) = the average of t(j) .. t(j+p-1)
                        (let ((k (- ncp p 1)))
                          (loop for j from 0 below k
-                               collect (let* ((lo (floor (* j (/ (1+ n) (max 1 k)))))
-                                              (hi (min n (+ lo (max 1 (1- p))))))
-                                         (/ (loop for i from lo to hi sum (aref tv i)) (1+ (- hi lo)))))))))
+                               collect (/ (loop for i from j below (+ j p) sum (aref tv (min n i))) p))))))
              (coerce (append (make-list (1+ p) :initial-element 0d0)
                              (sort (remove-if (lambda (x) (or (<= x 0d0) (>= x 1d0))) inner) #'<)
                              (make-list (1+ p) :initial-element 1d0))
