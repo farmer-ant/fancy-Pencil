@@ -278,6 +278,8 @@ mcmd .mb.draw "Circle: 3 Points" "CIRCLE 3P"
 mcmd .mb.draw "Arc: 3 Points" ARC
 mcmd .mb.draw "Arc: Center, Start, End" "ARC C"
 mcmd .mb.draw "Ellipse (polyline)" ELLIPSE
+mcmd .mb.draw "Spline: Fit Points" "SPLINE"
+mcmd .mb.draw "Spline: Control Vertices" "SPLINE M CV"
 mcmd .mb.draw "Helix / Spiral" HELIX
 .mb.draw add separator
 mcmd .mb.draw "Hatch..." HATCH
