@@ -1235,7 +1235,12 @@ several), else the current layer. Only shows it; the current layer is not change
              (when (and e (member (ent-type e) '("TEXT" "MTEXT" "ATTDEF") :test #'equal))
                (take-pickfirst) (sweep-highlights) (refresh-grips) (refresh-palette)
                (setf *edit-target* e
-                     *acq-result* (list :text "TEXTEDIT")))))))
+                     *acq-result* (list :text "TEXTEDIT")))
+             ;; double-click on a hatch: Hatch Edit, as in AutoCAD
+             (when (and e (equal (ent-type e) "HATCH"))
+               (take-pickfirst) (sweep-highlights) (refresh-grips) (refresh-palette)
+               (setf *edit-target* e
+                     *acq-result* (list :text "HATCHEDIT")))))))
       ((string= ty "R")
        ;; right-click: a menu at the Command: prompt, Shift+right-click a one-time osnap while
        ;; picking points, otherwise Enter

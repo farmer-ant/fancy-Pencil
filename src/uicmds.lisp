@@ -135,7 +135,9 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
      head
      (remove nil
      (if sel
-         (list (list "Erase" "ERASE") (list "Move" "MOVE") (list "Copy Selection" "COPY")
+         (list (when (some (lambda (e) (equal (ent-type e) "HATCH")) sel) (list "Hatch Edit..." "HATCHEDIT"))
+               (when (some (lambda (e) (equal (ent-type e) "HATCH")) sel) :sep)
+               (list "Erase" "ERASE") (list "Move" "MOVE") (list "Copy Selection" "COPY")
                (list "Scale" "SCALE") (list "Rotate" "ROTATE") (list "Mirror" "MIRROR")
                (list "Align" "ALIGN") (list "Array" "ARRAY")
                (list "Match Properties" "MATCHPROP")

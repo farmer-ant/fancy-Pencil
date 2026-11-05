@@ -248,20 +248,30 @@
                        (out (format nil "Valid hatch boundary not found.~%"))))))))))))
 
 (defcmd "HATCHEDIT" ("HE" "-HATCHEDIT") "Changes the pattern, scale or angle of existing hatches."
-  (let ((e (sel-entity (get-user-input :entity :prompt "Select hatch object: "))))
-    (if (not (and e (equal (ent-type e) "HATCH")))
-        (out (format nil "Object selected is not a hatch.~%"))
-        (let* ((data (ent-data e))
-               (saved (list (sysvar "HPNAME") (sysvar "HPSCALE") (sysvar "HPANG"))))
-          (setf (sysvar "HPNAME") (or (dxf 2 data) "ANSI31") (sysvar "HPSCALE") (d (or (dxf 41 data) 1)) (sysvar "HPANG") (d (or (dxf 52 data) 0)))
-          (let ((ok (if (and (use-inplace-editor-p) (not (dash-command-p)))
-                        (string= (hatch-dialog 0 "edit") "OK")
-                        (progn (hatch-settings-prompt) t))))
-            (when ok
-              (set-entity-data e (append (rem-dxf :pattern (rem-dxf 2 (rem-dxf 70 (rem-dxf 41 (rem-dxf 52 data)))))
-                                         (list (cons 2 (sysvar "HPNAME")) (cons 70 (if (solid-pattern-p (sysvar "HPNAME")) 1 0))
-                                               (cons 41 (d (sysvar "HPSCALE"))) (cons 52 (d (sysvar "HPANG"))))))))
-          (destructuring-bind (n s a) saved (setf (sysvar "HPNAME") n (sysvar "HPSCALE") s (sysvar "HPANG") a))))))
+  ;; the hatches already selected (or the one double-clicked), else pick one
+  (let* ((pre (remove-if-not (lambda (e) (equal (ent-type e) "HATCH"))
+                             (append (and *edit-target* (list (shiftf *edit-target* nil))) (take-pickfirst))))
+         (hatches (or pre
+                      (let ((e (sel-entity (get-user-input :entity :prompt "Select hatch object: "))))
+                        (if (and e (equal (ent-type e) "HATCH"))
+                            (list e)
+                            (progn (out (format nil "Object selected is not a hatch.~%")) nil))))))
+    (when hatches
+      (let* ((data (ent-data (first hatches)))
+             (saved (list (sysvar "HPNAME") (sysvar "HPSCALE") (sysvar "HPANG"))))
+        (when (> (length hatches) 1) (out (format nil "~D hatches: the changes go to all of them.~%" (length hatches))))
+        (setf (sysvar "HPNAME") (or (dxf 2 data) "ANSI31") (sysvar "HPSCALE") (d (or (dxf 41 data) 1)) (sysvar "HPANG") (d (or (dxf 52 data) 0)))
+        (unwind-protect
+             (let ((ok (if (and (use-inplace-editor-p) (not (dash-command-p)))
+                           (string= (hatch-dialog 0 "edit") "OK")
+                           (progn (hatch-settings-prompt) t))))
+               (when ok
+                 (dolist (e hatches)
+                   (let ((dd (ent-data e)))
+                     (set-entity-data e (append (rem-dxf :pattern (rem-dxf 2 (rem-dxf 70 (rem-dxf 41 (rem-dxf 52 dd)))))
+                                                (list (cons 2 (sysvar "HPNAME")) (cons 70 (if (solid-pattern-p (sysvar "HPNAME")) 1 0))
+                                                      (cons 41 (d (sysvar "HPSCALE"))) (cons 52 (d (sysvar "HPANG"))))))))))
+          (destructuring-bind (n s a) saved (setf (sysvar "HPNAME") n (sysvar "HPSCALE") s (sysvar "HPANG") a)))))))
 
 ;;; ---------- REVCLOUD ----------
 
