@@ -610,6 +610,11 @@
   (let* ((kind (inreq-kind req))
          (s (if (inreq-spaces req) text (string-trim " " text)))
          (kws (inreq-keywords req)))
+    ;; 'CAL or 'QC (the calculator) at a prompt for a point, distance, angle or number
+    (when (and (member kind '(:point :corner :distance :angle :real :int))
+               (member (string-trim " " s) '("'cal" "'qc" "'quickcalc") :test #'string-equal))
+      (multiple-value-bind (v ok) (funcall 'transparent-calc (string-left-trim "'" (string-trim " " s)) req)
+        (return-from interpret-text (if (eq v :retry) (values :retry t) (values v ok)))))
     ;; transparent AutoLISP at any prompt: (expression) or !variable
     (when (and (member kind '(:point :corner :distance :angle :real :int :select-point))
                (plusp (length s)) (member (char s 0) '(#\( #\!)))
@@ -708,12 +713,12 @@
     (and (consp lo) (consp hi)
          (not (and (<= (px lo) (px p) (px hi)) (<= (py lo) (py p) (py hi)))))))
 
-(defun get-user-input (kind &key (prompt "") base keywords (flags 0) drag spaces nosnap)
+(defun get-user-input (kind &key (prompt "") base keywords (flags 0) drag spaces nosnap osnap)
   "Ask for input of KIND. Returns the value, NIL for Enter, or a matched keyword string.
 NOSNAP turns off object snap, grid snap and ortho (used for selection windows)."
   (let ((req (make-inreq :kind kind :prompt prompt :base (and base (pt3 base)) :keywords keywords
                          :flags flags :drag drag :spaces spaces :nosnap nosnap))
-        (*osnap-override* nil))
+        (*osnap-override* osnap))           ; OSNAP: one snap to use for this point (as END typed first)
     (loop
       (let ((item (next-queued-input)) value ok)
         (if (and item (not (eq item :interactive)) (not (equal item +pause+)))
