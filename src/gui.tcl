@@ -329,6 +329,7 @@ mcmd .mb.format "Point Style..." DDPTYPE
 mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Quick Properties" QUICKPROPERTIES
 mcmd .mb.tools "Command History  (F2)" HISTORY
+mcmd .mb.tools "QuickCalc  (Ctrl+8)" QUICKCALC
 mcmd .mb.tools "Image Manager..." IMAGE
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
 menu .mb.tools.alias -tearoff 0
@@ -813,6 +814,7 @@ bind all <F5> {emit K F5; break}
 bind all <Control-e> {emit K F5; break}
 bind all <F9> {emit K F9; break}
 bind all <F12> {emit K F12; break}
+bind all <Control-Key-8> {emit MENU QUICKCALC; break}
 bind all <F10> {emit K F10; break}
 bind all <Control-z> {emit MENU U; break}
 bind all <Control-y> {emit MENU REDO; break}
@@ -3489,6 +3491,277 @@ proc fpfiledlg {save title dir name types ext} {
     if {$save} { focus $w.bot.name; $w.bot.name selection range 0 end } else { focus $w.main.list }
     tkwait window $w
     return $::fd(result)
+}
+
+# ---------------------------------------------------------------- QuickCalc
+# A calculator beside the drawing (QUICKCALC, Ctrl+8): type an expression (as CAL reads them:
+# numbers, feet-inches, [x,y,z] points, sin cos sqrt dist ang ...) or use the keys; Enter or =
+# works it out in Fancy Pencil. Its toolbar reads a point, a distance, an angle or an intersection
+# from the drawing. Opened with 'QC in the middle of a command, Apply gives that command the answer.
+set ::qc_last ""
+set ::qc_mem 0
+set ::qc_apply 0
+set ::qc_uval ""
+set ::qc_ures ""
+set ::qc_units {
+    Length {{Millimeters 1} {Centimeters 10} {Meters 1000} {Kilometers 1000000} {Inches 25.4} {Feet 304.8}
+            {Yards 914.4} {Miles 1609344}}
+    Area {{{Square millimeters} 1} {{Square centimeters} 100} {{Square meters} 1e6} {Hectares 1e10}
+          {{Square kilometers} 1e12} {{Square inches} 645.16} {{Square feet} 92903.04} {{Square yards} 836127.36}
+          {Acres 4046856422.4} {{Square miles} 2589988110336}}
+    Volume {{{Cubic millimeters} 1} {{Cubic centimeters} 1000} {Liters 1e6} {{Cubic meters} 1e9}
+            {{Cubic inches} 16387.064} {{Cubic feet} 28316846.592} {{Cubic yards} 764554857.984}
+            {{US gallons} 3785411.784}}
+    Angular {{Degrees 1} {Radians 57.29577951308232} {Gradians 0.9} {Revolutions 360}}
+}
+proc qc_open {apply} {
+    set ::qc_apply $apply
+    set w .qc
+    if {[winfo exists $w]} {
+        qc_mode; wm deiconify $w; raise $w; focus $w.in.e; return
+    }
+    toplevel $w -background $::panel
+    wm title $w "QuickCalc"
+    wm transient $w .
+    wm geometry $w 360x560+[expr {max(0, [winfo rootx .] + [winfo width .] - 420)}]+[expr {[winfo rooty .] + 90}]
+    wm minsize $w 330 460
+    wm protocol $w WM_DELETE_WINDOW {wm withdraw .qc; focus .cmd.e}
+    # toolbar
+    ttk::frame $w.tb -padding {6 6 6 2}
+    foreach {b t c} {clr "Clear" qc_clear hist "Clear History" {.qc.hist delete 0 end}
+                     coord "Point" {emit QC COORD} dist "Distance" {emit QC DIST}
+                     ang "Angle" {emit QC ANGLE} ille "Intersection" {emit QC ILLE}} {
+        ttk::button $w.tb.$b -text $t -command $c -width [expr {[string length $t] > 7 ? 11 : 7}]
+    }
+    grid $w.tb.clr $w.tb.hist $w.tb.coord -sticky ew -padx 1 -pady 1
+    grid $w.tb.dist $w.tb.ang $w.tb.ille -sticky ew -padx 1 -pady 1
+    foreach c {0 1 2} { grid columnconfigure $w.tb $c -weight 1 }
+    # history: double-click puts an expression back
+    listbox $w.hist -height 6 -activestyle none -borderwidth 0 -highlightthickness 0 -background $::panel2 \
+        -foreground $::fg -selectbackground $::accent -font TkFixedFont
+    bind $w.hist <Double-1> {
+        set i [.qc.hist curselection]
+        if {$i ne ""} { set l [.qc.hist get $i]; set k [string last " = " $l]
+            .qc.in.e delete 0 end; .qc.in.e insert 0 [string range $l 0 [expr {$k - 1}]] }
+    }
+    # the expression and its answer
+    ttk::frame $w.in -padding {6 4 6 2}
+    entry $w.in.e -font {Helvetica 13} -background "#f3f5f8" -foreground "#101418" -insertbackground "#101418" \
+        -relief flat -highlightthickness 1
+    label $w.in.r -text "" -anchor e -background $::panel -foreground $::fg -font {Helvetica 11 bold}
+    pack $w.in.e -fill x
+    pack $w.in.r -fill x -pady {2 0}
+    bind $w.in.e <Return> {qc_eval; break}
+    bind $w.in.e <KP_Enter> {qc_eval; break}
+    bind $w <Escape> {wm withdraw .qc; focus .cmd.e}
+    # keys, functions, units, variables
+    ttk::notebook $w.nb
+    set k [ttk::frame $w.nb.keys -padding 4]
+    set rows {
+        {MC MR MS M+ C}
+        {( ) ^ sqrt <-}
+        {7 8 9 / x^2}
+        {4 5 6 * 1/x}
+        {1 2 3 - +/-}
+        {0 . pi + =}
+    }
+    set r 0
+    foreach row $rows {
+        set c 0
+        foreach key $row {
+            set b [ttk::button $k.b${r}_$c -text $key -width 4 -command [list qc_key $key]]
+            grid $b -row $r -column $c -sticky nsew -padx 1 -pady 1
+            incr c
+        }
+        incr r
+    }
+    foreach c {0 1 2 3 4} { grid columnconfigure $k $c -weight 1 }
+    set f [ttk::frame $w.nb.fn -padding 4]
+    set rows {
+        {sin cos tan log exp10}
+        {asin acos atan ln exp}
+        {r2d d2r abs round trunc}
+        {[ ] , < sqr}
+        {dist( ang( cvunit( xof( yof(}
+    }
+    set r 0
+    foreach row $rows {
+        set c 0
+        foreach key $row {
+            set b [ttk::button $f.b${r}_$c -text $key -width 5 -command [list qc_fn $key]]
+            grid $b -row $r -column $c -sticky nsew -padx 1 -pady 1
+            incr c
+        }
+        incr r
+    }
+    foreach c {0 1 2 3 4} { grid columnconfigure $f $c -weight 1 }
+    set u [ttk::frame $w.nb.units -padding 8]
+    ttk::label $u.tl -text "Units type:"
+    ttk::combobox $u.type -state readonly -values [dict keys $::qc_units] -textvariable ::qc_utype -width 18
+    ttk::label $u.fl -text "Convert from:"
+    ttk::combobox $u.from -state readonly -textvariable ::qc_ufrom -width 18
+    ttk::label $u.ol -text "Convert to:"
+    ttk::combobox $u.to -state readonly -textvariable ::qc_uto -width 18
+    ttk::label $u.vl -text "Value to convert:"
+    ttk::entry $u.val -textvariable ::qc_uval -width 20
+    ttk::label $u.rl -text "Converted value:"
+    ttk::label $u.res -textvariable ::qc_ures -font {Helvetica 11 bold}
+    ttk::button $u.use -text "Put in the calculator" -command {if {$::qc_ures ne ""} {.qc.in.e insert insert $::qc_ures}}
+    grid $u.tl $u.type -sticky w -pady 2
+    grid $u.fl $u.from -sticky w -pady 2
+    grid $u.ol $u.to -sticky w -pady 2
+    grid $u.vl $u.val -sticky w -pady 2
+    grid $u.rl $u.res -sticky w -pady 2
+    grid $u.use - -sticky w -pady {8 0}
+    set ::qc_utype Length; qc_unit_type
+    bind $u.type <<ComboboxSelected>> qc_unit_type
+    bind $u.from <<ComboboxSelected>> qc_convert
+    bind $u.to <<ComboboxSelected>> qc_convert
+    bind $u.val <KeyRelease> qc_convert
+    set v [ttk::frame $w.nb.vars -padding 6]
+    listbox $v.l -height 7 -activestyle none -borderwidth 0 -highlightthickness 0 -background $::panel2 \
+        -foreground $::fg -selectbackground $::accent -font TkFixedFont
+    ttk::label $v.h -text "Type  name=expression  above to keep a value. Double-click to use one." -wraplength 300
+    ttk::button $v.del -text "Delete" -command {
+        set i [.qc.nb.vars.l curselection]
+        if {$i ne ""} { emit QC DELVAR [lindex [split [.qc.nb.vars.l get $i] "="] 0] }
+    }
+    pack $v.h -anchor w
+    pack $v.l -fill both -expand 1 -pady 4
+    pack $v.del -anchor e
+    bind $v.l <Double-1> {
+        set i [.qc.nb.vars.l curselection]
+        if {$i ne ""} { .qc.in.e insert insert [string trim [lindex [split [.qc.nb.vars.l get $i] "="] 0]] }
+    }
+    $w.nb add $k -text "Number Pad"
+    $w.nb add $f -text "Scientific"
+    $w.nb add $u -text "Units"
+    $w.nb add $v -text "Variables"
+    # bottom: give the answer to the command line, or to the command waiting for it
+    ttk::frame $w.bot -padding {6 4 6 6}
+    ttk::button $w.bot.paste -text "Paste to Command Line" -command qc_paste
+    ttk::button $w.bot.apply -text "Apply" -command qc_applyit
+    ttk::button $w.bot.close -text "Close" -command {wm withdraw .qc; focus .cmd.e}
+    pack $w.tb -side top -fill x
+    pack $w.hist -side top -fill x -padx 6
+    pack $w.in -side top -fill x
+    pack $w.bot -side bottom -fill x
+    pack $w.nb -side top -fill both -expand 1 -padx 6
+    qc_mode
+    focus $w.in.e
+}
+proc qc_mode {} {
+    set b .qc.bot
+    pack forget $b.paste $b.apply $b.close
+    if {$::qc_apply} { pack $b.close $b.apply -side right -padx 2 } else { pack $b.close $b.paste -side right -padx 2 }
+}
+proc qc_eval {} {
+    set e [string trim [.qc.in.e get]]
+    if {$e eq ""} return
+    .qc.in.r configure -text "..." -foreground $::fg
+    emit QC EVAL $e
+}
+proc qc_result {expr res} {
+    set ::qc_last $res
+    .qc.hist insert end "$expr = $res"
+    .qc.hist see end
+    .qc.in.r configure -text "= $res" -foreground "#9cdc7c"
+    .qc.in.e delete 0 end
+    .qc.in.e insert 0 $res
+    .qc.in.e selection range 0 end
+    .qc.in.e icursor end
+    if {[winfo exists .qc]} { raise .qc; focus .qc.in.e }
+}
+proc qc_error {msg} {
+    .qc.in.r configure -text $msg -foreground "#ff8a80"
+    if {[winfo exists .qc]} { raise .qc; focus .qc.in.e }
+}
+proc qc_clear {} { .qc.in.e delete 0 end; .qc.in.r configure -text "" }
+proc qc_put {s} {
+    set e .qc.in.e
+    if {[$e selection present]} { $e delete sel.first sel.last }
+    $e insert insert $s
+    focus $e
+}
+proc qc_key {k} {
+    set e .qc.in.e
+    switch -- $k {
+        C { qc_clear }
+        <- { if {[$e selection present]} { $e delete sel.first sel.last } else { $e delete [expr {[$e index insert] - 1}] } }
+        = { qc_eval }
+        pi { qc_put "pi" }
+        sqrt { qc_wrap "sqrt(" ")" }
+        x^2 { qc_wrap "sqr(" ")" }
+        1/x { qc_wrap "1/(" ")" }
+        +/- { qc_wrap "-(" ")" }
+        MS { if {$::qc_last ne ""} { set ::qc_mem $::qc_last; .qc.in.r configure -text "Memory: $::qc_mem" } }
+        MR { qc_put $::qc_mem }
+        M+ { if {$::qc_last ne "" && [string is double $::qc_last] && [string is double $::qc_mem]} {
+                 set ::qc_mem [expr {$::qc_mem + $::qc_last}]; .qc.in.r configure -text "Memory: $::qc_mem" } }
+        MC { set ::qc_mem 0; .qc.in.r configure -text "Memory cleared" }
+        default { qc_put $k }
+    }
+}
+proc qc_wrap {pre post} {
+    set e .qc.in.e
+    set t [string trim [$e get]]
+    $e delete 0 end
+    $e insert 0 "$pre$t$post"
+    focus $e
+}
+proc qc_fn {k} {
+    if {[string index $k end] eq "("} { qc_put $k; return }
+    if {$k in {[ ] , <}} { qc_put $k; return }
+    # a function of what is typed (or of the next value typed)
+    set t [string trim [.qc.in.e get]]
+    if {$t eq ""} { qc_put "$k(" } else { qc_wrap "$k\(" ")" }
+}
+proc qc_unit_type {} {
+    set names [lmap x [dict get $::qc_units $::qc_utype] {lindex $x 0}]
+    .qc.nb.units.from configure -values $names
+    .qc.nb.units.to configure -values $names
+    set ::qc_ufrom [lindex $names 0]
+    set ::qc_uto [lindex $names [expr {[llength $names] > 4 ? 4 : 1}]]
+    qc_convert
+}
+proc qc_convert {} {
+    set ::qc_ures ""
+    set v [string trim $::qc_uval]
+    if {$v eq "" || ![string is double $v]} return
+    set f ""; set t ""
+    foreach x [dict get $::qc_units $::qc_utype] {
+        if {[lindex $x 0] eq $::qc_ufrom} { set f [lindex $x 1] }
+        if {[lindex $x 0] eq $::qc_uto} { set t [lindex $x 1] }
+    }
+    if {$f eq "" || $t eq ""} return
+    set r [expr {$v * double($f) / double($t)}]
+    set ::qc_ures [string trimright [string trimright [format %.10f $r] 0] .]
+}
+proc qc_vars {items} {
+    if {![winfo exists .qc.nb.vars.l]} return
+    set l .qc.nb.vars.l
+    $l delete 0 end
+    $l insert end "pi = 3.14159265" "Phi = 1.61803399"
+    foreach it $items { $l insert end "[lindex $it 0] = [lindex $it 1]" }
+}
+proc qc_paste {} {
+    if {$::qc_last eq ""} return
+    .cmd.e insert end $::qc_last
+    focus .cmd.e
+}
+proc qc_applyit {} {
+    set v $::qc_last
+    set t [string trim [.qc.in.e get]]
+    if {$t ne "" && $t ne $v} { qc_eval; return }
+    if {$v eq ""} return
+    set ::qc_apply 0
+    wm withdraw .qc
+    # a point goes in as typed absolute coordinates
+    if {[llength [split $v ,]] > 1} { set v "#$v" }
+    .cmd.e delete 0 end
+    .cmd.e insert 0 $v
+    focus .cmd.e
+    cmdsubmit
 }
 
 # ---------------------------------------------------------------- layer dialog

@@ -307,6 +307,30 @@ dimension style (DIMASZ, DIMTXT, DIMSCALE). Leaders are saved as real AutoCAD LE
   text together). Each new leader keeps that size, as an override on that leader only.
 * For every leader and dimension using a style: Dimension → Dimension Style..., Arrow size.
 
+### QuickCalc and CAL (Ctrl+8)
+
+Tools > QuickCalc (QUICKCALC, QC or Ctrl+8) opens a calculator beside the drawing. Type an
+expression and press Enter (or =); the history keeps each one (double-click to use it again).
+
+* **Number Pad** and **Scientific** keys: memory (MS MR M+ MC), powers, roots, sin cos tan and their
+  inverses (in degrees), logs, r2d / d2r, rounding, and the [ , < ] of points.
+* **Units**: lengths, areas, volumes and angles, converted as you type; put the answer in the calculator.
+* **Variables**: `name=expression` keeps a value (AutoLISP sees it too); pi and Phi are known.
+* Toolbar: **Point**, **Distance**, **Angle** and **Intersection** read them from the drawing.
+* **Paste to Command Line** puts the answer on the command line.
+
+In the middle of a command, type `'QC` at a prompt for a point, distance, angle or number: work
+out the value, then **Apply** gives it to the command. `'CAL` asks for an expression on the command
+line instead, and CAL at the Command prompt prints the answer.
+
+Expressions read as AutoCAD's CAL does: `+ - * / ^` and brackets; feet-inches (`5'6"`); points
+`[x,y,z]` and `[dist<angle]` (+ and - add them, a number times a point scales it, `*` between points
+is the dot product, `&` the cross product); `dist(p1,p2)`, `ang(p1,p2)`, `cvunit(1,"inch","mm")`,
+`xof` `yof` `zof`, `min` `max`; and points picked in the drawing: `cur`, `end`, `mid`, `cen`, `int`,
+`nea`, `qua`, `per`, `nod`, `ins`, with `rad` (a circle's radius), `dee` (distance between two
+endpoints), `mee` (the midpoint between two endpoints) and `ille` (where two lines meet). For
+example `dist(end,end)/2` or `rad*2`.
+
 ### DWF and DGN underlays (DWFATTACH, DGNATTACH)
 
 File > Attach DWF / DWFx... and Attach DGN (MicroStation)... place another file's drawing in this
