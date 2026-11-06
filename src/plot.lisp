@@ -165,8 +165,12 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
          (fam (string-downcase (font-family-for (if st (textstyle-font st) "Arial"))))
          (fmt (and (equal (dxf 0 data) "MTEXT") (mtext-overall-format (or (dxf 1 data) ""))))
          (bold (or (getf fmt :bold) (and st (textstyle-bold st))))
-         (italic (or (getf fmt :italic) (and st (textstyle-italic st))))
-         (base (cond ((or (search "mono" fam) (search "cour" fam)) "Courier")
+         (italic (or (getf fmt :italic) (and st (textstyle-italic st)))))
+    (pdf-font-name fam bold italic)))
+
+(defun pdf-font-name (fam bold italic)
+  "The PDF base font for font family FAM (lower case) in BOLD / ITALIC."
+  (let* ((base (cond ((or (search "mono" fam) (search "cour" fam)) "Courier")
                      ((or (search "times" fam) (search "serif" fam) (search "roman" fam)) "Times")
                      (t "Helvetica"))))
     (cond ((string= base "Times") (cond ((and bold italic) "Times-BoldItalic") (bold "Times-Bold") (italic "Times-Italic") (t "Times-Roman")))
@@ -179,7 +183,9 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
          (size (/ h +cap+))
          (rot (or (dxf 50 data) 0d0))
          (font (pdf-font-for data)))
-    (if (equal type "MTEXT")
+    (cond
+      ((and (equal type "MTEXT") (mtext-rich-p data)) (plot-rich-mtext data color))
+      ((equal type "MTEXT")
         (let* ((p (pt3 (dxf 10 data)))
                (attach (or (dxf 71 data) 1))
                (col (mod (1- attach) 3)) (row (floor (1- attach) 3))
@@ -193,14 +199,36 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
           (loop for line in lines for i from 0
                 for dy = (- top-off h (* i pitch))
                 for q = (v+ p (rot-pt (pt 0 dy) (pt 0 0) rot))
-                do (emit-prim (list :text line q size rot halign 0 color font))))
+                do (emit-prim (list :text line q size rot halign 0 color font)))))
+      (t
         (let* ((s (text-string-display (or (dxf 1 data) "")))
                (h72 (or (dxf 72 data) 0)) (v73 (or (dxf 73 data) 0))
                (p (pt3 (text-insertion data))))
           (emit-prim (list :text s p size rot
                            (case h72 ((1 4) 1) (2 2) (t 0))
                            (if (= h72 4) 2 v73)
-                           color font))))))
+                           color font)))))))
+
+(defun plot-rich-mtext (data color)
+  "A rich MTEXT plotted piece by piece, each in its own font, size and color."
+  (multiple-value-bind (pieces total box-w) (mtext-rich-layout data)
+    (let* ((p (pt3 (dxf 10 data)))
+           (rot (or (dxf 50 data) 0d0))
+           (attach (or (dxf 71 data) 1))
+           (left (- (* box-w (case (mod (1- attach) 3) (0 0) (1 0.5d0) (t 1)))))
+           (top (* total (case (floor (1- attach) 3) (0 0) (1 0.5d0) (t 1)))))
+      (dolist (pc pieces)
+        (destructuring-bind (s r x y) pc
+          (let* ((q (v+ p (rot-pt (pt (+ left x) (- top y)) (pt 0 0) rot)))
+                 (col (if (run-aci r) (plot-color (run-aci r)) color))
+                 (fam (string-downcase (font-family-for (run-font r)))))
+            (unless (string= (string-trim " " s) "")
+              (emit-prim (list :text s q (run-size r) rot 0 0 col (pdf-font-name fam (run-bold r) (run-italic r)))))
+            (when (run-underline r)
+              (let ((dy (* -0.2d0 (run-height r))))
+                (emit-prim (list :poly (list (v+ p (rot-pt (pt (+ left x) (+ (- top y) dy)) (pt 0 0) rot))
+                                             (v+ p (rot-pt (pt (+ left x (run-width s r)) (+ (- top y) dy)) (pt 0 0) rot)))
+                                 col 0.18d0))))))))))
 
 (defun plot-wrap-lines (s size width)
   "Split on newlines, and word-wrap at WIDTH (drawing units) using Helvetica widths."

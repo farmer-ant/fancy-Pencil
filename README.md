@@ -169,7 +169,11 @@ Enter on an empty line ends. Double-click any text, or use TEXTEDIT (ED), to edi
 From AutoLISP or scripts, the same commands take their text on the command line.
 
 The MTEXT editor has a formatting bar: text style, font, height, Bold/Italic/Underline (also Ctrl+B/I/U),
-left/center/right alignment, and a Symbols menu (°, ±, ⌀ ...). Right-click in the editor or on the command
+color, left/center/right alignment, and a Symbols menu (°, ±, ⌀ ...). Font, height, Bold/Italic/Underline
+and color change only the selected characters; with nothing selected they set what you type next, and
+moving the cursor picks up the format of the text there. Text style and alignment apply to the whole
+note. Each part keeps its format on the drawing, in plots and when saved (as AutoCAD's inline MTEXT
+codes, so formatting made in AutoCAD opens here too). Right-click in the editor or on the command
 line for Cut/Copy/Paste, Select All, symbols and change case. A selected MTEXT shows grips on the top
 corners of its box: drag one (object snaps work as usual) to change the wrap width.
 

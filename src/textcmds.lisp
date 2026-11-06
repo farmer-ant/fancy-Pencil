@@ -26,7 +26,7 @@
                   (all-textstyles))))
 
 (defun inplace-edit (mode p width-world h &key (init "") (justify "left") aci (min-height 0)
-                                             style font bold italic underline)
+                                             style font bold italic underline runs)
   "Open the in-place editor on the drawing at world point P (MTEXT: top-left corner of the box;
 :LINE: start of the baseline). Returns a plist (:text :style :font :height :bold :italic
 :underline :justify); :text is MTEXT-encoded in :mtext mode. Esc cancels the command."
@@ -38,14 +38,17 @@
    (tk "set ::spell_file ~A; set ::spell_custom ~A" (tq (namestring (spell-cache-path))) (tq (namestring (custom-dict-path)))))
   (let* ((st (or (find-textstyle style) (current-textstyle)))
          (given font)
+         (color-hex (aci->hex (or aci (current-color-aci))))
          (font (or font (textstyle-font st)))
          (bold (if given bold (textstyle-bold st)))
          (italic (if given italic (textstyle-italic st)))
          (k (/ *vscale* 0.72d0))
          (fpx (round (* h k)))
-         (color (aci->hex (or aci (current-color-aci))))
-         (opts (format nil "~A ~A ~D ~D ~D ~F ~F {~A}" (tq (textstyle-name st)) (tq font)
-                       (if bold 1 0) (if italic 1 0) (if underline 1 0) (d h) k (styles-tcl-list))))
+         (color color-hex)
+         (opts (format nil "~A ~A ~D ~D ~D ~F ~F {~A} {~A} {~{~A~^ ~}}" (tq (textstyle-name st)) (tq font)
+                       (if bold 1 0) (if italic 1 0) (if underline 1 0) (d h) k (styles-tcl-list)
+                       (if (eq mode :mtext) (runs-tcl-list runs color-hex) "")
+                       (if (eq mode :mtext) (loop for i from 0 to 255 collect (aci->hex i)) nil))))
     (multiple-value-bind (x y) (w->s p)
       (let ((r (tk-ask (format nil "mtedit ~A ~D ~D ~D ~D ~A ~A ~A ~D ~A"
                                (if (eq mode :mtext) "mtext" "line") (round x) (round y)
@@ -58,15 +61,23 @@
           (error 'alisp-cancel))
         (let ((f (split-string (if (> (length r) 3) (subseq r 3) "") (code-char 31))))
           (flet ((fld (i) (or (nth i f) "")))
-            (list :style (fld 0) :font (fld 1)
-                  :height (let ((v (parse-number-text (fld 2)))) (if (and v (plusp v)) (d v) (d h)))
-                  :bold (string= (fld 3) "1") :italic (string= (fld 4) "1") :underline (string= (fld 5) "1")
-                  :justify (fld 6)
-                  :text (format nil "~{~A~^~C~}" (loop for x in (nthcdr 7 f) for i from 0
-                                                       append (if (zerop i) (list x) (list (code-char 31) x)))))))))))
+            (let ((runs (and (eq mode :mtext) (parse-editor-runs (fld 8)))))
+              (list :style (fld 0) :font (fld 1)
+                    :height (if runs (runs-base-height runs)
+                                (let ((v (parse-number-text (fld 2)))) (if (and v (plusp v)) (d v) (d h))))
+                    :bold (string= (fld 3) "1") :italic (string= (fld 4) "1") :underline (string= (fld 5) "1")
+                    :justify (fld 6)
+                    :runs runs
+                    :text (fld 7)))))))))
 
 (defun editor-result-content (r)
-  "MTEXT content for an editor result R, with whole-object formatting only where it differs from the style."
+  "MTEXT content for an editor result R: formatting codes only where the text differs from the style
+(per stretch of text when the editor returned runs)."
+  (let ((st (or (find-textstyle (getf r :style)) (current-textstyle))))
+    (when (getf r :runs)
+      (return-from editor-result-content
+        (mtext-encode-runs (getf r :runs) :font (style-display-font st) :bold (textstyle-bold st)
+                                          :italic (textstyle-italic st) :base-height (getf r :height)))))
   (let* ((st (or (find-textstyle (getf r :style)) (current-textstyle)))
          (font (getf r :font))
          (override (or (not (string-equal font (textstyle-font st)))
@@ -217,6 +228,7 @@
               (box (text-box data))
               (r (inplace-edit :mtext (mtext-top-left data) w (text-effective-height data)
                                :init (text-string-display old) :aci (entity-color-aci e)
+                               :runs (mtext-data-runs data)
                                :justify (column-justify (dxf 71 data)) :style (textstyle-name st)
                                :font font :bold bold :italic italic :underline (getf fmt :underline)))
               (attach (or (dxf 71 data) 1))
