@@ -1115,19 +1115,245 @@ proc mted_font {} {
 }
 proc mted_restyle {} {
     if {$::mted eq "" || ![winfo exists $::mted]} return
-    $::mted configure -font [mted_font]
+    if {$::mt(mode) eq "mtext"} {
+        $::mted configure -font [mted_fontof $::mt(typing)]
+    } else {
+        $::mted configure -font [mted_font]
+    }
     $::mted tag configure all -justify $::mt(justify)
     mted_fit
 }
+# A text style applies to the whole text: its font, bold, italic (and height when it has one)
 proc mted_pickstyle {} {
     foreach s $::mt(styles) {
         lassign $s name font bold italic height
         if {[string equal -nocase $name $::mt(style)]} {
             set ::mt(font) $font; set ::mt(bold) $bold; set ::mt(italic) $italic
-            if {$height > 0} { set ::mt(height) $height }
+            if {$height > 0} { set ::mt(height) $height; set ::mt(hentry) [format %g $height] }
+            if {$::mt(mode) eq "mtext"} {
+                set changes [list 0 $font 1 [expr {$bold ? 1 : 0}] 2 [expr {$italic ? 1 : 0}]]
+                if {$height > 0} { lappend changes 4 $height }
+                foreach {i v} $changes {
+                    set ::mt(typing) [lreplace $::mt(typing) $i $i $v]
+                    mted_retag 1.0 end-1c $i $v
+                }
+                mted_showfmt
+            }
         }
     }
     mted_restyle
+}
+
+# ---- formatting on parts of an MTEXT: every character carries one format tag "fmtN", whose
+# format is {font bold italic underline height aci} (aci "" = the object's own color). The
+# toolbar changes the selected characters, or (with nothing selected) what is typed next.
+proc mted_fontof {fmt} {
+    lassign $fmt f b i u h
+    set px [expr {max(6, min(400, round($h * $::mt(k))))}]
+    set spec [list [tkfamily $f] -$px]
+    if {$b} { lappend spec bold }
+    if {$i} { lappend spec italic }
+    if {$u} { lappend spec underline }
+    return $spec
+}
+proc mted_hex {aci} {
+    if {$aci eq "" || ![string is integer -strict $aci] || $aci < 1 || $aci > 255 || [llength $::mt(palette)] < 256} {
+        return $::mt(defcolor)
+    }
+    return [lindex $::mt(palette) $aci]
+}
+proc mted_tagfor {fmt} {
+    lassign $fmt f b i u h aci
+    set key [list $f [expr {$b ? 1 : 0}] [expr {$i ? 1 : 0}] [expr {$u ? 1 : 0}] [format %.6g $h] $aci]
+    if {[info exists ::mtf_key($key)]} { return $::mtf_key($key) }
+    set tag fmt[incr ::mtf_n]
+    set ::mtf_key($key) $tag
+    set ::mtf($tag) $key
+    $::mted tag configure $tag -font [mted_fontof $key] -foreground [mted_hex $aci]
+    catch {$::mted tag raise sel}
+    return $tag
+}
+proc mted_typingtag {} { return [mted_tagfor $::mt(typing)] }
+proc mted_fmttag_at {idx} {
+    foreach tg [$::mted tag names $idx] { if {[string match fmt* $tg]} { return $tg } }
+    return ""
+}
+# the text widget's command, wrapped: whatever is inserted without a format gets the typing format,
+# and moving the cursor picks up the format of the text there
+proc mted_wrapper {args} {
+    set op [lindex $args 0]
+    if {$op eq "insert" && [llength $args] >= 3} {
+        set tags [expr {[llength $args] >= 4 ? [lindex $args 3] : {}}]
+        if {[lsearch -glob $tags fmt*] < 0} {
+            set tg ""
+            if {[info exists ::mted_undoing]} {
+                # Undo puts text back through here: it takes the format of the text before it
+                set at [::mted_w index [lindex $args 1]]
+                if {[::mted_w compare $at > 1.0]} { set tg [mted_fmttag_at "$at - 1 char"] }
+                if {$tg eq ""} { set tg [mted_fmttag_at $at] }
+            }
+            lappend tags [expr {$tg ne "" ? $tg : [mted_typingtag]}]
+        }
+        if {[lsearch -exact $tags all] < 0} { lappend tags all }
+        return [::mted_w insert [lindex $args 1] [lindex $args 2] $tags {*}[lrange $args 4 end]]
+    }
+    if {$op eq "edit" && [lindex $args 1] in {undo redo}} {
+        set ::mted_undoing 1
+        set c [catch {::mted_w {*}$args} r]
+        unset ::mted_undoing
+        if {$c} { return -code error $r }
+        return $r
+    }
+    set r [::mted_w {*}$args]
+    if {$op eq "mark" && [lindex $args 1] eq "set" && [lindex $args 2] eq "insert"} {
+        if {![info exists ::mted_syncing]} { set ::mted_syncing 1; after idle mted_sync }
+    }
+    return $r
+}
+proc mted_sync {} {
+    catch {unset ::mted_syncing}
+    set t $::mted
+    if {$t eq "" || ![winfo exists $t] || $::mt(mode) ne "mtext"} return
+    if {[llength [$t tag ranges sel]]} { set at sel.first } \
+    elseif {[$t compare insert > 1.0]} { set at "insert - 1 char" } else { set at insert }
+    set tag [mted_fmttag_at $at]
+    if {$tag eq "" && [$t compare insert > 1.0]} { set tag [mted_fmttag_at insert] }
+    if {$tag ne ""} {
+        set ::mt(typing) $::mtf($tag)
+        mted_showfmt
+        set f [mted_fontof $::mt(typing)]
+        if {$f ne [$t cget -font]} { $t configure -font $f; mted_fit }
+    }
+}
+# the toolbar shows the typing format (or that of the selection)
+proc mted_showfmt {} {
+    lassign $::mt(typing) f b i u h aci
+    set ::mt(font) $f; set ::mt(bold) $b; set ::mt(italic) $i; set ::mt(underline) $u
+    set ::mt(height) $h; set ::mt(hentry) [format %g $h]; set ::mt(hshown) $::mt(hentry)
+    set ::mt(color) $aci
+    catch {.mtedbar.cs configure -background [mted_hex $aci]}
+}
+# change one part of the format (0 font, 1 bold, 2 italic, 3 underline, 4 height, 5 color)
+# for the selected characters, and for what is typed next
+proc mted_apply {key val} {
+    set t $::mted
+    if {$t eq "" || ![winfo exists $t]} return
+    if {$::mt(mode) ne "mtext"} { mted_restyle; return }
+    set i [dict get {font 0 bold 1 italic 2 underline 3 height 4 color 5} $key]
+    if {$i in {1 2 3}} { set val [expr {$val ? 1 : 0}] }
+    set ::mt(typing) [lreplace $::mt(typing) $i $i $val]
+    foreach {a z} [$t tag ranges sel] { mted_retag $a $z $i $val }
+    mted_showfmt
+    mted_restyle
+}
+proc mted_retag {a z i val} {
+    set t $::mted
+    set at [$t index $a]
+    set z [$t index $z]
+    while {[$t compare $at < $z]} {
+        set tag [mted_fmttag_at $at]
+        if {$tag ne ""} {
+            set e [lindex [$t tag prevrange $tag "$at + 1 char"] 1]
+            if {$e eq "" || [$t compare $e > $z] || [$t compare $e <= $at]} { set e $z }
+            set fmt $::mtf($tag)
+            $t tag remove $tag $at $e
+        } else {
+            set e [$t index "$at + 1 char"]
+            set fmt $::mt(typing)
+        }
+        $t tag add [mted_tagfor [lreplace $fmt $i $i $val]] $at $e
+        set at [$t index $e]
+    }
+}
+# characters that lost their format (an undo puts text back without it)
+proc mted_fixtags {} {
+    set t $::mted
+    set on {}
+    set todo {}
+    foreach tg [$t tag names 1.0] { if {[string match fmt* $tg]} { lappend on $tg } }
+    foreach {k v i} [$t dump -tag -text 1.0 end-1c] {
+        switch -- $k {
+            tagon { if {[string match fmt* $v] && $v ni $on} { lappend on $v } }
+            tagoff { set on [lsearch -all -inline -not -exact $on $v] }
+            text { if {[llength $on] == 0} { lappend todo $i [string length $v] } }
+        }
+    }
+    # the format of the text just before (or after) them; else the typing format
+    foreach {i n} $todo {
+        set tg ""
+        if {[$t compare $i > 1.0]} { set tg [mted_fmttag_at "$i - 1 char"] }
+        if {$tg eq ""} { set tg [mted_fmttag_at "$i + $n chars"] }
+        if {$tg eq ""} { set tg [mted_typingtag] }
+        $t tag add $tg $i "$i + $n chars"
+    }
+}
+# the text as runs {text fmt}, in order, neighbours of one format joined
+proc mted_runs {} {
+    set t $::mted
+    set on {}
+    set runs {}
+    foreach tg [$t tag names 1.0] { if {[string match fmt* $tg]} { lappend on $tg } }
+    foreach {k v i} [$t dump -tag -text 1.0 end-1c] {
+        switch -- $k {
+            tagon { if {[string match fmt* $v] && $v ni $on} { lappend on $v } }
+            tagoff { set on [lsearch -all -inline -not -exact $on $v] }
+            text {
+                set fmt [expr {[llength $on] ? $::mtf([lindex $on end]) : $::mt(typing)}]
+                if {[llength $runs] && [lindex $runs end 1] eq $fmt} {
+                    lset runs end 0 "[lindex $runs end 0]$v"
+                } else {
+                    lappend runs [list $v $fmt]
+                }
+            }
+        }
+    }
+    # no trailing new lines
+    while {[llength $runs]} {
+        set s [string trimright [lindex $runs end 0] "\n"]
+        if {$s eq ""} { set runs [lrange $runs 0 end-1] } else { lset runs end 0 $s; break }
+    }
+    return $runs
+}
+# width of the longest line when the box has no width (lines don't wrap)
+proc mted_natwidth {} {
+    set t $::mted
+    set w 0; set cur 0
+    foreach r [mted_runs] {
+        lassign $r s fmt
+        set f [mted_fontof $fmt]
+        set first 1
+        foreach part [split $s "\n"] {
+            if {!$first} { set w [expr {max($w, $cur)}]; set cur 0 }
+            set first 0
+            set cur [expr {$cur + [font measure $f $part]}]
+        }
+    }
+    return [expr {max($w, $cur)}]
+}
+proc mted_colormenu {m} {
+    $m delete 0 end
+    $m add command -label "ByLayer" -command {mted_apply color {}}
+    foreach {n lbl} {1 Red 2 Yellow 3 Green 4 Cyan 5 Blue 6 Magenta 7 White 8 "Gray 8" 9 "Gray 9"} {
+        set img [mted_swatch $n]
+        $m add command -label $lbl -image $img -compound left -command [list mted_apply color $n]
+    }
+    $m add separator
+    $m add command -label "More Colors..." -command mted_morecolors
+}
+proc mted_swatch {n} {
+    set name mtsw_$n
+    if {[lsearch -exact [image names] $name] < 0} { image create photo $name -width 12 -height 12 }
+    $name put [mted_hex $n] -to 0 0 12 12
+    return $name
+}
+proc mted_morecolors {} {
+    set cur [expr {$::mt(color) eq "" ? 256 : $::mt(color)}]
+    set r [colordlg $cur 1 $::mt(palette)]
+    if {[string range $r 0 2] eq "OK "} {
+        set v [string trim [string range $r 3 end]]
+        if {[string is integer -strict $v] && $v >= 1 && $v <= 255} { mted_apply color $v } else { mted_apply color {} }
+    }
+    catch {focus $::mted}
 }
 proc mted_families {} {
     if {![info exists ::mt_families]} {
@@ -1145,13 +1371,90 @@ proc mted_box_colors {color} {
     if {$lum < 0.45} { return {"#f3f5f8" "#101418"} }
     return {"#171c23" "#ffffff"}
 }
+# An MTEXT with formatting on parts of its text, drawn one piece per run: words wrap at WPX
+# (0: only at new lines), the line's pieces share a baseline, ATTACH 1-9 places the block on
+# (x,y), and ANG turns it. RUNS: {text font color} each.
+proc mtrich {x y attach ang wpx tags runs} {
+    set lines {}
+    set cur {}; set curw 0; set pend {}; set word {}; set lastf ""
+    set flush_word {
+        if {[llength $word]} {
+            set ww 0; foreach c $word { set ww [expr {$ww + [lindex $c 3]}] }
+            set sw 0; foreach c $pend { set sw [expr {$sw + [lindex $c 3]}] }
+            if {$wpx > 0 && [llength $cur] && $curw + $sw + $ww > $wpx} {
+                lappend lines [list $cur $curw $lastf]; set cur {}; set curw 0
+            } else {
+                foreach c $pend { lappend cur [linsert $c end $curw]; set curw [expr {$curw + [lindex $c 3]}] }
+            }
+            foreach c $word { lappend cur [linsert $c end $curw]; set curw [expr {$curw + [lindex $c 3]}] }
+            set word {}; set pend {}
+        }
+    }
+    foreach r $runs {
+        lassign $r txt f col
+        set lastf $f
+        foreach piece [regexp -all -inline {\n|[ ]+|[^ \n]+} $txt] {
+            if {$piece eq "\n"} {
+                eval $flush_word
+                lappend lines [list $cur $curw $f]; set cur {}; set curw 0; set pend {}
+            } elseif {[string index $piece 0] eq " "} {
+                eval $flush_word
+                lappend pend [list $piece $f $col [font measure $f $piece]]
+            } else {
+                lappend word [list $piece $f $col [font measure $f $piece]]
+            }
+        }
+    }
+    eval $flush_word
+    lappend lines [list $cur $curw $lastf]
+    # line heights and the block's size
+    set total 0; set boxw $wpx; set info {}
+    foreach ln $lines {
+        lassign $ln items lw lf
+        set asc 0; set desc 0
+        set fonts [expr {[llength $items] ? [lsort -unique [lmap it $items {lindex $it 1}]] : [list $lf]}]
+        foreach f $fonts {
+            set asc [expr {max($asc, [font metrics $f -ascent])}]
+            set desc [expr {max($desc, [font metrics $f -descent])}]
+        }
+        lappend info [list $asc $desc]
+        set total [expr {$total + $asc + $desc}]
+        if {$wpx <= 0} { set boxw [expr {max($boxw, $lw)}] }
+    }
+    set col [expr {($attach - 1) % 3}]; set row [expr {($attach - 1) / 3}]
+    set left [expr {-$boxw * $col / 2.0}]
+    set top [expr {-$total * $row / 2.0}]
+    set a [expr {$ang * 3.14159265358979 / 180.0}]
+    set ca [expr {cos($a)}]; set sa [expr {sin($a)}]
+    set ly $top
+    foreach ln $lines inf $info {
+        lassign $ln items lw
+        lassign $inf asc desc
+        set base [expr {$ly + $asc}]
+        set dx [expr {$col == 0 ? 0 : ($col == 1 ? ($boxw - $lw) / 2.0 : $boxw - $lw)}]
+        foreach it $items {
+            lassign $it s f c w px
+            if {[string trim $s] eq "" && ![string match *underline* $f]} continue
+            set lx [expr {$left + $dx + $px}]
+            set ly2 [expr {$base + [font metrics $f -descent]}]
+            set X [expr {$x + $lx * $ca + $ly2 * $sa}]
+            set Y [expr {$y - $lx * $sa + $ly2 * $ca}]
+            .c create text $X $Y -text $s -anchor sw -angle $ang -font $f -fill $c -tags $tags
+        }
+        set ly [expr {$ly + $asc + $desc}]
+    }
+}
 proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
-    lassign $opts style font bold italic underline height k styles
+    lassign $opts style font bold italic underline height k styles runs palette
     if {$k eq "" || $k <= 0} { set k 1; set height $fpx }
     array set ::mt [list mode $mode style $style font $font bold [expr {$bold ne "" && $bold}] \
                         italic [expr {$italic ne "" && $italic}] underline [expr {$underline ne "" && $underline}] \
-                        height $height k $k styles $styles justify $justify]
+                        height $height k $k styles $styles justify $justify palette $palette defcolor $color color {}]
     if {$::mt(font) eq ""} { set ::mt(font) Arial }
+    set ::mt(typing) [list $::mt(font) $::mt(bold) $::mt(italic) $::mt(underline) $height {}]
+    array unset ::mtf
+    array unset ::mtf_key
+    set ::mtf_n 0
     set font [mted_font]
     set ls [font metrics $font -linespace]
     set f .mtedf
@@ -1160,13 +1463,32 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     set t $f.t
     # the box behind the text: light behind dark text (black on a light drawing), dark behind light
     lassign [mted_box_colors $color] boxbg caret
+    catch {rename ::mted_w {}}
     text $t -font $font -foreground $color -background $boxbg -insertbackground $caret \
         -insertwidth 2 -relief flat -borderwidth 0 -highlightthickness 0 -padx 3 -pady 1 \
-        -undo 1 -selectbackground $::accent -wrap [expr {$mode eq "mtext" && $width > 0 ? "word" : "none"}]
+        -undo 1 -selectbackground $::accent -wrap [expr {$mode eq "mtext" && $width > 0 ? "word" : "none"}] \
+        -exportselection [expr {$mode eq "mtext" ? 0 : 1}]
     $t tag configure all -justify $justify
     $t tag configure misspelled -underline 1
     catch {$t tag configure misspelled -underlinefg "#ff5050"}
-    $t insert end $init all
+    if {$mode eq "mtext"} {
+        rename $t ::mted_w
+        interp alias {} $t {} mted_wrapper
+        set ::mted $t
+        if {[llength $runs]} {
+            foreach r $runs {
+                lassign $r rtext rfont rb ri ru rh raci
+                $t insert end $rtext [list all [mted_tagfor [list $rfont $rb $ri $ru $rh $raci]]]
+            }
+            set ::mt(typing) $::mtf([mted_fmttag_at "end - 2 chars"])
+        } else {
+            $t insert end $init
+        }
+        mted_showfmt
+        $t configure -font [mted_fontof $::mt(typing)]
+    } else {
+        $t insert end $init all
+    }
     $t edit reset
     pack $t -padx 1 -pady 1 -fill both -expand 1
     # only the text widget's own bindings: keep the program's global keys (Esc, Ctrl+Z, F8...) out
@@ -1184,15 +1506,16 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
         bind $b.style <<ComboboxSelected>> {mted_pickstyle; focus $::mted}
         ttk::label $b.fl -text "Font" -style Dim.TLabel
         ttk::combobox $b.font -values [mted_families] -textvariable ::mt(font) -width 18
-        bind $b.font <<ComboboxSelected>> {mted_restyle; focus $::mted}
-        bind $b.font <Return> {mted_restyle; focus $::mted; break}
+        bind $b.font <<ComboboxSelected>> {mted_apply font $::mt(font); focus $::mted}
+        bind $b.font <Return> {mted_apply font $::mt(font); focus $::mted; break}
         ttk::label $b.hl -text "Height" -style Dim.TLabel
         ttk::entry $b.h -textvariable ::mt(hentry) -width 7
-        set ::mt(hentry) [format %g $height]
+        set ::mt(hentry) [format %g $::mt(height)]
+        set ::mt(hshown) $::mt(hentry)
         bind $b.h <Return> {mted_setheight; focus $::mted; break}
         bind $b.h <FocusOut> {mted_setheight}
         foreach {w key lbl} {bb bold B ii italic I uu underline U} {
-            checkbutton $b.$w -text $lbl -variable ::mt($key) -indicatoron 0 -command {mted_restyle; focus $::mted} \
+            checkbutton $b.$w -text $lbl -variable ::mt($key) -indicatoron 0 -command "mted_apply $key \$::mt($key); focus \$::mted" \
                 -width 2 -background "#353c47" -foreground "#d8dde4" -selectcolor $::accent -relief flat \
                 -activebackground "#46505e" -borderwidth 0 -font [list Helvetica 10 [dict get {bold bold italic italic underline underline} $key]]
         }
@@ -1201,21 +1524,26 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
                 -command {mted_restyle; focus $::mted} -width 2 -background "#353c47" -foreground "#d8dde4" \
                 -selectcolor $::accent -relief flat -activebackground "#46505e" -borderwidth 0
         }
+        frame $b.cs -width 12 -height 12 -background [mted_hex $::mt(color)] -borderwidth 1 -relief solid
+        menubutton $b.col -text "Color" -menu $b.col.m -background "#353c47" -foreground "#d8dde4" \
+            -relief flat -activebackground "#46505e" -borderwidth 0 -padx 4
+        menu $b.col.m -tearoff 0
+        mted_colormenu $b.col.m
         menubutton $b.sym -text "Symbols" -menu $b.sym.m -background "#353c47" -foreground "#d8dde4" \
             -relief flat -activebackground "#46505e" -borderwidth 0 -padx 6
         menu $b.sym.m -tearoff 0
         mted_symbol_items $b.sym.m
-        grid $b.sl $b.style $b.fl $b.font $b.hl $b.h $b.bb $b.ii $b.uu $b.jl $b.jc $b.jr $b.sym -padx 2 -pady 3 -row 0
+        grid $b.sl $b.style $b.fl $b.font $b.hl $b.h $b.bb $b.ii $b.uu $b.cs $b.col $b.jl $b.jc $b.jr $b.sym -padx 2 -pady 3 -row 0
     }
     ttk::button $b.ok -text OK -style Tool.TButton -command {mted_done ok}
     ttk::button $b.no -text Cancel -style Tool.TButton -command {mted_done cancel}
-    set hint [expr {$mode eq "mtext" ? "Enter: new line   Ctrl+Enter or click outside: done   Esc: cancel   Right-click: menu"
+    set hint [expr {$mode eq "mtext" ? "Select text, then B/I/U, Font, Height or Color change just that text.   Enter: new line   Ctrl+Enter or click outside: done   Esc: cancel"
                                       : "Enter: done   Esc: cancel   Right-click: menu"}]
     label $b.hint -text $hint -background "#2b313b" -foreground "#8a94a3" -font {Helvetica 8}
     if {$mode eq "mtext"} {
-        grid $b.ok -row 0 -column 13 -padx {8 2}
-        grid $b.no -row 0 -column 14 -padx {2 4}
-        grid $b.hint -row 1 -column 0 -columnspan 15 -sticky w -padx 4
+        grid $b.ok -row 0 -column 15 -padx {8 2}
+        grid $b.no -row 0 -column 16 -padx {2 4}
+        grid $b.hint -row 1 -column 0 -columnspan 17 -sticky w -padx 4
     } else {
         grid $b.hint $b.ok $b.no -row 0 -padx 3 -pady 2
     }
@@ -1234,9 +1562,9 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     bind $t <KeyRelease> {mted_fit; mted_spell_later}
     bind $t <<Paste>> {+after idle mted_spell_later}
     bind $t <Button-3> {$::mted mark set spellpt @%x,%y; mted_popup %X %Y; break}
-    bind $t <Control-b> {set ::mt(bold) [expr {!$::mt(bold)}]; mted_restyle; break}
-    bind $t <Control-i> {set ::mt(italic) [expr {!$::mt(italic)}]; mted_restyle; break}
-    bind $t <Control-u> {set ::mt(underline) [expr {!$::mt(underline)}]; mted_restyle; break}
+    bind $t <Control-b> {set ::mt(bold) [expr {!$::mt(bold)}]; mted_apply bold $::mt(bold); break}
+    bind $t <Control-i> {set ::mt(italic) [expr {!$::mt(italic)}]; mted_apply italic $::mt(italic); break}
+    bind $t <Control-u> {set ::mt(underline) [expr {!$::mt(underline)}]; mted_apply underline $::mt(underline); break}
     bind $t <Control-a> {$::mted tag add sel 1.0 end; break}
     bind $t <Shift-F3> {mted_case_cycle; break}
     set ::mted $t
@@ -1256,12 +1584,20 @@ proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
     vwait ::mted_result
     set r $::mted_result
     destroy $b $f
+    catch {interp alias {} $t {}}
     set ::mted ""
     focus .cmd.e
     return $r
 }
 proc mted_setheight {} {
     if {[string is double -strict $::mt(hentry)] && $::mt(hentry) > 0} {
+        if {$::mt(mode) eq "mtext"} {
+            # only a typed change: leaving the box must not flatten a selection of mixed heights
+            if {[info exists ::mt(hshown)] && $::mt(hentry) eq $::mt(hshown)} return
+            set ::mt(height) $::mt(hentry)
+            mted_apply height $::mt(hentry)
+            return
+        }
         set ::mt(height) $::mt(hentry)
         mted_restyle
     } else {
@@ -1298,7 +1634,7 @@ proc mted_popup {X Y} {
             set sugs [spell_suggest $word]
             if {[llength $sugs] == 0} { $m add command -label "(no suggestions)" -state disabled }
             foreach sg $sugs {
-                $m add command -label $sg -font {Helvetica 10 bold}                     -command [list apply {{a b sg} {$::mted delete $a $b; $::mted insert $a $sg all; mted_fit; mted_spellcheck}} $a $b $sg]
+                $m add command -label $sg -font {Helvetica 10 bold}                     -command [list apply {{a b sg} {set tg [lsearch -all -inline -not -exact [$::mted tag names $a] misspelled]; $::mted delete $a $b; $::mted insert $a $sg $tg; mted_fit; mted_spellcheck}} $a $b $sg]
             }
             $m add command -label "Add \"$word\" to Dictionary" -command [list apply {{w} {spell_add $w; mted_spellcheck}} $word]
             $m add command -label "Ignore \"$word\"" -command [list apply {{w} {set ::spell_ignore([string tolower $w]) 1; mted_spellcheck}} $word]
@@ -1371,10 +1707,29 @@ proc mted_case {fn} {
     set t $::mted
     if {[llength [$t tag ranges sel]]} { set a sel.first; set z sel.last } else { set a 1.0; set z end-1c }
     set keepsel [llength [$t tag ranges sel]]
-    set s [case_convert [$t get $a $z] $fn]
+    set old [$t get $a $z]
+    set s [case_convert $old $fn]
     set ia [$t index $a]
-    $t delete $a $z
-    $t insert $ia $s all
+    if {$::mt(mode) eq "mtext" && [string length $s] == [string length $old]} {
+        # one character at a time keeps every character's format (one step for Undo)
+        $t configure -autoseparators 0
+        $t edit separator
+        set n [string length $s]
+        for {set k 0} {$k < $n} {incr k} {
+            set c [string index $s $k]
+            if {$c ne [string index $old $k]} {
+                set at [$t index "$ia + $k chars"]
+                set tg [$t tag names $at]
+                $t delete $at
+                $t insert $at $c $tg
+            }
+        }
+        $t edit separator
+        $t configure -autoseparators 1
+    } else {
+        $t delete $a $z
+        $t insert $ia $s all
+    }
     if {$keepsel} { $t tag add sel $ia "$ia + [string length $s] chars" }
     mted_fit
 }
@@ -1385,8 +1740,11 @@ proc mted_fit {} {
     $t tag add all 1.0 end
     lassign $::mted_geom mode x y width ls minh
     set ls [font metrics [$t cget -font] -linespace]
+    if {$mode eq "mtext"} { mted_fixtags }
     if {$mode eq "mtext" && $width > 0} {
         set w [expr {$width + 8}]
+    } elseif {$mode eq "mtext"} {
+        set w [expr {max(40, [mted_natwidth] + $ls)}]
     } else {
         set w 40
         foreach line [split [$t get 1.0 end-1c] "\n"] {
@@ -1397,7 +1755,12 @@ proc mted_fit {} {
     update idletasks
     set n [$t count -displaylines 1.0 end]
     if {$n eq "" || $n < 1} { set n 1 }
-    place .mtedf -in .c -x [expr {$x - 4}] -y [expr {$y - 2}] -width $w -height [expr {max($n * $ls + 6, $minh)}]
+    set hpx [expr {$n * $ls + 6}]
+    if {$mode eq "mtext"} {
+        set yp [$t count -update -ypixels 1.0 end]
+        if {$yp ne "" && $yp > 0} { set hpx [expr {$yp + 8}] }
+    }
+    place .mtedf -in .c -x [expr {$x - 4}] -y [expr {$y - 2}] -width $w -height [expr {max($hpx, $minh)}]
     raise .mtedf
     catch {raise .mtedbar}
 }
@@ -1412,6 +1775,15 @@ proc mted_done {how} {
         set s [string map {"\n" " "} $s]
     }
     set fields [list $::mt(style) $::mt(font) $::mt(height) $::mt(bold) $::mt(italic) $::mt(underline) $::mt(justify) $s]
+    if {$::mt(mode) eq "mtext"} {
+        # each run: text (new lines as \x1c), font, bold, italic, underline, height, color
+        set out {}
+        foreach r [mted_runs] {
+            lassign $r rs fmt
+            lappend out [join [concat [list [string map {"\n" "\x1c"} $rs]] $fmt] \x1d]
+        }
+        lappend fields [join $out \x1e]
+    }
     set ::mted_result "OK [join $fields \x1f]"
 }
 

@@ -413,6 +413,7 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
            (text-greek-cmds data (if hl "#8fc4ff" color) tags))
           ((> px-size 3000) nil)
           ((or (< x -4000) (> x (+ *full-cw* 4000)) (< y -4000) (> y (+ *full-ch* 4000))) nil)
+          ((mtext-rich-p data) (list (render-rich-mtext data x y color tags hl)))
           (t (multiple-value-bind (anchor justify) (text-anchor data)
                (list (format nil ".c create text ~A ~A -text ~A -anchor ~A -justify ~A -angle ~,3F -font {~A} -fill ~A -tags {~A}~A"
                              (fmtn x) (fmtn y) (tq s) anchor justify (deg rot) (text-font-spec data px-size)

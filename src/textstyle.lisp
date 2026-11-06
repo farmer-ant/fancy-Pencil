@@ -152,7 +152,8 @@ Returns a plist (:font F :bold B :italic I :underline U :height H :relative-heig
 (defun text-effective-height (data)
   "Drawn height of DATA, honouring an MTEXT whole-object \\H override."
   (let* ((h (or (dxf 40 data) 0.2d0))
-         (fmt (and (equal (dxf 0 data) "MTEXT") (mtext-overall-format (or (dxf 1 data) "")))))
+         (fmt (and (equal (dxf 0 data) "MTEXT") (not (mtext-rich-p data))
+                   (mtext-overall-format (or (dxf 1 data) "")))))
     (cond ((getf fmt :height) (getf fmt :height))
           ((getf fmt :relative-height) (* h (getf fmt :relative-height)))
           (t h))))
