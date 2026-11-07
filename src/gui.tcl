@@ -615,6 +615,14 @@ bind .c <B2-Motion> {emit D %x %y}
 bind .c <ButtonRelease-2> {emit Q %x %y}
 bind .c <Double-Button-2> {emit MENU "'ZOOMEXT"}
 set ::idleid ""
+# zooming with the wheel: grips go where their points went, keeping their size
+proc grips_follow {sx sy f} {
+    foreach i [.c find withtag grip] {
+        lassign [.c coords $i] x0 y0 x1 y1
+        set cx [expr {($x0 + $x1) / 2.0}]; set cy [expr {($y0 + $y1) / 2.0}]
+        .c move $i [expr {($cx - $sx) * ($f - 1)}] [expr {($cy - $sy) * ($f - 1)}]
+    }
+}
 proc idle-later {} { after cancel $::idleid; set ::idleid [after 200 {emit IDLE}] }
 proc wheel {x y d} { emit W $x $y $d; idle-later }
 bind .c <Button-4> {wheel %x %y 1}

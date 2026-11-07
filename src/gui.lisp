@@ -218,7 +218,8 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
           *vy* (+ (py w) (/ (- sy *ty* (/ *ch* 2d0)) *vscale*)))
     (if quick
         ;; instant feedback: scale what is on the canvas; exact regen follows on IDLE
-        (progn (tk-send-string (format nil "foreach tg {~A} {.c scale $tg ~D ~D ~,5F ~,5F}" (quick-tags) sx sy factor factor))
+        (progn (tk-send-string (format nil "foreach tg {~A} {.c scale $tg ~D ~D ~,5F ~,5F}~%grips_follow ~D ~D ~,5F"
+                                       (quick-tags) sx sy factor factor sx sy factor))
                (setf *regen-pending* t)
                (draw-temp))
         (gui-regen))))
@@ -1164,7 +1165,7 @@ several), else the current layer. Only shows it; the current layer is not change
                                 (setf *vx* (- vx (/ (- x x0) *vscale*)) *vy* (+ vy (/ (- y y0) *vscale*)))
                                 (setf *mouse-sx* x *mouse-sy* y)
                                 ;; move existing items now; regen when the button is released
-                                (tk-send-string (format nil "foreach tg {~A} {.c move $tg ~D ~D}" (quick-tags) (- x ox) (- y oy)))
+                                (tk-send-string (format nil "foreach tg {~A grip} {.c move $tg ~D ~D}" (quick-tags) (- x ox) (- y oy)))
                                 (draw-temp)))))
                         t)
       ((string= ty "Q") (setf *pan-start* nil) (gui-regen) t)
