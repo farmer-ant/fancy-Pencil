@@ -183,6 +183,13 @@ does the same at the command line. Styles are saved to and read from DXF, includ
 font and bold/italic flags AutoCAD stores. Width factor and oblique angle are kept in the file but
 text is drawn without them for now.
 
+**Adding fonts.** Put .ttf / .otf files in a folder named `fonts` next to the `fancypencil` folder
+(or inside it, or in `~/.config/fancypencil/fonts`). Each time Fancy Pencil starts it installs any new
+ones for your user (in `~/.local/share/fonts/fancypencil`), and they appear in the Font lists.
+Drawings that name AutoCAD's Century Gothic files (GOTHIC.TTF, GOTHICB.TTF ...) use Century Gothic
+when it is installed, otherwise a free look-alike (URW Gothic / TeX Gyre Adventor) if there is one.
+Fonts are not part of the Fancy Pencil download: commercial fonts stay under their own licenses.
+
 ### Selection, grips and the Properties palette
 
 Click objects at the `Command:` prompt to select them first. Selected objects show blue grips;
