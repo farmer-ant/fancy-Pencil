@@ -60,6 +60,10 @@ substitutes metric-compatible fonts (Arial -> Liberation Sans) when the named on
              ((search "calibri" base) "Calibri")
              ((search "verdana" base) "Verdana")
              ((search "tahoma" base) "Tahoma")
+             ;; AutoCAD's Century Gothic files: GOTHIC, GOTHICB, GOTHICI, GOTHICBI
+             ((or (member base '("gothic" "gothicb" "gothici" "gothicbi") :test #'string=)
+                  (search "centurygothic" base) (search "century gothic" base) (search "century_gothic" base))
+              "Century Gothic")
              ((search "isocpeur" base) "Helvetica")
              (t (pathname-name (pathname (substitute #\/ #\\ f))))))
       (t f))))
@@ -77,7 +81,9 @@ substitutes metric-compatible fonts (Arial -> Liberation Sans) when the named on
     ("Courier New" "Liberation Mono" "Cousine" "DejaVu Sans Mono" "Courier")
     ("Courier" "Liberation Mono" "Cousine" "DejaVu Sans Mono" "Courier")
     ("Calibri" "Carlito" "Liberation Sans" "DejaVu Sans" "Helvetica")
-    ("Cambria" "Caladea" "Liberation Serif" "DejaVu Serif" "Times")))
+    ("Cambria" "Caladea" "Liberation Serif" "DejaVu Serif" "Times")
+    ;; free look-alikes of Century Gothic, when it isn't installed
+    ("Century Gothic" "URW Gothic" "URW Gothic L" "TeX Gyre Adventor" "DejaVu Sans" "Helvetica")))
 
 (defun installed-family (family)
   "FAMILY if it is installed, else a metric-compatible look-alike, else Helvetica (Tk always has it)."

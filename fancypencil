@@ -7,4 +7,21 @@ if [ ! -t 2 ]; then
     exec 2>>"$HOME/.cache/fancypencil.log"
     echo "--- $(date) fancypencil $*" >&2
 fi
+# fonts put in a "fonts" folder (inside or next to the Fancy Pencil folder, or in
+# ~/.config/fancypencil/fonts) are installed for this user, so the drawing can use them
+FONTDEST="$HOME/.local/share/fonts/fancypencil"
+NEWFONTS=
+for FD in "$DIR/fonts" "$DIR/../fonts" "$HOME/.config/fancypencil/fonts"; do
+    [ -d "$FD" ] || continue
+    for F in "$FD"/*.ttf "$FD"/*.TTF "$FD"/*.otf "$FD"/*.OTF "$FD"/*.ttc "$FD"/*.TTC; do
+        [ -f "$F" ] || continue
+        B=$(basename "$F")
+        if [ ! -f "$FONTDEST/$B" ] || ! cmp -s "$F" "$FONTDEST/$B"; then
+            mkdir -p "$FONTDEST" && cp "$F" "$FONTDEST/$B" && NEWFONTS=1
+        fi
+    done
+done
+if [ -n "$NEWFONTS" ] && command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f "$FONTDEST" >/dev/null 2>&1
+fi
 exec sbcl --noinform --disable-debugger --load "$DIR/load.lisp" --eval '(fancy-pencil:main)' --end-toplevel-options "$@"
