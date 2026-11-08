@@ -199,7 +199,10 @@ foreach {label kw} {Top Top Bottom Bottom Left Left Right Right Front Front Back
 }
 set ::viewname Top
 .mb.view add command -label "Plan View (Top)" -command {menucmd PLAN}
-.mb.view add command -label "Orbit" -command {menucmd 3DORBIT}
+menu .mb.view.nav -tearoff 0
+.mb.view add cascade -label "3D Navigation" -menu .mb.view.nav
+foreach {l c} {"Constrained Orbit" 3DORBIT "Free Orbit" 3DFORBIT "Continuous Orbit" 3DCORBIT
+               "Adjust Distance" 3DDISTANCE "Swivel" 3DSWIVEL "Zoom" 3DZOOM "Pan" 3DPAN} { mcmd .mb.view.nav $l $c }
 menu .mb.view.vs -tearoff 0
 .mb.view add cascade -label "Visual Styles" -menu .mb.view.vs
 set ::vstyle Wireframe
@@ -616,6 +619,13 @@ proc rolltip_hide {} { place forget .c.tip }
 bind .c <ButtonPress-2> {emit P %x %y}
 bind .c <B2-Motion> {emit D %x %y}
 bind .c <ButtonRelease-2> {emit Q %x %y}
+# Shift + middle drag: orbit (Ctrl + Shift: free orbit), as in AutoCAD
+bind .c <Shift-ButtonPress-2> {emit OP %x %y 0}
+bind .c <Control-Shift-ButtonPress-2> {emit OP %x %y 1}
+bind .c <Shift-B2-Motion> {emit OD %x %y}
+bind .c <Control-Shift-B2-Motion> {emit OD %x %y}
+bind .c <Shift-ButtonRelease-2> {emit OQ %x %y}
+bind .c <Control-Shift-ButtonRelease-2> {emit OQ %x %y}
 bind .c <Double-Button-2> {emit MENU "'ZOOMEXT"}
 set ::idleid ""
 # zooming with the wheel: grips go where their points went, keeping their size

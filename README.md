@@ -516,9 +516,28 @@ current view; each drawing tab keeps its own view. Thickness and elevation are s
 
 ### Orbit and visual styles (View menu)
 
-**3DORBIT** (View → Orbit, `ORBIT`, `3DO`): press and drag on the drawing to turn the view around it
-- left-right turns it about the vertical, up-down tilts it - then release; drag again or press
-Enter to finish. The view stays "Custom" until you pick a standard view.
+**3D navigation** (View → 3D Navigation, or the 3D Navigation toolbar). Press and drag on the drawing;
+release; drag again, or press Enter to finish. At the prompt you can switch to any other tool
+(Constrained / Free / coNtinuous / Distance / Swivel / Zoom / Pan). The view stays "Custom" until
+you pick a standard view.
+
+* **3DORBIT** (`ORBIT`, `3DO`), constrained orbit: turns the view around a target - left-right about
+  the Z axis, up-down tilts - and up stays up. The target shows as a small dark sphere while you drag.
+* **3DFORBIT**, free orbit: inside the green circle drag turns the view any way; outside it, drag rolls
+  it about your line of sight; on the small circles left/right it turns about the vertical only,
+  top/bottom about the horizontal only.
+* **3DCORBIT**, continuous orbit: drag and let go, and the view keeps turning in that direction, as
+  fast as you dragged. Click to stop.
+* **3DDISTANCE**, adjust distance: drag up to move the camera closer (objects larger), down to move it away.
+* **3DSWIVEL**: the camera stays where it is and turns, like turning your head; the target moves.
+* **3DZOOM** and **3DPAN**: zoom (drag up = in) and pan in the 3D view.
+* **Shift + middle-button drag** orbits at any time, even in the middle of another command;
+  **Ctrl + Shift + middle drag** is a free orbit.
+* **ORBITAUTOTARGET**: 1 (standard) orbits around the middle of the selected objects, or of the whole
+  drawing when nothing is selected; 0 around the point in the middle of the screen.
+
+Views are drawn in parallel projection (no perspective), so Adjust Distance and Zoom both change
+how large things look; the camera distance matters for Swivel.
 
 **VSCURRENT** (View → Visual Styles, `VS`; `HIDE` for Hidden):
 

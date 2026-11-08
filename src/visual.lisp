@@ -149,30 +149,6 @@ one turned away (drawn in Hidden and Shaded with Edges), each just after its fro
 
 (defvar *orbit-redrawing* nil)
 
-(defcmd "3DORBIT" ("3DO" "ORBIT") "Turns the view around the drawing with the mouse."
-  (out (format nil "Drag to orbit (left-right turns, up-down tilts). Enter to finish.~%"))
-  (loop
-    (let ((p (get-user-input :point :prompt "Press and drag to orbit, or Enter to finish: " :nosnap t)))
-      (unless (pointp p) (return))
-      (let ((sx0 *mouse-sx*) (sy0 *mouse-sy*))
-        (multiple-value-bind (az0 el0) (view-angles *view*)
-          ;; keep the middle of the screen in the middle while turning
-          (let* ((centre (s->w (+ *tx* (/ *cw* 2d0)) (+ *ty* (/ *ch* 2d0))))
-                 (turn (lambda (cur)
-                         (declare (ignore cur))
-                         (let ((dx (- *mouse-sx* sx0)) (dy (- *mouse-sy* sy0)))
-                           (setf *view* (orbit-view (- az0 (* dx 0.01d0)) (+ el0 (* dy 0.01d0))))
-                           (multiple-value-bind (u v) (view-project centre) (setf *vx* u *vy* v))
-                           (clear-geom-cache)
-                           ;; redraw (the redraw itself shows the drag again: do not recurse)
-                           (unless *orbit-redrawing*
-                             (let ((*orbit-redrawing* t)) (gui-regen))))
-                         nil)))
-            (get-user-input :corner :base p :prompt "Release (or click) to stop: " :drag turn :nosnap t)
-            (clear-geom-cache)
-            (when (gui-p) (gui-regen) (gui-sync)))))))
-  (out (format nil "View: ~A.~%" (if *view* (first *view*) "Top"))))
-
 ;;; ---------- plots in the Hidden and Shaded styles ----------
 
 (defun plot-shade (rgb normal)
