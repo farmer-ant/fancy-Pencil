@@ -1,6 +1,6 @@
 (asdf:defsystem "fancypencil"
   :description "2D drafting program with an AutoLISP-compatible interpreter"
-  :version "0.3.93"
+  :version "0.3.94"
   :license "MIT"
   :serial t
   :components ((:module "src"

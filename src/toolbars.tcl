@@ -835,8 +835,166 @@ proc tbx_opt_set {key col} {
     tbx_opt_changed
 }
 proc tbx_opt_pick {key} {
-    set c [tk_chooseColor -parent .tbopt -initialcolor $::tbo($key) -title "Toolbar color"]
+    set c [fpcolor_choose $::tbo($key) "Toolbar color" .tbopt [list tbx_opt_set $key]]
     if {$c ne ""} { tbx_opt_set $key $c }
+}
+
+# ---------------------------------------------------------------- color chooser
+# Red, Green and Blue sliders plus a Light / Dark slider (the lightness of the same color: drag
+# left for darker shades, right for lighter tints), a hex box and a preview. Returns "#rrggbb",
+# or "" when cancelled. LIVE, if given, is called with each color as it changes.
+proc fpcolor_choose {initial title parent {live ""}} {
+    set t .fpcolor
+    catch {destroy $t}
+    toplevel $t -background $::panel
+    wm title $t $title
+    catch {wm attributes $t -type dialog}
+    if {[winfo exists $parent]} { wm transient $t $parent }
+    wm resizable $t 0 0
+    if {[catch {lassign [winfo rgb . $initial] r g b}]} { lassign {0 0 0} r g b }
+    set ::fpc(r) [expr {$r / 256}]; set ::fpc(g) [expr {$g / 256}]; set ::fpc(b) [expr {$b / 256}]
+    set ::fpc(live) $live
+    set ::fpc(orig) [format "#%02x%02x%02x" $::fpc(r) $::fpc(g) $::fpc(b)]
+    fpcolor_from_rgb
+    set f [ttk::frame $t.f -padding 10]
+    pack $f
+    set row 0
+    foreach {k lbl} {r Red g Green b Blue l "Light / Dark"} {
+        ttk::label $f.l$k -text $lbl
+        ttk::spinbox $f.e$k -from 0 -to [expr {$k eq "l" ? 100 : 255}] -width 5 -textvariable ::fpc(e$k) \
+            -command [list fpcolor_typed $k]
+        bind $f.e$k <Return> [list fpcolor_typed $k]
+        bind $f.e$k <FocusOut> [list fpcolor_typed $k]
+        set c [canvas $f.c$k -width 258 -height 24 -background $::panel -highlightthickness 0 -cursor hand2]
+        bind $c <Button-1> [list fpcolor_drag $k %x]
+        bind $c <B1-Motion> [list fpcolor_drag $k %x]
+        grid $f.l$k -row $row -column 0 -sticky w -padx {0 6} -pady 3
+        grid $f.e$k -row $row -column 1 -sticky w -padx {0 6} -pady 3
+        grid $c -row $row -column 2 -sticky w -pady 3
+        incr row
+    }
+    ttk::label $f.lh -text "Hex"
+    ttk::entry $f.hex -width 9 -textvariable ::fpc(hex)
+    bind $f.hex <Return> fpcolor_hex
+    bind $f.hex <FocusOut> fpcolor_hex
+    grid $f.lh -row 0 -column 3 -sticky w -padx {14 4}
+    grid $f.hex -row 1 -column 3 -sticky w -padx {14 4}
+    frame $f.pv -width 90 -height 52 -relief solid -borderwidth 1
+    grid $f.pv -row 2 -column 3 -rowspan 2 -sticky nw -padx {14 4}
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.ok -text "OK" -command {set ::fpc(done) ok}
+    ttk::button $bb.cancel -text "Cancel" -command {set ::fpc(done) cancel}
+    pack $bb.ok -side left -padx 4
+    pack $bb.cancel -side left -padx 4
+    grid $bb -row $row -column 0 -columnspan 4 -pady {10 0}
+    bind $t <Return> {set ::fpc(done) ok}
+    bind $t <Escape> {set ::fpc(done) cancel}
+    wm protocol $t WM_DELETE_WINDOW {set ::fpc(done) cancel}
+    fpcolor_show
+    if {[winfo exists $parent]} {
+        wm geometry $t +[expr {[winfo rootx $parent] + 30}]+[expr {[winfo rooty $parent] + 60}]
+    }
+    catch {grab $t}
+    focus $t
+    set ::fpc(done) ""
+    vwait ::fpc(done)
+    catch {grab release $t}
+    set res [expr {$::fpc(done) eq "ok" ? [fpcolor_hexnow] : ""}]
+    if {$res eq "" && $live ne ""} { catch {uplevel #0 [concat $live [list $::fpc(orig)]]} }
+    destroy $t
+    return $res
+}
+proc fpcolor_hexnow {} { format "#%02x%02x%02x" $::fpc(r) $::fpc(g) $::fpc(b) }
+# RGB (0-255) <-> hue, saturation, lightness (0-1)
+proc fpcolor_from_rgb {} {
+    set r [expr {$::fpc(r) / 255.0}]; set g [expr {$::fpc(g) / 255.0}]; set b [expr {$::fpc(b) / 255.0}]
+    set mx [expr {max($r, $g, $b)}]; set mn [expr {min($r, $g, $b)}]
+    set l [expr {($mx + $mn) / 2.0}]
+    if {$mx - $mn > 1e-6} {
+        set d [expr {$mx - $mn}]
+        set s [expr {$l > 0.5 ? $d / (2.0 - $mx - $mn) : $d / ($mx + $mn)}]
+        if {$mx == $r} { set h [expr {($g - $b) / $d + ($g < $b ? 6 : 0)}] } \
+        elseif {$mx == $g} { set h [expr {($b - $r) / $d + 2}] } \
+        else { set h [expr {($r - $g) / $d + 4}] }
+        set ::fpc(h) [expr {$h / 6.0}]; set ::fpc(s) $s
+    } elseif {![info exists ::fpc(h)]} { set ::fpc(h) 0.0; set ::fpc(s) 0.0 } \
+    elseif {$l > 0.0 && $l < 1.0} { set ::fpc(s) 0.0 }
+    set ::fpc(l) $l
+}
+proc fpcolor_hsl {h s l} {
+    if {$s < 1e-6} { set v [expr {round($l * 255)}]; return [list $v $v $v] }
+    set q [expr {$l < 0.5 ? $l * (1 + $s) : $l + $s - $l * $s}]
+    set p [expr {2 * $l - $q}]
+    set out {}
+    foreach tt [list [expr {$h + 1/3.0}] $h [expr {$h - 1/3.0}]] {
+        if {$tt < 0} { set tt [expr {$tt + 1}] }
+        if {$tt > 1} { set tt [expr {$tt - 1}] }
+        if {$tt < 1/6.0} { set v [expr {$p + ($q - $p) * 6 * $tt}] } \
+        elseif {$tt < 0.5} { set v $q } \
+        elseif {$tt < 2/3.0} { set v [expr {$p + ($q - $p) * (2/3.0 - $tt) * 6}] } \
+        else { set v $p }
+        lappend out [expr {max(0, min(255, round($v * 255)))}]
+    }
+    return $out
+}
+proc fpcolor_set {k v} {
+    if {$k eq "l"} {
+        set ::fpc(l) [expr {max(0.0, min(1.0, $v / 100.0))}]
+        lassign [fpcolor_hsl $::fpc(h) $::fpc(s) $::fpc(l)] ::fpc(r) ::fpc(g) ::fpc(b)
+    } else {
+        set ::fpc($k) [expr {max(0, min(255, round($v)))}]
+        fpcolor_from_rgb
+    }
+    fpcolor_show
+}
+proc fpcolor_drag {k x} {
+    set v [expr {max(0.0, min(1.0, ($x - 1) / 256.0))}]
+    fpcolor_set $k [expr {$k eq "l" ? $v * 100 : $v * 255}]
+}
+proc fpcolor_typed {k} {
+    set v $::fpc(e$k)
+    if {[string is double -strict $v]} { fpcolor_set $k $v } else { fpcolor_show }
+}
+proc fpcolor_hex {} {
+    set v [string trim $::fpc(hex)]
+    if {![string match "#*" $v]} { set v "#$v" }
+    if {[regexp {^#[0-9a-fA-F]{6}$} $v] && ![catch {winfo rgb . $v} rgb]} {
+        lassign $rgb r g b
+        set ::fpc(r) [expr {$r / 256}]; set ::fpc(g) [expr {$g / 256}]; set ::fpc(b) [expr {$b / 256}]
+        fpcolor_from_rgb
+    }
+    fpcolor_show
+}
+proc fpcolor_show {} {
+    set f .fpcolor.f
+    if {![winfo exists $f]} return
+    foreach k {r g b} { set ::fpc(e$k) $::fpc($k) }
+    set ::fpc(el) [expr {round($::fpc(l) * 100)}]
+    set ::fpc(hex) [fpcolor_hexnow]
+    $f.pv configure -background $::fpc(hex)
+    foreach k {r g b l} {
+        set c $f.c$k
+        $c delete all
+        for {set i 0} {$i < 64} {incr i} {
+            set t [expr {($i + 0.5) / 64.0}]
+            if {$k eq "l"} {
+                lassign [fpcolor_hsl $::fpc(h) $::fpc(s) $t] rr gg bb
+            } else {
+                set rr $::fpc(r); set gg $::fpc(g); set bb $::fpc(b)
+                set [dict get {r rr g gg b bb} $k] [expr {round($t * 255)}]
+            }
+            set x0 [expr {1 + $i * 4}]
+            $c create rectangle $x0 1 [expr {$x0 + 4}] 15 -fill [format "#%02x%02x%02x" $rr $gg $bb] -outline ""
+        }
+        $c create rectangle 1 1 257 15 -outline $::dim
+        set pos [expr {$k eq "l" ? $::fpc(l) : $::fpc($k) / 255.0}]
+        set x [expr {1 + $pos * 256}]
+        $c create polygon $x 16 [expr {$x - 5}] 23 [expr {$x + 5}] 23 -fill $::fg -outline $::panel
+    }
+    if {$::fpc(live) ne ""} {
+        catch {after cancel $::fpc(liveid)}
+        set ::fpc(liveid) [after 120 [list catch [concat $::fpc(live) [list [fpcolor_hexnow]]]]]
+    }
 }
 proc tbx_opt_theme {name} {
     if {![dict exists $::tbo_themes $name]} return
