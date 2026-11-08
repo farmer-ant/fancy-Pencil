@@ -220,7 +220,8 @@ mcmd .mb.view.ucs "Rotate About Z" "UCS Z"
 .mb.view.ucs add separator
 mcmd .mb.view.ucs "Previous" "UCS Previous"
 .mb.view add checkbutton -label "Show View Picker" -variable ::vc_shown -command {viewcube_show $::vc_shown}
-.mb.view add checkbutton -label "Command Tree Icons" -variable ::itbshown -command {itb_toggle; emit TREEICONS $::itbshown}
+menu .mb.view.tbars -tearoff 0
+.mb.view add cascade -label "Toolbars" -menu .mb.view.tbars
 .mb.view add separator
 menu .mb.view.iso -tearoff 0
 .mb.view add cascade -label "Isometric Drafting" -menu .mb.view.iso
@@ -438,145 +439,6 @@ pack .main -side top -fill both -expand 1
 canvas .c -background $bg -highlightthickness 0 -cursor none -borderwidth 0
 pack .c -in .main -side left -fill both -expand 1
 
-# ---------------------------------------------------------------- command tree icons
-# A strip of icons down the left of the drawing, one per menu: click one to open that
-# menu (its whole tree of commands) beside it. View > Command Tree Icons shows / hides it.
-set ::itb_menus {file File edit Edit view View layout Layout draw Draw solid Solids dim Dimension
-                 modify Modify format Format tools Tools express Express window Window help Help}
-set ::itb_open ""
-frame .itb -background $panel -borderwidth 0
-proc itb_glyph {c name} {
-    set f $::fg; set a $::accent; set p $::panel2
-    switch -- $name {
-        file {
-            $c create polygon 6 3 15 3 20 8 20 21 6 21 -fill "" -outline $f -width 1.5
-            $c create line 15 3 15 8 20 8 -fill $f -width 1.5
-            $c create line 9 12 17 12 -fill $a -width 1.5
-            $c create line 9 15 17 15 -fill $a -width 1.5
-            $c create line 9 18 14 18 -fill $a -width 1.5
-        }
-        edit {
-            $c create rectangle 6 5 18 21 -outline $f -width 1.5
-            $c create rectangle 9 3 15 7 -fill $a -outline $a
-            $c create line 9 11 15 11 -fill $f
-            $c create line 9 14 15 14 -fill $f
-            $c create line 9 17 13 17 -fill $f
-        }
-        view {
-            $c create line 3 12 12 6 21 12 12 18 3 12 -smooth 1 -fill $f -width 1.5
-            $c create oval 9 9 15 15 -fill $a -outline $a
-            $c create oval 11 11 13 13 -fill $::panel -outline ""
-        }
-        layout {
-            $c create rectangle 4 4 20 20 -outline $f -width 1.5
-            $c create line 4 17 20 17 -fill $f
-            $c create line 14 17 14 20 -fill $f
-            $c create rectangle 7 7 17 14 -outline $a -width 1.5
-        }
-        draw {
-            $c create polygon 16 3 21 8 9 20 4 15 -fill "" -outline $f -width 1.5
-            $c create polygon 4 15 9 20 3 21 -fill $a -outline $a
-            $c create line 14 5 19 10 -fill $f
-        }
-        solid {
-            $c create polygon 12 3 20 7.5 12 12 4 7.5 -fill "#6aa9f0" -outline $f
-            $c create polygon 4 7.5 12 12 12 21 4 16.5 -fill $a -outline $f
-            $c create polygon 12 12 20 7.5 20 16.5 12 21 -fill "#2a6cb8" -outline $f
-        }
-        dim {
-            $c create line 5 5 5 20 -fill $f
-            $c create line 19 5 19 20 -fill $f
-            $c create line 5 14 19 14 -fill $a -width 1.5 -arrow both -arrowshape {5 6 2.5}
-            $c create line 10 9 14 9 -fill $f -width 1.5
-        }
-        modify {
-            $c create line 12 3 12 21 -fill $f -width 1.5 -arrow both -arrowshape {5 6 3}
-            $c create line 3 12 21 12 -fill $f -width 1.5 -arrow both -arrowshape {5 6 3}
-            $c create oval 10 10 14 14 -fill $a -outline $a
-        }
-        format {
-            $c create line 3 17 12 22 21 17 -fill $f -width 1.5
-            $c create line 3 13 12 18 21 13 -fill $f -width 1.5
-            $c create polygon 12 4 21 9 12 14 3 9 -fill $a -outline $f
-        }
-        tools {
-            $c create line 5 19 14 10 -fill $f -width 4 -capstyle round
-            $c create oval 12 3 21 12 -outline $f -width 2.5
-            $c create rectangle 15 2 18.5 7 -fill $::panel -outline $::panel
-            $c create oval 4 18 6 20 -fill $a -outline $a
-        }
-        express {
-            $c create polygon 14 2 5 13 11 13 9 22 19 10 13 10 16 2 -fill "#f0c040" -outline "#c89a20"
-        }
-        window {
-            $c create rectangle 3 5 15 15 -fill $p -outline $f
-            $c create rectangle 3 5 15 7.5 -fill $f -outline $f
-            $c create rectangle 9 9 21 19 -fill $p -outline $f
-            $c create rectangle 9 9 21 11.5 -fill $a -outline $f
-        }
-        help {
-            $c create oval 3 3 21 21 -outline $f -width 1.5
-            $c create text 12 12.5 -text "?" -fill $a -font {Helvetica -14 bold}
-        }
-    }
-    $c move all 3 3
-}
-proc itb_build {} {
-    foreach w [winfo children .itb] { destroy $w }
-    foreach {name label} $::itb_menus {
-        if {![winfo exists .mb.$name]} continue
-        set c [canvas .itb.$name -width 30 -height 30 -background $::panel -highlightthickness 0 \
-                   -borderwidth 0 -cursor hand2]
-        itb_glyph $c $name
-        pack $c -side top -padx 3 -pady 2
-        bind $c <ButtonPress-1> [list itb_click $name]
-        bind $c <Enter> [list itb_enter $name $label]
-        bind $c <Leave> [list itb_leave $name]
-    }
-}
-proc itb_click {name} {
-    itb_tip_hide
-    if {$::itb_open eq $name && $::fp_popup_menu ne ""} { popup_close; return }
-    set c .itb.$name
-    fp_popup .mb.$name [expr {[winfo rootx $c] + [winfo width $c] + 4}] [winfo rooty $c]
-    set ::itb_open $name
-    $c configure -background $::accent
-}
-proc itb_reset {} {
-    if {$::itb_open ne "" && [winfo exists .itb.$::itb_open]} { .itb.$::itb_open configure -background $::panel }
-    set ::itb_open ""
-}
-proc itb_enter {name label} {
-    if {$::itb_open ne $name} { .itb.$name configure -background "#46505e" }
-    # another menu already open from the strip: moving onto an icon opens its menu instead
-    if {$::itb_open ne "" && $::itb_open ne $name && $::fp_popup_menu ne ""} { itb_click $name; return }
-    catch {after cancel $::itb_tipid}
-    set ::itb_tipid [after 450 [list itb_tip_show $name $label]]
-}
-proc itb_leave {name} {
-    if {$::itb_open ne $name} { .itb.$name configure -background $::panel }
-    itb_tip_hide
-}
-proc itb_tip_show {name label} {
-    if {$::itb_open ne "" || ![winfo exists .itb.$name]} return
-    set c .itb.$name
-    catch {destroy .itbtip}
-    toplevel .itbtip -background "#11151a"
-    wm overrideredirect .itbtip 1
-    label .itbtip.l -text "$label commands" -background "#11151a" -foreground $::fg -padx 6 -pady 2
-    pack .itbtip.l -padx 1 -pady 1
-    wm geometry .itbtip +[expr {[winfo rootx $c] + [winfo width $c] + 6}]+[expr {[winfo rooty $c] + 6}]
-}
-proc itb_tip_hide {} {
-    catch {after cancel $::itb_tipid}
-    catch {destroy .itbtip}
-}
-set ::itbshown 1
-proc itb_toggle {} {
-    if {$::itbshown} { pack .itb -in .main -side left -fill y -before .c } else { pack forget .itb }
-}
-itb_build
-itb_toggle
 
 # Properties palette (PROPERTIES / Ctrl+1)
 frame .pal -background $panel -width 290
@@ -2060,7 +1922,7 @@ proc mbar_open {i} {
     $l configure -background $::accent -foreground white
 }
 proc mbar_reset {} {
-    catch {itb_reset}
+    catch {tbx_menu_reset}
     if {$::mbar_open >= 0 && [winfo exists .mbar.l$::mbar_open]} {
         .mbar.l$::mbar_open configure -background $::panel -foreground $::fg
     }
@@ -4527,6 +4389,7 @@ proc aliasdlg {pairs} {
     tkwait window $w
     return $::aliasresult
 }
+source [file join [file dirname [file normalize [info script]]] toolbars.tcl]
 emit READY
 # test hook: FANCYPENCIL_TEST_TCL=script.tcl is sourced after startup (used by the automated GUI tests)
 if {[info exists env(FANCYPENCIL_TEST_TCL)]} { after 1500 [list source $env(FANCYPENCIL_TEST_TCL)] }

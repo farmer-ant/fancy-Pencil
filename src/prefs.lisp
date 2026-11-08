@@ -6,7 +6,7 @@
 
 (defparameter *pref-sysvars*
   '("BKGCOLOR" "CURSORSIZE" "CURSORCOLOR" "PICKBOX" "APERTURE" "AUTOSNAPSIZE" "GRIPSIZE" "ROLLOVERTIPS"
-    "OSMODE" "GRIDMODE" "DELOBJ" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS" "DYNMODE" "DYNPROMPT" "SAVETIME" "AUTOSNAP" "POLARANG" "POLARADDANG" "POLARMODE" "TREEICONS")
+    "OSMODE" "GRIDMODE" "DELOBJ" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS" "DYNMODE" "DYNPROMPT" "SAVETIME" "AUTOSNAP" "POLARANG" "POLARADDANG" "POLARMODE")
   "Settings kept in the preferences file.")
 
 ;; they belong to the program, not to one drawing: carry them between tabs
@@ -114,7 +114,3 @@
           (when (and v (<= 1 v 50)) (setf (sysvar "APERTURE") v)))
         (save-prefs))))
 
-(defun apply-tree-icons ()
-  "Show or hide the strip of command tree icons as the TREEICONS setting says (shown unless 0)."
-  (when (gui-p)
-    (tk "set ::itbshown ~D; itb_toggle" (if (eql (sysvar "TREEICONS") 0) 0 1))))

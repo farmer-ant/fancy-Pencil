@@ -190,13 +190,21 @@ Drawings that name AutoCAD's Century Gothic files (GOTHIC.TTF, GOTHICB.TTF ...) 
 when it is installed, otherwise a free look-alike (URW Gothic / TeX Gyre Adventor) if there is one.
 Fonts are not part of the Fancy Pencil download: commercial fonts stay under their own licenses.
 
-### Command tree icons
+### Toolbars
 
-A strip of icons down the left of the drawing gives one-click access to each menu's tree of commands:
-File, Edit, View, Layout, Draw, Solids, Dimension, Modify, Format, Tools, Express, Window and Help.
-Click an icon to open that menu beside it (with its sub-menus); with one open, sliding onto another
-icon switches to it. Rest the mouse on an icon to see its name. View > Command Tree Icons hides or
-shows the strip, and Fancy Pencil remembers the choice.
+Every menu has a toolbar of command icons, and so does each sub-menu (3D Views, Visual Styles,
+Working Plane, Viewports, Draw Order, Text Case ...). The Menus toolbar has one icon per menu that
+opens that menu's whole tree of commands. Common commands have drawn icons; the rest show a
+lettered tile. Rest the mouse on an icon to see its name.
+
+- Turn toolbars on and off with View > Toolbars, by right-clicking any toolbar, or with the
+  TOOLBAR command (TO). "Reset Toolbar Layout" brings back the standard layout (Menus and Draw on
+  the left, Modify on the right).
+- Drag a toolbar by its dotted grip to move it. Drop it near an edge of the drawing to dock it
+  there (top, bottom, left or right), beside or between other toolbars, or in a new row or column
+  of its own; drop it in the middle of the drawing to float it as a small window.
+- Long toolbars wrap into extra columns (or rows) to fit. The layout is remembered between
+  sessions, in `~/.config/fancypencil/toolbars.tcl`.
 
 ### Selection, grips and the Properties palette
 
