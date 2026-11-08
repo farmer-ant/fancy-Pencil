@@ -205,6 +205,12 @@ lettered tile. Rest the mouse on an icon to see its name.
 - Drag a toolbar by its dotted grip to move it. Drop it near an edge of the drawing to dock it
   there (top, bottom, left or right), beside or between other toolbars, or in a new row or column
   of its own; drop it in the middle of the drawing to float it as a small window.
+- **Toolbar Options** (in View > Toolbars, the right-click menu, or the TOOLBAROPTIONS command) is a
+  small floating window that stays open while you work: sliders for icon size (16 to 64 pixels),
+  line weight and spacing, and colors for the toolbar background, icon lines, highlights and filled
+  shapes (pick from the swatches, or More... for any color), plus ready-made color schemes (Dark,
+  Light, High contrast, Blueprint, Warm, Green screen). Changes show at once, with a preview;
+  "Standard Look" puts everything back. Icons are drawn as lines, so they stay sharp at any size.
 - Long toolbars wrap into extra columns (or rows) to fit. The layout is remembered between
   sessions, in `~/.config/fancypencil/toolbars.tcl`.
 

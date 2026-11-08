@@ -267,3 +267,6 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
   (if (gui-p)
       (tk "tbx_rmenu [expr {[winfo rootx .c] + 40}] [expr {[winfo rooty .c] + 20}]")
       (out (format nil "Toolbars need the graphical interface.~%"))))
+
+(defcmd "TOOLBAROPTIONS" ("TBOPTIONS") "Opens the Toolbar Options window: icon size, line weight, spacing and colors."
+  (if (gui-p) (tk "tbx_options") (out (format nil "Toolbars need the graphical interface.~%"))))
