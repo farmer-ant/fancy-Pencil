@@ -12,7 +12,39 @@ set ::tbx_menus {file File edit Edit view View layout Layout draw Draw solid Sol
 set ::tbx_names {}
 set ::tbx_open ""
 set ::tbx_file [file join $env(HOME) .config fancypencil toolbars.tcl]
-set ::tbx_bsize 26
+
+# ---------------------------------------------------------------- look (Toolbar Options)
+# size: button size in pixels; thick: line weight of the drawings; pad: space between buttons;
+# bg / fg / ac / fill: toolbar background, icon lines, icon highlights, filled shapes
+set ::tbo_defaults [list size 26 thick 1.0 pad 1 bg $::panel fg $::fg ac $::accent fill $::panel2]
+array set ::tbo $::tbo_defaults
+set ::tbo_themes {
+    "Dark (standard)"  {bg #2b313b fg #d8dde4 ac #3b8ee8 fill #353c47}
+    "Light"            {bg #e9ecf0 fg #2a3038 ac #1f6fd1 fill #ffffff}
+    "High contrast"    {bg #000000 fg #ffffff ac #ffd400 fill #303030}
+    "Blueprint"        {bg #123a6b fg #e8f0ff ac #7fd4ff fill #1d4f8c}
+    "Warm"             {bg #3a302a fg #f2e6d8 ac #f08a3c fill #4a3d35}
+    "Green screen"     {bg #0e1a12 fg #b8f5c8 ac #3ddc6e fill #1a2e20}
+}
+proc tbx_hex {c} {
+    lassign [winfo rgb . $c] r g b
+    format "#%02x%02x%02x" [expr {$r / 256}] [expr {$g / 256}] [expr {$b / 256}]
+}
+proc tbx_mix {a b t} {
+    lassign [winfo rgb . $a] r1 g1 b1
+    lassign [winfo rgb . $b] r2 g2 b2
+    format "#%02x%02x%02x" [expr {int(($r1 + ($r2 - $r1) * $t) / 256)}] [expr {int(($g1 + ($g2 - $g1) * $t) / 256)}] [expr {int(($b1 + ($b2 - $b1) * $t) / 256)}]
+}
+proc tbx_colors {} {
+    foreach k {bg fg ac fill} { if {[catch {winfo rgb . $::tbo($k)}]} { set ::tbo($k) [dict get $::tbo_defaults $k] } }
+    set ::tbx_bg $::tbo(bg); set ::tbx_fg $::tbo(fg); set ::tbx_ac $::tbo(ac); set ::tbx_fill $::tbo(fill)
+    set ::tbx_hover [tbx_mix $::tbo(bg) $::tbo(fg) 0.18]
+    set ::tbx_edge [tbx_mix $::tbo(bg) $::tbo(fg) 0.12]
+    set ::tbx_grip [tbx_mix $::tbo(bg) $::tbo(fg) 0.45]
+    set ::tbx_k [expr {($::tbo(size) - 6) / 20.0}]
+    foreach d {.dock_t .dock_b .dock_l .dock_r} { catch {$d configure -background $::tbx_bg} }
+}
+tbx_colors
 
 # ---------------------------------------------------------------- the toolbars, from the menus
 proc tbx_add {name title items {kind cmd}} {
@@ -62,37 +94,49 @@ proc tbx_collect {} {
 # r accent rect, X dashed rect, a arc (x0 y0 x1 y1 start extent), aa accent arc, G big text,
 # t text, T accent text, W wide line
 proc tbx_draw {c ops} {
-    set f $::fg; set a $::accent
+    set f $::tbx_fg; set a $::tbx_ac; set k $::tbx_k
+    set w1 [expr {max(1, 1.5 * $k * $::tbo(thick))}]
+    set w0 [expr {max(1, 1.0 * $k * $::tbo(thick))}]
+    set w3 [expr {max(2, 3.5 * $k * $::tbo(thick))}]
+    set ar [list [expr {5 * $k}] [expr {6 * $k}] [expr {2.5 * $k}]]
+    set fb [list Helvetica [expr {-round(15 * $k)}] bold]
+    set fs [list Helvetica [expr {-max(7, round(9 * $k))}] bold]
     foreach op $ops {
-        set k [lindex $op 0]; set v [lrange $op 1 end]
-        switch -- $k {
-            L  { $c create line {*}$v -fill $f -width 1.5 -capstyle round -joinstyle round }
-            l  { $c create line {*}$v -fill $f -width 1 }
-            W  { $c create line {*}$v -fill $f -width 3.5 -capstyle round }
-            A  { $c create line {*}$v -fill $a -width 1.5 -capstyle round -joinstyle round }
-            D  { $c create line {*}$v -fill $f -width 1 -dash {2 2} }
-            >  { $c create line {*}$v -fill $a -width 1.5 -arrow last -arrowshape {5 6 2.5} }
-            <> { $c create line {*}$v -fill $a -width 1.5 -arrow both -arrowshape {5 6 2.5} }
-            S  { $c create line {*}$v -fill $f -width 1.5 -smooth 1 }
-            s  { $c create line {*}$v -fill $a -width 1.5 -smooth 1 }
-            C  { $c create line {*}$v -fill $a -width 1.5 -smooth 1 -arrow last -arrowshape {5 6 2.5} }
-            P  { $c create polygon {*}$v -fill "" -outline $f -width 1.5 -joinstyle round }
-            F  { set col [lindex $v 0]; if {$col eq "a"} { set col $a } elseif {$col eq "p"} { set col $::panel2 }
-                 $c create polygon {*}[lrange $v 1 end] -fill $col -outline $f -width 1 }
-            O  { $c create oval {*}$v -outline $f -width 1.5 }
-            E  { $c create oval {*}$v -outline $a -width 1.5 }
+        set kk [lindex $op 0]; set v [lrange $op 1 end]
+        switch -- $kk {
+            L  { $c create line {*}$v -fill $f -width $w1 -capstyle round -joinstyle round }
+            l  { $c create line {*}$v -fill $f -width $w0 }
+            W  { $c create line {*}$v -fill $f -width $w3 -capstyle round }
+            A  { $c create line {*}$v -fill $a -width $w1 -capstyle round -joinstyle round }
+            D  { $c create line {*}$v -fill $f -width $w0 -dash {2 2} }
+            >  { $c create line {*}$v -fill $a -width $w1 -arrow last -arrowshape $ar }
+            <> { $c create line {*}$v -fill $a -width $w1 -arrow both -arrowshape $ar }
+            S  { $c create line {*}$v -fill $f -width $w1 -smooth 1 }
+            s  { $c create line {*}$v -fill $a -width $w1 -smooth 1 }
+            C  { $c create line {*}$v -fill $a -width $w1 -smooth 1 -arrow last -arrowshape $ar }
+            P  { $c create polygon {*}$v -fill "" -outline $f -width $w1 -joinstyle round }
+            F  { set col [lindex $v 0]; if {$col eq "a"} { set col $a } elseif {$col eq "p"} { set col $::tbx_fill }
+                 $c create polygon {*}[lrange $v 1 end] -fill $col -outline $f -width $w0 }
+            O  { $c create oval {*}$v -outline $f -width $w1 }
+            E  { $c create oval {*}$v -outline $a -width $w1 }
             o  { $c create oval {*}$v -fill $a -outline $a }
-            R  { $c create rectangle {*}$v -outline $f -width 1.5 }
-            B  { $c create rectangle {*}$v -outline $f -width 1.2 -fill $::panel2 }
+            R  { $c create rectangle {*}$v -outline $f -width $w1 }
+            B  { $c create rectangle {*}$v -outline $f -width $w0 -fill $::tbx_fill }
             r  { $c create rectangle {*}$v -outline $a -fill $a }
-            X  { $c create rectangle {*}$v -outline $a -width 1 -dash {2 2} }
-            a  { $c create arc {*}[lrange $v 0 3] -start [lindex $v 4] -extent [lindex $v 5] -style arc -outline $f -width 1.5 }
-            aa { $c create arc {*}[lrange $v 0 3] -start [lindex $v 4] -extent [lindex $v 5] -style arc -outline $a -width 1.5 }
-            G  { $c create text [lindex $v 0] [lindex $v 1] -text [lindex $v 2] -fill $f -font {Helvetica -15 bold} }
-            t  { $c create text [lindex $v 0] [lindex $v 1] -text [lindex $v 2] -fill $f -font {Helvetica -9 bold} }
-            T  { $c create text [lindex $v 0] [lindex $v 1] -text [lindex $v 2] -fill $a -font {Helvetica -9 bold} }
+            X  { $c create rectangle {*}$v -outline $a -width $w0 -dash {2 2} }
+            a  { $c create arc {*}[lrange $v 0 3] -start [lindex $v 4] -extent [lindex $v 5] -style arc -outline $f -width $w1 }
+            aa { $c create arc {*}[lrange $v 0 3] -start [lindex $v 4] -extent [lindex $v 5] -style arc -outline $a -width $w1 }
+            G  { $c create text [lindex $v 0] [lindex $v 1] -text [lindex $v 2] -fill $f -font $fb }
+            t  { $c create text [lindex $v 0] [lindex $v 1] -text [lindex $v 2] -fill $f -font $fs }
+            T  { $c create text [lindex $v 0] [lindex $v 1] -text [lindex $v 2] -fill $a -font $fs }
         }
     }
+}
+# the glyph was drawn on the 20 x 20 grid: bring it to the button's size, centred
+proc tbx_fit {c} {
+    $c scale all 0 0 $::tbx_k $::tbx_k
+    set off [expr {($::tbo(size) - 20 * $::tbx_k) / 2.0}]
+    $c move all $off $off
 }
 proc tbx_dots {pts} { set out {}; foreach {x y} $pts { lappend out [list o [expr {$x-1.6}] [expr {$y-1.6}] [expr {$x+1.6}] [expr {$y+1.6}]] }; return $out }
 proc tbx_cube {{face ""}} {
@@ -326,12 +370,11 @@ proc tbx_icon {c key label cat} {
         set col #4a5a6a
         if {[dict exists $::tbx_catcolors $cat]} { set col [dict get $::tbx_catcolors $cat] }
         $c create rectangle 1 3 19 17 -fill $col -outline ""
-        $c create text 10 10 -text [tbx_abbrev $label] -fill white -font {Helvetica -9 bold}
+        $c create text 10 10 -text [tbx_abbrev $label] -fill white -font [list Helvetica [expr {-max(7, round(9 * $::tbx_k))}] bold]
     }
-    $c move all 3 3
+    tbx_fit $c
 }
 proc tbx_menuglyph {c name} {
-    set f $::fg; set a $::accent; set p $::panel2
     switch -- $name {
         file { tbx_draw $c [list $::tbx_page {l 12 1 12 5 16 5} {A 7 10 13 10} {A 7 13 13 13} {A 7 16 11 16}] }
         edit { tbx_draw $c {{R 4 3 16 19} {r 7 1 13 5} {l 7 9 13 9} {l 7 12 13 12} {l 7 15 11 15}} }
@@ -347,7 +390,7 @@ proc tbx_menuglyph {c name} {
         window { tbx_draw $c {{B 1 3 13 13} {r 1 3 13 5.5} {B 7 7 19 17} {r 7 7 19 9.5}} }
         help { tbx_draw $c {{O 1 1 19 19} {G 10 10.5 ?}} }
     }
-    $c move all 3 3
+    tbx_fit $c
 }
 
 # ---------------------------------------------------------------- docks
@@ -380,6 +423,7 @@ proc tbx_save {} {
         set fd [open $::tbx_file w]
         puts $fd "# Fancy Pencil toolbar layout (written by the program; delete it to get the standard layout)"
         foreach r $out { puts $fd [list $r] }
+        puts $fd [list [concat :opts [array get ::tbo]]]
         close $fd
     }
 }
@@ -387,6 +431,17 @@ proc tbx_load {} {
     if {[catch {set fd [open $::tbx_file]; set data [read $fd]; close $fd}]} return
     foreach line [split $data \n] {
         if {[string match "#*" $line] || [string trim $line] eq ""} continue
+        if {[lindex [lindex $line 0] 0] eq ":opts"} {
+            foreach {k v} [lrange [lindex $line 0] 1 end] {
+                switch -- $k {
+                    size { if {[string is integer -strict $v] && $v >= 16 && $v <= 72} { set ::tbo(size) $v } }
+                    thick { if {[string is double -strict $v] && $v >= 0.4 && $v <= 4} { set ::tbo(thick) $v } }
+                    pad { if {[string is integer -strict $v] && $v >= 0 && $v <= 10} { set ::tbo(pad) $v } }
+                    bg - fg - ac - fill { if {![catch {winfo rgb . $v}]} { set ::tbo($k) $v } }
+                }
+            }
+            continue
+        }
         if {[catch {lassign [lindex $line 0] n d ln pos g last}]} continue
         if {$n ni $::tbx_names || $d ni {top bottom left right float hidden}} continue
         if {![string is double -strict $ln] || ![string is double -strict $pos]} continue
@@ -417,14 +472,14 @@ proc tbx_layout_dock {d} {
     set avail [expr {$vert ? [winfo height .c] : [winfo width .]}]
     if {$avail < 200} { set avail [expr {$vert ? 560 : 1200}] }
     set ::tbx_avail($d) $avail
-    set maxrun [expr {max(1, ($avail - 14) / ($::tbx_bsize + 2))}]
+    set maxrun [expr {max(1, ($avail - 14) / ($::tbo(size) + 2 * $::tbo(pad) + 2))}]
     set side [dict get {left left right right top top bottom bottom} $d]
     set li -1; set prev ""; set k 0
     foreach rec $here {
         lassign $rec ln pos n
         if {$ln ne $prev} {
             incr li; set prev $ln; set k 0
-            frame $D.l$li -background $::panel
+            frame $D.l$li -background $::tbx_bg
             pack $D.l$li -side $side -fill [expr {$vert ? "y" : "x"}] -padx [expr {$vert ? 1 : 0}] -pady [expr {$vert ? 0 : 1}]
             bind $D.l$li <Button-3> {tbx_rmenu %X %Y}
         }
@@ -440,13 +495,13 @@ proc tbx_layout_dock {d} {
     if {$vert} { $D configure -width $size } else { $D configure -height $size }
 }
 proc tbx_make {w n vert maxrun} {
-    frame $w -background $::panel -highlightthickness 1 -highlightbackground "#3a424e" -highlightcolor "#3a424e"
-    set g [canvas $w.grip -background $::panel -highlightthickness 0 -cursor fleur \
-               -width [expr {$vert ? $::tbx_bsize : 8}] -height [expr {$vert ? 8 : $::tbx_bsize}]]
+    frame $w -background $::tbx_bg -highlightthickness 1 -highlightbackground $::tbx_edge -highlightcolor $::tbx_edge
+    set g [canvas $w.grip -background $::tbx_bg -highlightthickness 0 -cursor fleur \
+               -width [expr {$vert ? $::tbo(size) : 8}] -height [expr {$vert ? 8 : $::tbo(size)}]]
     if {$vert} {
-        for {set x 6} {$x < $::tbx_bsize - 4} {incr x 4} { $g create rectangle $x 2 [expr {$x+1}] 3 -fill $::dim -outline ""; $g create rectangle [expr {$x+2}] 5 [expr {$x+3}] 6 -fill $::dim -outline "" }
+        for {set x 6} {$x < $::tbo(size) - 4} {incr x 4} { $g create rectangle $x 2 [expr {$x+1}] 3 -fill $::tbx_grip -outline ""; $g create rectangle [expr {$x+2}] 5 [expr {$x+3}] 6 -fill $::tbx_grip -outline "" }
     } else {
-        for {set y 6} {$y < $::tbx_bsize - 4} {incr y 4} { $g create rectangle 2 $y 3 [expr {$y+1}] -fill $::dim -outline ""; $g create rectangle 5 [expr {$y+2}] 6 [expr {$y+3}] -fill $::dim -outline "" }
+        for {set y 6} {$y < $::tbo(size) - 4} {incr y 4} { $g create rectangle 2 $y 3 [expr {$y+1}] -fill $::tbx_grip -outline ""; $g create rectangle 5 [expr {$y+2}] 6 [expr {$y+3}] -fill $::tbx_grip -outline "" }
     }
     bind $g <ButtonPress-1> [list tbx_drag_start $n %X %Y]
     bind $g <B1-Motion> [list tbx_drag_move $n %X %Y]
@@ -455,25 +510,25 @@ proc tbx_make {w n vert maxrun} {
     bind $g <Leave> tbx_tip_hide
     bind $g <Button-3> {tbx_rmenu %X %Y}
     bind $w <Button-3> {tbx_rmenu %X %Y}
-    set b [frame $w.b -background $::panel]
+    set b [frame $w.b -background $::tbx_bg]
     if {$vert} { pack $g -side top -fill x; pack $b -side top } else { pack $g -side left -fill y; pack $b -side left }
     set i 0
     foreach it $::tbx(i,$n) {
         lassign $it label cmd key
-        set c [canvas $b.c$i -width $::tbx_bsize -height $::tbx_bsize -background $::panel -highlightthickness 0 -borderwidth 0]
+        set c [canvas $b.c$i -width $::tbo(size) -height $::tbo(size) -background $::tbx_bg -highlightthickness 0 -borderwidth 0]
         if {$::tbx(k,$n) eq "menus"} { tbx_menuglyph $c $cmd } else { tbx_icon $c $key $label $::tbx(c,$n) }
         set run [expr {$i % $maxrun}]; set other [expr {$i / $maxrun}]
-        if {$vert} { grid $c -row $run -column $other -padx 1 -pady 1 } else { grid $c -row $other -column $run -padx 1 -pady 1 }
+        if {$vert} { grid $c -row $run -column $other -padx $::tbo(pad) -pady $::tbo(pad) } else { grid $c -row $other -column $run -padx $::tbo(pad) -pady $::tbo(pad) }
         bind $c <Enter> [list tbx_benter $c $n $label]
         bind $c <Leave> [list tbx_bleave $c]
-        bind $c <ButtonPress-1> [list $c configure -background $::accent]
+        bind $c <ButtonPress-1> [list $c configure -background $::tbx_ac]
         bind $c <ButtonRelease-1> [list tbx_bclick $c $n $i %X %Y]
         bind $c <Button-3> {tbx_rmenu %X %Y}
         incr i
     }
 }
 proc tbx_benter {c n label} {
-    if {$::tbx_open ne $c} { $c configure -background "#46505e" }
+    if {$::tbx_open ne $c} { $c configure -background $::tbx_hover }
     if {$::tbx(k,$n) eq "menus" && $::tbx_open ne "" && $::tbx_open ne $c && $::fp_popup_menu ne ""} {
         set i [string range [lindex [split $c .] end] 1 end]
         tbx_openmenu $c $n $i; return
@@ -481,14 +536,14 @@ proc tbx_benter {c n label} {
     tbx_tip $c [expr {$::tbx(k,$n) eq "menus" ? "$label commands" : $label}]
 }
 proc tbx_bleave {c} {
-    if {$::tbx_open ne $c && [winfo exists $c]} { $c configure -background $::panel }
+    if {$::tbx_open ne $c && [winfo exists $c]} { $c configure -background $::tbx_bg }
     tbx_tip_hide
 }
 proc tbx_bclick {c n i X Y} {
     tbx_tip_hide
     if {![winfo exists $c]} return
-    if {[winfo containing $X $Y] ne $c} { $c configure -background $::panel; return }
-    $c configure -background "#46505e"
+    if {[winfo containing $X $Y] ne $c} { $c configure -background $::tbx_bg; return }
+    $c configure -background $::tbx_hover
     set it [lindex $::tbx(i,$n) $i]
     if {$::tbx(k,$n) eq "menus"} {
         if {$::tbx_open eq $c && $::fp_popup_menu ne ""} { popup_close; return }
@@ -511,10 +566,10 @@ proc tbx_openmenu {c n i} {
     }
     fp_popup $m $X $Y
     set ::tbx_open $c
-    $c configure -background $::accent
+    $c configure -background $::tbx_ac
 }
 proc tbx_menu_reset {} {
-    if {$::tbx_open ne "" && [winfo exists $::tbx_open]} { $::tbx_open configure -background $::panel }
+    if {$::tbx_open ne "" && [winfo exists $::tbx_open]} { $::tbx_open configure -background $::tbx_bg }
     set ::tbx_open ""
 }
 
@@ -643,7 +698,7 @@ proc tbx_target {n X Y} {
 proc tbx_float {n} {
     set t .tbf_$n
     if {[winfo exists $t]} { destroy $t }
-    toplevel $t -background $::panel
+    toplevel $t -background $::tbx_bg
     wm title $t $::tbx(t,$n)
     catch {wm attributes $t -type utility}
     wm transient $t .
@@ -692,9 +747,115 @@ proc tbx_place_end {n d} {
     set vert [expr {$d in {left right}}]
     set used [expr {$vert ? [winfo reqheight $L] : [winfo reqwidth $L]}]
     set avail [expr {$vert ? [winfo height .c] : [winfo width .]}]
-    set need [expr {([llength $::tbx(i,$n)] + 1) * ($::tbx_bsize + 2) + 12}]
+    set need [expr {([llength $::tbx(i,$n)] + 1) * ($::tbo(size) + 2 * $::tbo(pad) + 2) + 12}]
     set ::tbx(line,$n) [expr {$used + $need <= $avail ? [llength $lines] - 1 : [llength $lines]}]
 }
+# ---------------------------------------------------------------- the Toolbar Options window
+# a small floating window: drag the sliders or pick colors and the toolbars change as you go
+proc tbx_options {} {
+    set t .tbopt
+    if {[winfo exists $t]} { wm deiconify $t; raise $t; return }
+    toplevel $t -background $::panel
+    wm title $t "Toolbar Options"
+    catch {wm attributes $t -type utility}
+    wm transient $t .
+    wm resizable $t 1 1
+    wm minsize $t 360 300
+    set f [ttk::frame $t.f -padding 10]
+    pack $f -fill both -expand 1
+    set r 0
+    foreach {key lbl from to res} {size "Icon size" 16 64 1 thick "Line weight" 0.5 3.0 0.1 pad "Spacing" 0 8 1} {
+        ttk::label $f.l$key -text $lbl
+        scale $f.s$key -from $from -to $to -resolution $res -orient horizontal -showvalue 1 -variable ::tbo($key) \
+            -command [list tbx_opt_changed] -background $::panel -foreground $::fg -troughcolor $::panel2 \
+            -highlightthickness 0 -activebackground $::accent -length 200 -borderwidth 0
+        grid $f.l$key -row $r -column 0 -sticky w -pady 2
+        grid $f.s$key -row $r -column 1 -columnspan 2 -sticky ew -pady 2
+        incr r
+    }
+    ttk::label $f.lres -text "Icons are drawn as lines, so they stay sharp at every size." -style Dim.TLabel
+    grid $f.lres -row $r -column 0 -columnspan 3 -sticky w -pady {0 8}
+    incr r
+    foreach {key lbl} {bg "Background" fg "Icon lines" ac "Highlights" fill "Filled shapes"} {
+        ttk::label $f.c$key -text $lbl
+        set sw [frame $f.w$key -width 34 -height 18 -background $::tbo($key) -relief solid -borderwidth 1 -cursor hand2]
+        bind $sw <Button-1> [list tbx_opt_pick $key]
+        set p [frame $f.p$key -background $::panel]
+        set i 0
+        foreach col {#000000 #1b1f24 #2b313b #46505e #808890 #c9ced6 #ffffff #123a6b #3b8ee8 #7fd4ff #3ddc6e #ffd400 #f08a3c #e04848} {
+            set b [frame $p.b$i -width 14 -height 14 -background $col -relief solid -borderwidth 1 -cursor hand2]
+            bind $b <Button-1> [list tbx_opt_set $key $col]
+            pack $b -side left -padx 1
+            incr i
+        }
+        ttk::button $f.m$key -text "More..." -width 0 -command [list tbx_opt_pick $key]
+        grid $f.c$key -row $r -column 0 -sticky w -pady 3
+        grid $sw -row $r -column 1 -sticky w -pady 3 -padx {0 6}
+        grid $p -row $r -column 2 -sticky w -pady 3
+        grid $f.m$key -row $r -column 3 -sticky w -padx 4
+        incr r
+    }
+    ttk::label $f.lt -text "Color scheme"
+    ttk::combobox $f.theme -state readonly -width 18 -values [dict keys $::tbo_themes]
+    bind $f.theme <<ComboboxSelected>> {tbx_opt_theme [.tbopt.f.theme get]}
+    grid $f.lt -row $r -column 0 -sticky w -pady {8 3}
+    grid $f.theme -row $r -column 1 -columnspan 2 -sticky w -pady {8 3}
+    incr r
+    ttk::label $f.lp -text "Preview"
+    set pv [frame $f.pv -background $::tbx_bg -relief solid -borderwidth 1]
+    grid $f.lp -row $r -column 0 -sticky nw -pady 6
+    grid $pv -row $r -column 1 -columnspan 3 -sticky w -pady 6
+    incr r
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.def -text "Standard Look" -command tbx_opt_defaults
+    ttk::button $bb.close -text "Close" -command {destroy .tbopt}
+    pack $bb.def -side left
+    pack $bb.close -side right
+    grid $bb -row $r -column 0 -columnspan 4 -sticky ew -pady {10 0}
+    grid columnconfigure $f 2 -weight 1
+    tbx_opt_preview
+    wm geometry $t +[expr {[winfo rootx .c] + 120}]+[expr {[winfo rooty .c] + 40}]
+}
+proc tbx_opt_preview {} {
+    set pv .tbopt.f.pv
+    if {![winfo exists $pv]} return
+    foreach w [winfo children $pv] { destroy $w }
+    $pv configure -background $::tbx_bg
+    set i 0
+    foreach {key lbl} {LINE Line CIRCLE Circle HATCH Hatch MOVE Move DIMLINEAR Linear BOX Box} {
+        set c [canvas $pv.c$i -width $::tbo(size) -height $::tbo(size) -background $::tbx_bg -highlightthickness 0]
+        tbx_icon $c $key $lbl draw
+        grid $c -row 0 -column $i -padx $::tbo(pad) -pady $::tbo(pad)
+        incr i
+    }
+    foreach key {bg fg ac fill} { catch {.tbopt.f.w$key configure -background $::tbo($key)} }
+}
+proc tbx_opt_set {key col} {
+    set ::tbo($key) $col
+    tbx_opt_changed
+}
+proc tbx_opt_pick {key} {
+    set c [tk_chooseColor -parent .tbopt -initialcolor $::tbo($key) -title "Toolbar color"]
+    if {$c ne ""} { tbx_opt_set $key $c }
+}
+proc tbx_opt_theme {name} {
+    if {![dict exists $::tbo_themes $name]} return
+    foreach {k v} [dict get $::tbo_themes $name] { set ::tbo($k) $v }
+    catch {.tbopt.f.theme set $name}
+    tbx_opt_changed
+}
+proc tbx_opt_defaults {} {
+    array set ::tbo $::tbo_defaults
+    tbx_opt_changed
+}
+# redraw the toolbars a moment after the last change (sliders send many changes)
+proc tbx_opt_changed {args} {
+    tbx_colors
+    tbx_opt_preview
+    catch {after cancel $::tbx_optid}
+    set ::tbx_optid [after 150 { tbx_colors; tbx_layout }]
+}
+
 proc tbx_reset {} {
     foreach n $::tbx_names { catch {destroy .tbf_$n}; unset -nocomplain ::tbx(g,$n) }
     tbx_defaults
@@ -712,6 +873,8 @@ proc tbx_menus_fill {m} {
     $m add command -label "Show All Main Toolbars" -command tbx_showmain
     $m add command -label "Hide All" -command tbx_hideall
     $m add command -label "Reset Toolbar Layout" -command tbx_reset
+    $m add separator
+    $m add command -label "Toolbar Options (size, colors)..." -command tbx_options
 }
 proc tbx_showmain {} {
     foreach n $::tbx_names { if {![string match *_* $n] && $::tbx(d,$n) eq "hidden"} { tbx_setvis $n 1 } }
@@ -743,6 +906,7 @@ bind .main <Configure> {+tbx_resized}
 tbx_collect
 tbx_defaults
 tbx_load
+tbx_colors
 tbx_menus_fill .mb.view.tbars
 # first layout once the main window is on screen (floating toolbars need it there)
 proc tbx_first_layout {} {
