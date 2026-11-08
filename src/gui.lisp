@@ -3,6 +3,9 @@
 (in-package :fancy-pencil)
 
 (defvar *wish-process* nil)
+(defvar *nav-overlay* nil "When set: a function giving extra Tk commands drawn with the cursor (navigate.lisp).")
+(defvar *release-ends-drag* nil "Let go of the button ends a press-and-drag even without moving (3D navigation).")
+(defvar *nav-mouse* nil "Shift + middle-button orbit in progress (navigate.lisp).")
 (defvar *wish-in* nil "Stream to wish's stdin.")
 (defvar *wish-out* nil "Stream from wish's stdout.")
 (defvar *event-buffer* nil)
@@ -1019,6 +1022,7 @@ active box). NIL when the line should be read as usual."
               (setf cmds (nconc cmds (snap-glyph x y *snap-bit*)
                                 (tooltip-cmds x y (cdr (assoc *snap-bit* *snap-names*)))))))))
       (when (and req (eq (inreq-kind req) :command)) (setf cmds (nconc cmds (grip-hover-cmds))))
+      (when *nav-overlay* (setf cmds (nconc cmds (ignore-errors (funcall *nav-overlay*)))))
       (setf cmds (nconc cmds (cursor-cmds) (list (dyn-cmd req))))
       (tk-send-string (format nil "~{~A~%~}" cmds)))))
 
@@ -1168,7 +1172,9 @@ several), else the current layer. Only shows it; the current layer is not change
                                 (tk-send-string (format nil "foreach tg {~A grip} {.c move $tg ~D ~D}" (quick-tags) (- x ox) (- y oy)))
                                 (draw-temp)))))
                         t)
-      ((string= ty "Q") (setf *pan-start* nil) (gui-regen) t)
+      ((string= ty "Q") (setf *pan-start* nil) (if *nav-mouse* (nav-mouse-event "OQ" ev) (gui-regen)) t)
+      ((member ty '("OP" "OD" "OQ") :test #'string=) (nav-mouse-event ty ev))
+      ((string= ty "NAVTICK") (nav-spin-tick) t)
       ((string= ty "C") (destructuring-bind (w h) (event-ints ev)
                           (setf *full-cw* (max 50 w) *full-ch* (max 50 h) *cw* *full-cw* *ch* *full-ch*)
                           (when (fboundp 'apply-tile-geometry) (funcall 'apply-tile-geometry))
@@ -1219,7 +1225,8 @@ several), else the current layer. Only shows it; the current layer is not change
       ((string= ty "U")
        (destructuring-bind (x y) (event-ints ev)
          (when (and (eq kind :corner) (inreq-nosnap *req*) *press-pos*
-                    (> (+ (abs (- x (first *press-pos*))) (abs (- y (second *press-pos*)))) 6))
+                    (or *release-ends-drag*
+                        (> (+ (abs (- x (first *press-pos*))) (abs (- y (second *press-pos*)))) 6)))
            (update-cursor x y)
            (echo-input "") (setf *acq-result* (list :point *cursor-world*)))
          (setf *press-pos* nil)))
