@@ -182,7 +182,7 @@ AutoCAD menu macros: \"MVIEW 4 Standard\" answers two prompts)."
           (quit-program)))
       (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
   (load-aliases)
-  (when gui (load-prefs) (apply-background) (load-recent) (refresh-recent-menu) (send-view-picker))
+  (when gui (load-prefs) (apply-background) (apply-tree-icons) (load-recent) (refresh-recent-menu) (send-view-picker))
   (out (banner))
   (current-doc)
   (when (and gui (not (or file files))) (zoom-to-box 0 0 12 9))
