@@ -262,3 +262,8 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
         (gui-regen)
         (out (format nil "Current dimension style: ~A~@[ (~D dimension~:P updated)~]~%"
                      (sysvar "DIMSTYLE") (and (plusp updated) updated)))))))
+
+(defcmd "TOOLBAR" ("TO" "TB") "Shows the list of toolbars, to turn them on or off (drag a toolbar by its dotted grip to dock it on any edge or float it)."
+  (if (gui-p)
+      (tk "tbx_rmenu [expr {[winfo rootx .c] + 40}] [expr {[winfo rooty .c] + 20}]")
+      (out (format nil "Toolbars need the graphical interface.~%"))))

@@ -1193,8 +1193,6 @@ several), else the current layer. Only shows it; the current layer is not change
                          t)
       ((string= ty "H") (destructuring-bind (x y) (event-ints ev) (handle-rollover x y)) t)
       ((string= ty "TCLERR") (out (format nil "; window error: ~A~%" (event-rest ev))) t)
-      ((string= ty "TREEICONS")
-       (setf (sysvar "TREEICONS") (if (string= (event-rest ev) "0") 0 1)) (save-prefs) t)
       ((string= ty "PALETTE") (setf *palette-shown* (string= (event-rest ev) "1")) (refresh-palette) t)
       ((string= ty "PALTYPE") (set-palette-type (event-rest ev)) t)
       ((string= ty "QPCLOSE") (setf *quick-shown* nil) t)
