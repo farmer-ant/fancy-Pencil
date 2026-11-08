@@ -325,16 +325,26 @@ level plane at BASE's height."
           (t (v+ b (v* dir (vdot3 base dir)))))))
 
 (defun view-ortho (p base)
-  "Ortho in a 3D view: along the screen's horizontal or vertical through BASE."
-  (let* ((dv (v- (pt3 p) (pt3 base))) (r (second *view*)) (up (third *view*))
-         (du (vdot3 dv r)) (dvv (vdot3 dv up)))
-    (if (> (abs du) (abs dvv)) (v+ (pt3 base) (v* r du)) (v+ (pt3 base) (v* up dvv)))))
+  "Ortho in a 3D view: along the X or Y axis of the work plane through BASE. In an isometric
+(tilted) view that plane is level, so lines stay at BASE's height; in Front/Back/Left/Right it is
+the plane facing you, whose axes are the screen's horizontal and vertical."
+  (let* ((dv (v- (pt3 p) (pt3 base))) (r (second *view*)) (up (third *view*)) (dir (fourth *view*)))
+    (if (and (> (abs (pz dir)) 1d-9) (not (eq (fifth *view*) :ucs)))
+        (if (> (abs (px dv)) (abs (py dv)))
+            (v+ (pt3 base) (pt (px dv) 0 0))
+            (v+ (pt3 base) (pt 0 (py dv) 0)))
+        (let ((du (vdot3 dv r)) (dvv (vdot3 dv up)))
+          (if (> (abs du) (abs dvv)) (v+ (pt3 base) (v* r du)) (v+ (pt3 base) (v* up dvv)))))))
 
 (defun view-grid-snap (p ux uy)
-  "Grid snap in a 3D view: round the screen (view) coordinates, keep the depth."
-  (multiple-value-bind (u v) (view-project (pt3 p))
-    (let ((du (- (* ux (fround (/ u ux))) u)) (dv (- (* uy (fround (/ v uy))) v)))
-      (v+ (pt3 p) (v+ (v* (second *view*) du) (v* (third *view*) dv))))))
+  "Grid snap in a 3D view: in a tilted view the grid lies on the level plane at P's height, so X
+and Y round to it and the height stays; in Front/Back/Left/Right round the screen coordinates."
+  (let ((dir (fourth *view*)) (p (pt3 p)))
+    (if (and (> (abs (pz dir)) 1d-9) (not (eq (fifth *view*) :ucs)))
+        (pt (* ux (fround (/ (px p) ux))) (* uy (fround (/ (py p) uy))) (pz p))
+        (multiple-value-bind (u v) (view-project p)
+          (let ((du (- (* ux (fround (/ u ux))) u)) (dv (- (* uy (fround (/ v uy))) v)))
+            (v+ p (v+ (v* (second *view*) du) (v* (third *view*) dv))))))))
 
 ;;; ---------- UCS: any plane as the working plane ----------
 ;;; UCS sets up a working plane anywhere - on a slanted panel, through three points, on an object -

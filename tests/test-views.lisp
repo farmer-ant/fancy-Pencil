@@ -1,6 +1,10 @@
 ;; Working planes of the side views, objects in any plane, and picking in the isometric views.
 ;; Run: sbcl --non-interactive --load load.lisp --load tests/test-views.lisp
 (in-package :fancy-pencil)
+(defun view-work-point-from-screen-dir (base d)
+  "The point on the level plane through BASE under the screen spot BASE + D (D in the screen plane)."
+  (let* ((p (v+ (pt3 base) d)) (dir (fourth *view*)))
+    (v+ p (v* dir (/ (- (pz base) (pz p)) (pz dir))))))
 (setf *ui* :tty *output-fn* (lambda (s) s))
 (load-aliases)
 (current-doc)
@@ -295,5 +299,16 @@
 (al "(command \"presspull\" \"edge\" '(4 0 1.5) \"next\" \"\" -1)")
 (chk "Edge, next face (front), push in 1" (r3 (mesh-volume (ent-data (newest)))) 20)
 (al "(command \"plan\")")
+
+;; ortho and grid snap in an isometric view keep lines on the level work plane (no Z creep)
+(setf *view* (make-view "SW Isometric"))
+(let* ((base (pt 3 22 0)) (up (third *view*)) (r (second *view*)))
+  (chk "iso ortho, cursor down the screen: stays at Z 0" (pz (view-ortho (view-work-point-from-screen-dir base (v* up -3)) base)) 0d0)
+  (chk "iso ortho: follows the X or Y axis" (let ((q (view-ortho (v+ base (pt -2 -1.9 0)) base))) (list (px q) (py q))) '(1d0 22d0))
+  (chk "iso ortho, across the screen: still level" (pz (view-ortho (view-work-point-from-screen-dir base (v* r 4)) base)) 0d0)
+  (chk "iso grid snap keeps the height" (view-grid-snap (pt 1.3 2.6 0) 0.5 0.5) (pt 1.5 2.5 0)))
+(setf *view* (make-view "Front"))
+(chk "Front view ortho: up the screen is up in Z" (view-ortho (pt 2 0 5) (pt 0 0 0)) (pt 0 0 5))
+(setf *view* nil)
 
 (format t "~%View tests: ~D passed, ~D failed.~%" *pass* *fail*)

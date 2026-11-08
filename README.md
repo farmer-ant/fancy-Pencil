@@ -139,7 +139,9 @@ It behaves like AutoCAD's command line:
   along the rubber band. Distances accept feet-inches (`2'6`) and fractions (`1 1/2`).
 - Type `END`, `MID`, `CEN`, `INT`, `PER`, `TAN`, `QUA`, `NOD`, `INS`, `NEA` or `NON` at a point
   prompt for a one-time snap override.
-- F3 OSNAP, F7 GRID, F8 ORTHO, F9 SNAP (or click the status bar toggles).
+- F3 OSNAP, F7 GRID, F8 ORTHO, F9 SNAP (or click the status bar toggles). In a tilted 3D view (the
+  isometric views) Ortho follows the X and Y axes of the level plane you are drawing on, so lines
+  keep their height; in Front/Back/Left/Right it follows the screen, so up the screen is up in Z.
 - Mouse wheel zooms at the cursor, middle-drag pans, middle double-click zooms extents.
 - Click objects at the `Command:` prompt to select them first (noun/verb), drag left-to-right for a
   window, right-to-left for a crossing window, then run MOVE, ERASE (or press Delete), etc.
