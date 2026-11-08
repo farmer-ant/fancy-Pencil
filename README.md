@@ -208,7 +208,8 @@ lettered tile. Rest the mouse on an icon to see its name.
 - **Toolbar Options** (in View > Toolbars, the right-click menu, or the TOOLBAROPTIONS command) is a
   small floating window that stays open while you work: sliders for icon size (16 to 64 pixels),
   line weight and spacing, and colors for the toolbar background, icon lines, highlights and filled
-  shapes (pick from the swatches, or More... for any color), plus ready-made color schemes (Dark,
+  shapes (pick from the swatches, or More... for any color: Red, Green and Blue sliders plus a
+  Light / Dark slider that makes the same color lighter or darker, a hex box and a preview), plus ready-made color schemes (Dark,
   Light, High contrast, Blueprint, Warm, Green screen). Changes show at once, with a preview;
   "Standard Look" puts everything back. Icons are drawn as lines, so they stay sharp at any size.
 - Long toolbars wrap into extra columns (or rows) to fit. The layout is remembered between
