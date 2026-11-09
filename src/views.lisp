@@ -317,8 +317,8 @@ quadrants and nearest, at the objects' real heights (tops of thick objects too).
 plane facing you in Front/Back/Left/Right (so dragging up and down changes heights), else the
 level plane at BASE's height."
   (let* ((q (s->uv sx sy)) (u (px q)) (v (py q))
-         (r (second *view*)) (up (third *view*)) (dir (fourth *view*))
-         (b (v+ (v* r u) (v* up v)))
+         (dir (view-dir))
+         (b (view-unproject u v))
          (base (and base (pt3 base))))
     (cond ((null base) (view-unproject u v))
           ((> (abs (pz dir)) 1d-9) (v+ b (v* dir (/ (- (pz base) (pz b)) (pz dir)))))
@@ -328,7 +328,7 @@ level plane at BASE's height."
   "Ortho in a 3D view: along the X or Y axis of the work plane through BASE. In an isometric
 (tilted) view that plane is level, so lines stay at BASE's height; in Front/Back/Left/Right it is
 the plane facing you, whose axes are the screen's horizontal and vertical."
-  (let* ((dv (v- (pt3 p) (pt3 base))) (r (second *view*)) (up (third *view*)) (dir (fourth *view*)))
+  (let* ((dv (v- (pt3 p) (pt3 base))) (r (view-r)) (up (view-up)) (dir (view-dir)))
     (if (and (> (abs (pz dir)) 1d-9) (not (eq (fifth *view*) :ucs)))
         (if (> (abs (px dv)) (abs (py dv)))
             (v+ (pt3 base) (pt (px dv) 0 0))
@@ -339,12 +339,12 @@ the plane facing you, whose axes are the screen's horizontal and vertical."
 (defun view-grid-snap (p ux uy)
   "Grid snap in a 3D view: in a tilted view the grid lies on the level plane at P's height, so X
 and Y round to it and the height stays; in Front/Back/Left/Right round the screen coordinates."
-  (let ((dir (fourth *view*)) (p (pt3 p)))
+  (let ((dir (view-dir)) (p (pt3 p)))
     (if (and (> (abs (pz dir)) 1d-9) (not (eq (fifth *view*) :ucs)))
         (pt (* ux (fround (/ (px p) ux))) (* uy (fround (/ (py p) uy))) (pz p))
         (multiple-value-bind (u v) (view-project p)
           (let ((du (- (* ux (fround (/ u ux))) u)) (dv (- (* uy (fround (/ v uy))) v)))
-            (v+ p (v+ (v* (second *view*) du) (v* (third *view*) dv))))))))
+            (v+ p (v+ (v* (view-r) du) (v* (view-up) dv))))))))
 
 ;;; ---------- UCS: any plane as the working plane ----------
 ;;; UCS sets up a working plane anywhere - on a slanted panel, through three points, on an object -
@@ -465,3 +465,93 @@ and Y round to it and the height stays; in Front/Back/Left/Right round the scree
            (out (format nil "No previous working plane.~%"))
            (progn (setf *view* (pop *ucs-history*)) (after-view-change)
                   (out (format nil "~A.~%" (if *view* (first *view*) "World coordinates (Top view)")))))))))
+
+;;; ---------- the drafting plane, apart from the view ----------
+;;; In the 3D views (isometric, orbit) you draw on the ground (XY) plane unless you choose another
+;;; drafting plane: Front, Right, any plane through three points, an object's or a solid face's
+;;; plane... The view stays as it is; points you pick land on that plane, Ortho and the grid follow
+;;; its axes, and circles, arcs, rectangles and the rest lie in it. F6 steps through Ground, Front
+;;; and Right. In Top, Front, Right and the other straight-on views you draw in the view's own plane.
+
+(defparameter *named-drafting-planes*
+  ;; name  x  y  z
+  '(("Top" (1 0 0) (0 1 0) (0 0 1))
+    ("Front" (1 0 0) (0 0 1) (0 -1 0))
+    ("Right" (0 1 0) (0 0 1) (1 0 0))
+    ("Left" (0 -1 0) (0 0 1) (-1 0 0))
+    ("Back" (-1 0 0) (0 0 1) (0 1 0))
+    ("Bottom" (1 0 0) (0 -1 0) (0 0 -1))))
+
+(defun set-drafting-plane (frame name)
+  "Draw on FRAME = (x y z origin) (world) in the 3D views, or on the ground plane when FRAME is NIL."
+  (let ((ground (or (null frame)
+                    (destructuring-bind (x y z o) frame
+                      (declare (ignore z))
+                      (and (< (dist (pt3 x) (pt 1 0 0)) 1d-9) (< (dist (pt3 y) (pt 0 1 0)) 1d-9)
+                           (< (dist (pt3 o) (pt 0 0 0)) 1d-9))))))
+    (setf *drafting-plane* (if ground nil (list (unit3 (first frame)) (unit3 (second frame)) (unit3 (third frame)) (pt3 (fourth frame))))
+          *drafting-plane-name* (if ground nil name))
+    (clear-geom-cache)
+    (when (gui-p) (gui-regen) (refresh-grips) (gui-sync))
+    (out (format nil "Drafting plane: ~A~@[, through ~A~].~A~%"
+                 (if ground "Ground (XY)" name)
+                 (and *drafting-plane* (> (dist (pt3 (fourth *drafting-plane*)) (pt 0 0 0)) 1d-9)
+                      (format nil "~{~A~^,~}" (mapcar #'fmt-num (pt3 (fourth *drafting-plane*)))))
+                 (if (or (null *view*) (facing-view-p *view*))
+                     (format nil "~%It is used in the 3D views (isometric, orbit); in this view you draw in the view's own plane.")
+                     "")))))
+
+(defun drafting-frame-named (name origin)
+  (let ((spec (assoc name *named-drafting-planes* :test #'string-equal)))
+    (destructuring-bind (nm x y z) spec
+      (declare (ignore nm))
+      (list (pt3 x) (pt3 y) (pt3 z) origin))))
+
+(defcmd "DRAFTPLANE" ("DPLANE" "DRP") "Chooses the plane you draw on in the 3D views, without changing the view: Ground, Front, Right, Left, Back, Bottom, through three points, on an object or a solid's face, facing the screen."
+  (let ((r (gkw "Specify drafting plane [Ground/Front/Right/Left/BAck/BOttom/3point/OBject/Face/View] <Ground>: "
+                '("Ground" "Front" "Right" "Left" "BAck" "BOttom" "3point" "OBject" "Face" "View"))))
+    (flet ((origin (default)
+             (let ((o (gpoint (format nil "Specify a point the plane passes through <~{~A~^,~}>: "
+                                      (mapcar #'fmt-num (pt3 default))))))
+               (if (pointp o) (ucs-point-to-world o) default))))
+      (cond
+        ((or (null r) (string-equal r "Ground"))
+         (let ((o (origin (pt 0 0 0))))
+           (set-drafting-plane (list (pt 1 0 0) (pt 0 1 0) (pt 0 0 1) (pt 0 0 (pz o))) "Ground")))
+        ((member r '("Front" "Right" "Left" "BAck" "BOttom") :test #'string-equal)
+         (let* ((name (cond ((string-equal r "BAck") "Back") ((string-equal r "BOttom") "Bottom") (t r)))
+                (o (origin (pt 0 0 0))))
+           (set-drafting-plane (drafting-frame-named name o) name)))
+        ((string-equal r "View")
+         (if (and *view* (not (facing-view-p *view*)))
+             (set-drafting-plane (list (second *view*) (third *view*) (fourth *view*) (origin (pt 0 0 0))) "View")
+             (out (format nil "This view already faces you straight on: you draw in its plane.~%"))))
+        ((string-equal r "3point")
+         (let* ((o (gpoint "Specify a point on the plane (its origin): "))
+                (px (and (pointp o) (gpoint "Specify a point along its X axis: " :base o)))
+                (py (and (pointp px) (gpoint "Specify a point on the plane on its positive Y side: " :base o))))
+           (when (pointp py)
+             (let* ((wo (ucs-point-to-world o)) (wx (v- (ucs-point-to-world px) wo)) (wy (v- (ucs-point-to-world py) wo))
+                    (z (cross3 wx wy)))
+               (if (< (vdot3 z z) 1d-18)
+                   (out (format nil "The three points are in a line: no plane.~%"))
+                   (set-drafting-plane (frame-from-x-and-z wo wx z) "3 points"))))))
+        ((member r '("OBject" "Face") :test #'string-equal)
+         (let* ((sel (get-user-input :entity :prompt "Select an object or a face of a solid (its plane becomes the drafting plane): "))
+                (e (sel-entity sel)))
+           (cond ((and e (equal (ent-type e) "POLYFACE"))
+                  (multiple-value-bind (pts n) (face-loop e (sel-point sel))
+                    (if (null pts) (out (format nil "No face there.~%"))
+                        (let ((wp (mapcar #'ucs-point-to-world pts)) (wn (ucs-vector-to-world n)))
+                          (set-drafting-plane (frame-from-x-and-z (first wp) (v- (second wp) (first wp)) wn) "Face")))))
+                 (e (set-drafting-plane (object-frame e) "Object")))))))))
+
+(defun cycle-drafting-plane ()
+  "F6: Ground -> Front -> Right -> Ground (in the 3D views)."
+  (let* ((order '(nil "Front" "Right"))
+         (next (second (member *drafting-plane-name* order :test #'equal))))
+    (if next
+        (set-drafting-plane (drafting-frame-named next (pt 0 0 0)) next)
+        (set-drafting-plane nil "Ground"))
+    (when (and (gui-p) (or (null *view*) (facing-view-p *view*)))
+      (out (format nil "(F6 changes the drafting plane of the 3D views.)~%")))))

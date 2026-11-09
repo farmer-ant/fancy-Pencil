@@ -17,7 +17,7 @@
 (defun shading-light ()
   "Direction of the light: from over the viewer's shoulder."
   (if (projected-view-p)
-      (unit3 (v+ (fourth *view*) (v+ (v* (third *view*) 0.45d0) (v* (second *view*) 0.25d0))))
+      (unit3 (v+ (view-dir) (v+ (v* (view-up) 0.45d0) (v* (view-r) 0.25d0))))
       (unit3 (pt 0.25 0.45 1))))
 
 (defun shade-hex (hex normal)
@@ -39,7 +39,7 @@
 (defun screen-coords (pts) (loop for p in pts append (multiple-value-bind (x y) (w->s p) (list (fmtn x) (fmtn y)))))
 
 (defun view-toward-viewer ()
-  (if (projected-view-p) (fourth *view*) (pt 0 0 1)))
+  (if (projected-view-p) (view-dir) (pt 0 0 1)))
 
 (defun shaded-edge-color (color style)
   "Edges over shaded faces: a light object's edges would vanish on its own light faces; draw them dark."

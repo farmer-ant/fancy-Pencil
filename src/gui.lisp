@@ -3,6 +3,7 @@
 (in-package :fancy-pencil)
 
 (defvar *wish-process* nil)
+(defvar *drafting-plane-name* nil "Name of the drafting plane in use (plane.lisp), for the view label.")
 (defvar *nav-overlay* nil "When set: a function giving extra Tk commands drawn with the cursor (navigate.lisp).")
 (defvar *release-ends-drag* nil "Let go of the button ends a press-and-drag even without moving (3D navigation).")
 (defvar *nav-mouse* nil "Shift + middle-button orbit in progress (navigate.lisp).")
@@ -135,17 +136,19 @@
 (defun view-project (p)
   "View coordinates (u v) of world point P: X,Y in plan view, else along the view's right/up."
   (if (projected-view-p)
-      (values (vdot3 p (second *view*)) (vdot3 p (third *view*)))
+      (multiple-value-bind (r u d ou ov) (view-axes)
+        (declare (ignore d))
+        (values (+ ou (vdot3 p r)) (+ ov (vdot3 p u))))
       (values (px p) (py p))))
 
 (defun view-unproject (u v)
   "The world point under view coordinates U,V: on the ground (XY) plane, or, when that plane is
 seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the origin."
-  (let* ((r (second *view*)) (up (third *view*)) (dir (fourth *view*))
-         (b (v+ (v* r u) (v* up v))))
+  (multiple-value-bind (r up dir ou ov) (view-axes)
+   (let ((b (v+ (v* r (- u ou)) (v* up (- v ov)))))
     (if (> (abs (pz dir)) 1d-9)
         (v+ b (v* dir (- (/ (pz b) (pz dir)))))
-        b)))
+        b))))
 
 (defun w->s (p)
   (multiple-value-bind (u v) (view-project p)
@@ -723,14 +726,16 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
     (return-from ucs-icon-cmds
       (let ((x (+ *tx* 44)) (y (+ *ty* (- *ch* 44))) (out nil))
         (loop for (axis col label) in '(((1 0 0) "#d24b4b" "X") ((0 1 0) "#4bbf5a" "Y") ((0 0 1) "#4b8fd2" "Z"))
-              do (multiple-value-bind (u v) (view-project axis)
+              do (multiple-value-bind (u v) (values (vdot3 (pt3 axis) (view-r)) (vdot3 (pt3 axis) (view-up)))
                    (let ((ex (+ x (* 34 u))) (ey (- y (* 34 v))))
                      (when (> (+ (* u u) (* v v)) 1d-6)
                        (push (format nil ".c create line ~D ~D ~,1F ~,1F -fill ~A -width 2 -arrow last -tags ucs" x y ex ey col) out)
                        (push (format nil ".c create text ~,1F ~,1F -text ~A -fill ~A -font {Helvetica 9 bold} -tags ucs"
                                      (+ ex (* 9 u)) (- ey (* 9 v)) label col) out)))))
         (push (format nil ".c create text ~D ~D -anchor sw -text ~A -fill #c9ced6 -font {Helvetica 10 bold} -tags ucs"
-                      (+ *tx* 10) (+ *ty* (- *ch* 6)) (tq (string-upcase (first *view*)))) out)
+                      (+ *tx* 10) (+ *ty* (- *ch* 6))
+                      (tq (format nil "~A~@[   DRAFTING PLANE: ~A~]" (string-upcase (first *view*))
+                                  (and (ucs) (string-upcase (or *drafting-plane-name* "custom")))))) out)
         (nreverse out))))
   (let ((x (+ *tx* 34)) (y (+ *ty* (- *ch* 30))))
     (list (format nil ".c create line ~D ~D ~D ~D -fill #d24b4b -width 2 -arrow last -tags ucs" x y (+ x 44) y)
@@ -1134,6 +1139,7 @@ several), else the current layer. Only shows it; the current layer is not change
                (ignore-errors (save-prefs)))))
           ((string= k "F9") (flip "SNAPMODE" "Snap"))
           ((string= k "F5") (cycle-isoplane))
+          ((string= k "F6") (cycle-drafting-plane))
           ((string= k "F12")
            ;; as in AutoCAD, off is the setting made negative, so turning it on again restores it
            (let ((v (or (sysvar "DYNMODE") 3)))

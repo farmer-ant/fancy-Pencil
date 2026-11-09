@@ -539,6 +539,21 @@ you pick a standard view.
 Views are drawn in parallel projection (no perspective), so Adjust Distance and Zoom both change
 how large things look; the camera distance matters for Swivel.
 
+### Drafting plane (apart from the view)
+
+In the 3D views (the isometric views and any orbit) you normally draw on the ground (XY) plane. To
+draw on another plane **without changing the view**, use **View → Drafting Plane** or the
+**DRAFTPLANE** command (`DPLANE`): Ground, Front (XZ), Right (YZ), Left, Back, Bottom, a plane
+through three points, the plane of an object or of a solid's face, or one facing the screen - each
+through a point you give (Enter: through the origin). **F6** steps through Ground, Front and Right.
+
+Points you pick then land on that plane, Ortho and grid snap follow its axes, typed coordinates are
+in its X/Y, and circles, arcs, rectangles, polylines, text and the rest are drawn in it. The axis
+icon shows the plane's X, Y and Z and the corner label names it ("SW ISOMETRIC  DRAFTING PLANE:
+FRONT"). The straight-on views (Top, Front, Right ...) always draw in their own plane; the drafting
+plane is kept for when you go back to a 3D view. UCS still sets a working plane and turns the view
+to face it.
+
 **VSCURRENT** (View → Visual Styles, `VS`; `HIDE` for Hidden):
 
 * **Wireframe** - every edge (as before).
