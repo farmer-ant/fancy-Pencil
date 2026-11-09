@@ -312,6 +312,16 @@ proc tbx_variant {key} {
         "VSCURRENT HIDDEN" { return {{O 2 2 18 18} {l 2 10 18 10} {D 10 2 10 18}} }
         "VSCURRENT SHADED" { return {{o 2 2 18 18}} }
         "VSCURRENT EDGES" { return {{o 2 2 18 18} {O 2 2 18 18} {L 2 10 18 10}} }
+        "DRAFTPLANE GROUND" { return {{l 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {F a 2 14 10 10 18 14 10 18}} }
+        "DRAFTPLANE FRONT" { return {{l 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {F a 2 6 10 10 10 18 2 14}} }
+        "DRAFTPLANE RIGHT" { return {{l 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {F a 10 10 18 6 18 14 10 18}} }
+        "DRAFTPLANE LEFT" { return {{l 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {F a 2 6 10 2 10 10 2 14} {T 15 4 L}} }
+        "DRAFTPLANE BACK" { return {{l 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {F a 10 2 18 6 18 14 10 10} {T 5 4 B}} }
+        "DRAFTPLANE BOTTOM" { return {{l 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {F a 2 6 10 2 18 6 10 10} {T 10 16 B}} }
+        "DRAFTPLANE 3POINT" { return [concat {{F a 2 15 14 18 18 5 6 2}} [tbx_dots {2 15 14 18 6 2}]] }
+        "DRAFTPLANE OBJECT" { return {{F a 2 15 14 18 18 5 6 2} {L 4 14 16 5}} }
+        "DRAFTPLANE FACE" { return [concat [tbx_cube right] {{T 4 3 F}}] }
+        "DRAFTPLANE VIEW" { return {{R 2 2 18 18} {F a 5 5 15 5 15 15 5 15}} }
         "UCS FACE" { return [concat [tbx_cube right] {{T 4 3 UCS}}] }
         "UCS*" {
             set ops {{> 4 16 4 3} {> 4 16 17 16}}

@@ -199,6 +199,12 @@ foreach {label kw} {Top Top Bottom Bottom Left Left Right Right Front Front Back
 }
 set ::viewname Top
 .mb.view add command -label "Plan View (Top)" -command {menucmd PLAN}
+menu .mb.view.dplane -tearoff 0
+.mb.view add cascade -label "Drafting Plane (3D views)" -menu .mb.view.dplane
+foreach {l c} {"Ground (XY)" {DRAFTPLANE Ground} "Front (XZ)" {DRAFTPLANE Front} "Right (YZ)" {DRAFTPLANE Right}
+               "Left" {DRAFTPLANE Left} "Back" {DRAFTPLANE BAck} "Bottom" {DRAFTPLANE BOttom}
+               "3 Points" {DRAFTPLANE 3point} "Object" {DRAFTPLANE OBject} "Face of a Solid" {DRAFTPLANE Face}
+               "Facing the Screen" {DRAFTPLANE View}} { mcmd .mb.view.dplane $l $c }
 menu .mb.view.nav -tearoff 0
 .mb.view add cascade -label "3D Navigation" -menu .mb.view.nav
 foreach {l c} {"Constrained Orbit" 3DORBIT "Free Orbit" 3DFORBIT "Continuous Orbit" 3DCORBIT
@@ -834,6 +840,7 @@ bind all <F3> {emit K F3; break}
 bind all <F7> {emit K F7; break}
 bind all <F8> {emit K F8; break}
 bind all <F5> {emit K F5; break}
+bind all <F6> {emit K F6; break}
 bind all <Control-e> {emit K F5; break}
 bind all <F9> {emit K F9; break}
 bind all <F12> {emit K F12; break}

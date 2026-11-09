@@ -308,7 +308,7 @@
   (chk "iso ortho, across the screen: still level" (pz (view-ortho (view-work-point-from-screen-dir base (v* r 4)) base)) 0d0)
   (chk "iso grid snap keeps the height" (view-grid-snap (pt 1.3 2.6 0) 0.5 0.5) (pt 1.5 2.5 0)))
 (setf *view* (make-view "Front"))
-(chk "Front view ortho: up the screen is up in Z" (view-ortho (pt 2 0 5) (pt 0 0 0)) (pt 0 0 5))
+(chk "Front view ortho (its own plane's coordinates): up the screen" (view-ortho (pt 2 5 0) (pt 0 0 0)) (pt 0 5 0))
 (setf *view* nil)
 
 (format t "~%View tests: ~D passed, ~D failed.~%" *pass* *fail*)

@@ -541,13 +541,13 @@ it, with mitred corners."
 
 (defun view-depth (p)
   "How near point P is to the viewer (bigger = nearer)."
-  (if (projected-view-p) (vdot3 (pt3 p) (fourth *view*)) (pz (pt3 p))))
+  (if (projected-view-p) (vdot3 (pt3 p) (view-dir)) (pz (pt3 p))))
 
 (defun view-frame ()
   "(right up toward-viewer) for the view: the screen directions in the coordinates objects are
 seen in (world for the isometric views, the working plane's otherwise)."
   (if (projected-view-p)
-      (list (pt3 (second *view*)) (pt3 (third *view*)) (pt3 (fourth *view*)))
+      (list (view-r) (view-up) (view-dir))
       (list (pt 1 0 0) (pt 0 1 0) (pt 0 0 1))))
 
 (defun screen-uv (p frame) (pt (vdot3 (pt3 p) (first frame)) (vdot3 (pt3 p) (second frame))))

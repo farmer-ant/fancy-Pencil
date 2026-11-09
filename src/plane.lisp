@@ -138,6 +138,9 @@ given, are used instead of DATA's own pieces (in its plane's coordinates)."
 ;;; ---------- the working plane of the side views ----------
 
 (defvar *ucs-off* nil "Bound true where entity data must be seen in world coordinates (files, clipboard).")
+(defvar *drafting-plane* nil
+  "A drafting plane chosen apart from the view: (x y z origin) in world coordinates. In the 3D
+(isometric / orbit) views you draw on it while the view stays as it is; NIL: the ground (XY) plane.")
 (defvar *ucs-cache-view* :none)
 (defvar *ucs-cache* nil)
 
@@ -153,6 +156,8 @@ given, are used instead of DATA's own pieces (in its plane's coordinates)."
 the isometric views)."
   (cond (*ucs-off* nil)
         ((null *view*) nil)
+        ;; a 3D view: the drafting plane, if one is set (the view stays as it is)
+        ((not (facing-view-p *view*)) *drafting-plane*)
         ((eq *view* *ucs-cache-view*) *ucs-cache*)
         (t (setf *ucs-cache-view* *view*
                  *ucs-cache* (and (facing-view-p *view*)
@@ -163,7 +168,27 @@ the isometric views)."
 (defun projected-view-p ()
   "A 3D view drawn by projection (the isometric views); the facing views are drawn flat in
 their working plane."
-  (and *view* (not (ucs))))
+  (and *view* (not (facing-view-p *view*))))
+
+(defvar *view-axes-key* nil)
+(defvar *view-axes-val* nil)
+(defun view-axes ()
+  "The 3D view's right, up and toward-viewer vectors in the coordinates objects are seen in -
+the drafting plane's when one is set, else world - plus the screen offsets of that plane's origin."
+  (let ((u (ucs)))
+    (if (null u)
+        (values (pt3 (second *view*)) (pt3 (third *view*)) (pt3 (fourth *view*)) 0d0 0d0)
+        (let ((key (list *view* u)))
+          (unless (and (eq (first *view-axes-key*) *view*) (eq (second *view-axes-key*) u))
+            (destructuring-bind (x y z &optional (o (pt 0 0 0))) u
+              (flet ((loc (v) (pt (vdot3 v x) (vdot3 v y) (vdot3 v z))))
+                (setf *view-axes-key* key
+                      *view-axes-val* (list (loc (second *view*)) (loc (third *view*)) (loc (fourth *view*))
+                                            (vdot3 o (second *view*)) (vdot3 o (third *view*)))))))
+          (values-list *view-axes-val*)))))
+(defun view-r () (nth-value 0 (view-axes)))
+(defun view-up () (nth-value 1 (view-axes)))
+(defun view-dir () (nth-value 2 (view-axes)))
 
 (defun ucs-xf (u &optional to-world)
   "World -> working-plane coordinates for frame U = (x y z origin) (or back with TO-WORLD)."

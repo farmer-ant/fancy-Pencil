@@ -301,7 +301,7 @@ lists of (points normal)."
                                     collect (v+ p (v+ (v* ux (* r (cos a))) (v* uy (* r (sin a)))))))))))
     (:sphere (destructuring-bind (c r) (rest f)
                (loop for i below 48 for a = (* +2pi+ (/ i 48))
-                     append (let ((fr (if (projected-view-p) (list (second *view*) (third *view*)) (list (pt 1 0 0) (pt 0 1 0)))))
+                     append (let ((fr (if (projected-view-p) (list (view-r) (view-up)) (list (pt 1 0 0) (pt 0 1 0)))))
                               (list (v+ c (v+ (v* (first fr) (* r (cos a))) (v* (second fr) (* r (sin a))))))))))))
 
 (defun on-round-shape-p (q shape)
