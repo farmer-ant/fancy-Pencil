@@ -63,7 +63,7 @@
           (push (sort idx #'< :key (lambda (m) (let ((w (v- (aref v m) c))) (atan (vdot3 w ay) (vdot3 w ax)))))
                 faces))))))
 
-(defun rotation-taking (a b)
+(defun turning-onto (a b)
   "A function turning unit vector A onto unit vector B."
   (let* ((axis (cross3 a b)) (s (sqrt (vdot3 axis axis))) (c (vdot3 a b)))
     (cond ((> s 1d-12) (let ((k (v* axis (/ 1d0 s))) (ang (atan s c))) (lambda (p) (rotate-about p k ang))))
@@ -87,7 +87,7 @@ largest face, that face centred on ORIGIN; else centred on ORIGIN."
       (let* ((base (first (sort (copy-list faces) #'> :key #'length)))
              (pts (mapcar (lambda (m) (aref v m)) base))
              (c (v* (reduce #'v+ pts) (/ 1d0 (length pts))))
-             (rot (rotation-taking (unit3 c) (pt 0 0 -1)))
+             (rot (turning-onto (unit3 c) (pt 0 0 -1)))
              (turned (mapcar rot vs))
              (bc (funcall rot c)))
         (setf vs (mapcar (lambda (p) (v- p (pt (px bc) (py bc) (pz bc)))) turned))
