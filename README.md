@@ -754,7 +754,7 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
   middle at the point. Size: the edge length, or [Radius] from the centre to a corner.
   Type **W** (Wireframe) at the first prompt, or use the Wireframe entries of the menu, to get the
   shape as its edges: 3D lines gathered in a block (one object to move, copy or rotate), with
-  endpoint, midpoint, nearest and intersection snaps on every edge and corner at its true height.
+  endpoint (every corner), midpoint and nearest snaps on every edge, at their true heights.
   **EXPLODE** it for separate lines. **S** (Solid) switches back.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
