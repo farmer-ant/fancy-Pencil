@@ -941,7 +941,8 @@ to it), then the paper space objects on top."
       (let* ((fits (and (<= (* w unit-pt) (+ pw 0.5)) (<= (* h unit-pt) (+ ph 0.5))))
              (ppu (if fits unit-pt (min (/ pw w) (/ ph h))))
              (offset (list (/ (- pw (* w ppu)) 2) (/ (- ph (* h ppu)) 2)))
-             (prims (let ((*plot-mono* (plot-settings-mono s)) (*plot-lw* (plot-settings-lineweights s)) (*plot-ppu* ppu))
+             (prims (let ((*plot-mono* (plot-settings-mono s)) (*plot-lw* (plot-settings-lineweights s)) (*plot-ppu* ppu)
+                          (*plot-screening* (plot-screening-of s)))
                       (layout-plot-prims l ppu))))
         (write-plot-pdf path prims :paper-w pw :paper-h ph :window (list 0 0 w h) :scale-ppu ppu :offset offset
                                    :title (format nil "~A - ~A" (drawing-display-name) (layout-name l)))

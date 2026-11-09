@@ -903,6 +903,13 @@ File → Plot... (or PLOT / PRINT, Ctrl+P) opens the Plot dialog:
 - **Scale**: Fit to paper, 1:1, 1:2 … 1:100, or architectural scales such as `1/4" = 1'-0"` and
   `1/8" = 1'-0"`; drawing units (inches or feet) are taken from the drawing. Centre on paper.
 - **Black only** (monochrome) and **plot with lineweights**.
+- **Screening %...**: how much ink each colour of the drawing gets, 0-100% (and one value for all other
+  colours). 100% is full strength; lower plots lighter - with Black only, a colour at 50% plots mid
+  grey, at 25% light grey; in colour, a paler shade. Each row shows a sample of the line as it will plot.
+- **Saved settings**: Save As... keeps everything in the dialog (printer, paper, orientation, area,
+  scale, units, options and screening) under a name; pick the name to load them again, Delete to
+  remove one. The settings of your last plot also come back by themselves the next time, even after
+  closing Fancy Pencil (kept in `~/.config/fancypencil/plot.lisp`).
 - **Preview** shows the page before you plot. A PDF can be opened in your viewer when it's written;
   printing goes through `lp` at true scale (no "fit to page" by the printer).
 

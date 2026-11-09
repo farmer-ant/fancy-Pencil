@@ -88,15 +88,33 @@
 (defvar *plot-lw* t)
 (defvar *plot-ppu* nil "PDF points per drawing unit for the plot being made (NIL outside a plot).")
 
+(defvar *plot-screening* nil
+  "Screening while plotting: (default-percent . ((aci . percent) ...)). 100 is full ink, 50 half
+(a mid grey from black), 0 none. NIL: everything at 100.")
+
+(defun plot-screen-percent (aci)
+  (if (null *plot-screening*) 100
+      (let ((e (assoc aci (cdr *plot-screening*))))
+        (if e (cdr e) (car *plot-screening*)))))
+
+(defun screen-rgb (rgb pct)
+  "RGB lightened toward white paper: PCT percent of the ink."
+  (if (>= pct 100) rgb
+      (let ((k (/ (max 0 pct) 100d0)))
+        (mapcar (lambda (c) (- 1d0 (* (- 1d0 c) k))) rgb))))
+
 (defun plot-color (aci)
-  "RGB (0-1) for ACI on white paper: white/black print black, everything black when monochrome."
-  (if (or *plot-mono* (member aci '(7 0 255 256)) (null aci))
-      ;; white/black: black on paper, but white when shown on a dark screen
-      (if (and *prims-for-display* (not *plot-mono*) (not (light-background-p))) '(1 1 1) '(0 0 0))
-      (let ((hex (aci->hex aci)))
-        (list (/ (parse-integer hex :start 1 :end 3 :radix 16) 255d0)
-              (/ (parse-integer hex :start 3 :end 5 :radix 16) 255d0)
-              (/ (parse-integer hex :start 5 :end 7 :radix 16) 255d0)))))
+  "RGB (0-1) for ACI on white paper: white/black print black, everything black when monochrome;
+then lightened by its screening percentage."
+  (screen-rgb
+   (if (or *plot-mono* (member aci '(7 0 255 256)) (null aci))
+       ;; white/black: black on paper, but white when shown on a dark screen
+       (if (and *prims-for-display* (not *plot-mono*) (not (light-background-p))) '(1 1 1) '(0 0 0))
+       (let ((hex (aci->hex aci)))
+         (list (/ (parse-integer hex :start 1 :end 3 :radix 16) 255d0)
+               (/ (parse-integer hex :start 3 :end 5 :radix 16) 255d0)
+               (/ (parse-integer hex :start 5 :end 7 :radix 16) 255d0))))
+   (if *prims-for-display* 100 (plot-screen-percent aci))))
 
 (defun plot-lw-mm (lw)
   (cond ((not *plot-lw*) 0.18d0)
@@ -469,7 +487,8 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
 
 (defstruct plot-settings
   (device "PDF file") (paper "Tabloid / ANSI B (11 x 17 in)") (landscape t) (area "Extents")
-  (window nil) (scale "Fit to paper") (units nil) (center t) (mono nil) (lineweights t) (copies 1))
+  (window nil) (scale "Fit to paper") (units nil) (center t) (mono nil) (lineweights t) (copies 1)
+  (screen-default 100) (screening nil))
 
 (defvar *plot-settings* nil)
 
@@ -504,7 +523,8 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
          (offset (if (plot-settings-center s)
                      (list (/ (- pw (* cw ppu)) 2) (/ (- ph (* ch ppu)) 2))
                      (list margin margin)))
-         (prims (let ((*plot-mono* (plot-settings-mono s)) (*plot-lw* (plot-settings-lineweights s)) (*plot-ppu* ppu))
+         (prims (let ((*plot-mono* (plot-settings-mono s)) (*plot-lw* (plot-settings-lineweights s)) (*plot-ppu* ppu)
+                      (*plot-screening* (plot-screening-of s)))
                   (apply #'collect-plot-prims clip))))
     (write-plot-pdf path prims :paper-w pw :paper-h ph :window clip :scale-ppu ppu :offset offset
                                :title (drawing-display-name))
@@ -529,9 +549,69 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
 (defun open-pdf-viewer (path)
   (run-shell (format nil "(xdg-open ~A >/dev/null 2>&1 &)" (shell-quote path))))
 
-(defun plot-dialog (s printers)
-  "Show the Plot dialog. Returns (values action settings), action \"OK\" \"PREVIEW\" \"PICK\" or NIL."
-  (let* ((r (tk-ask (format nil "plotdlg ~A ~A ~A ~A ~D ~A ~A ~A ~A ~D ~D ~D ~D ~A"
+(defun plot-screening-of (s)
+  (when (or (/= (plot-settings-screen-default s) 100) (plot-settings-screening s))
+    (cons (plot-settings-screen-default s) (plot-settings-screening s))))
+
+(defun screening-summary (s)
+  (let ((n (count-if (lambda (e) (/= (cdr e) 100)) (plot-settings-screening s))) (dflt (plot-settings-screen-default s)))
+    (cond ((and (zerop n) (= dflt 100)) "Screening: none (all colors at 100%)")
+          (t (format nil "Screening: ~@[~D color~:P set~]~:[~;, ~]~@[other colors ~D%~]"
+                     (and (plusp n) n) (and (plusp n) (/= dflt 100)) (and (/= dflt 100) dflt))))))
+
+;;; saved plot settings: the last ones used, and named page setups, kept between sessions
+(defun plot-store-file ()
+  (merge-pathnames ".config/fancypencil/plot.lisp"
+                   (concatenate (quote string) (string-right-trim "/" (or (getenv "HOME") "/tmp")) "/")))
+(defun plot-settings-plist (s)
+  (list :device (plot-settings-device s) :paper (plot-settings-paper s) :landscape (plot-settings-landscape s)
+        :area (plot-settings-area s) :window (plot-settings-window s) :scale (plot-settings-scale s)
+        :units (plot-settings-units s) :center (plot-settings-center s) :mono (plot-settings-mono s)
+        :lineweights (plot-settings-lineweights s) :copies (plot-settings-copies s)
+        :screen-default (plot-settings-screen-default s) :screening (plot-settings-screening s)))
+(defun plist-plot-settings (pl)
+  (let ((s (make-plot-settings :units (default-plot-units))))
+    (loop for (k v) on pl by #'cddr
+          do (case k
+               (:device (when (stringp v) (setf (plot-settings-device s) v)))
+               (:paper (when (stringp v) (setf (plot-settings-paper s) v)))
+               (:landscape (setf (plot-settings-landscape s) (and v t)))
+               (:area (when (stringp v) (setf (plot-settings-area s) v)))
+               (:window (when (and (listp v) (= (length v) 4) (every #'realp v)) (setf (plot-settings-window s) (mapcar #'d v))))
+               (:scale (when (stringp v) (setf (plot-settings-scale s) v)))
+               (:units (when (stringp v) (setf (plot-settings-units s) v)))
+               (:center (setf (plot-settings-center s) (and v t)))
+               (:mono (setf (plot-settings-mono s) (and v t)))
+               (:lineweights (setf (plot-settings-lineweights s) (and v t)))
+               (:copies (when (and (integerp v) (plusp v)) (setf (plot-settings-copies s) v)))
+               (:screen-default (when (and (realp v) (<= 0 v 100)) (setf (plot-settings-screen-default s) (round v))))
+               (:screening (when (listp v)
+                             (setf (plot-settings-screening s)
+                                   (loop for e in v when (and (consp e) (integerp (car e)) (realp (cdr e)) (<= 0 (cdr e) 100))
+                                         collect (cons (car e) (round (cdr e)))))))))
+    s))
+(defun read-plot-store ()
+  (let ((x (ignore-errors (with-open-file (i (plot-store-file) :external-format :utf-8)
+                            (with-standard-io-syntax (let ((*read-eval* nil)) (read i nil)))))))
+    (if (listp x) x nil)))
+(defun write-plot-store (store)
+  (ignore-errors
+   (ensure-directories-exist (plot-store-file))
+   (with-open-file (o (plot-store-file) :direction :output :if-exists :supersede :external-format :utf-8)
+     (with-standard-io-syntax (let ((*print-readably* nil)) (prin1 store o) (terpri o))))))
+(defun plot-setups () (getf (read-plot-store) :setups))
+(defun save-plot-store (&key last (setups nil setups-p))
+  (let ((st (read-plot-store)))
+    (when last (setf (getf st :last) (plot-settings-plist last)))
+    (when setups-p (setf (getf st :setups) setups))
+    (write-plot-store st)))
+(defun last-plot-settings ()
+  (let ((pl (getf (read-plot-store) :last))) (and pl (plist-plot-settings pl))))
+
+(defun plot-dialog (s printers &optional (setup ""))
+  "Show the Plot dialog. Returns (values action settings setup-name), action \"OK\" \"PREVIEW\"
+\"PICK\" \"SCREEN\" \"LOAD\" \"SAVE\" \"DELETE\" or NIL."
+  (let* ((r (tk-ask (format nil "plotdlg ~A ~A ~A ~A ~D ~A ~A ~A ~A ~D ~D ~D ~D ~A ~A ~A ~A"
                             (tcl-list (cons "PDF file" printers)) (tq (plot-settings-device s))
                             (tcl-list (mapcar #'first *paper-sizes*)) (tq (plot-settings-paper s))
                             (if (plot-settings-landscape s) 1 0)
@@ -540,18 +620,51 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                             (if (plot-settings-center s) 1 0) (if (plot-settings-mono s) 1 0)
                             (if (plot-settings-lineweights s) 1 0) (plot-settings-copies s)
                             (tq (if (plot-settings-window s)
-                                    (format nil "~{~,2F~^, ~}" (plot-settings-window s)) "")))))
+                                    (format nil "~{~,2F~^, ~}" (plot-settings-window s)) ""))
+                            (tcl-list (mapcar #'car (plot-setups))) (tq setup) (tq (screening-summary s)))))
          (f (split-string r (code-char 31))))
     (if (or (string= r "") (string= r "CANCEL"))
         nil
-        (destructuring-bind (action device paper land area scale units center mono lw copies &rest ignore) f
+        (destructuring-bind (action device paper land area scale units center mono lw copies &optional (name "") &rest ignore) f
           (declare (ignore ignore))
           (values action
                   (make-plot-settings :device device :paper paper :landscape (string= land "1") :area area
                                       :window (plot-settings-window s) :scale scale :units units
                                       :center (string= center "1") :mono (string= mono "1")
                                       :lineweights (string= lw "1")
-                                      :copies (max 1 (or (ignore-errors (parse-integer copies)) 1))))))))
+                                      :copies (max 1 (or (ignore-errors (parse-integer copies)) 1))
+                                      :screen-default (plot-settings-screen-default s)
+                                      :screening (plot-settings-screening s))
+                  (string-trim " " name))))))
+
+(defun drawing-plot-colors ()
+  "The colours objects plot in (their own or their layer's), commonest first."
+  (let ((tally (make-hash-table)))
+    (dolist (e (live-entities))
+      (let ((a (ignore-errors (entity-color-aci e))))
+        (when (and (integerp a) (<= 1 a 255)) (incf (gethash a tally 0)))))
+    (mapcar #'car (sort (loop for k being the hash-keys of tally using (hash-value v) collect (cons k v)) #'> :key #'cdr))))
+
+(defun screening-dialog (s)
+  "Set the screening percentage of each colour (and of all others). Changes S."
+  (let* ((cols (let ((c (drawing-plot-colors))) (if c (subseq c 0 (min 24 (length c))) (list 1 2 3 4 5 6 7))))
+         (cols (union cols (mapcar #'car (plot-settings-screening s))))
+         (r (tk-ask (format nil "screendlg {~{{~D ~A ~D}~^ ~}} ~D ~D"
+                            (loop for a in (sort (copy-list cols) #'<)
+                                  append (list a (aci->hex a) (or (cdr (assoc a (plot-settings-screening s))) (plot-settings-screen-default s))))
+                            (plot-settings-screen-default s) (if (plot-settings-mono s) 1 0)))))
+    (when (and (plusp (length r)) (string= (subseq r 0 (min 2 (length r))) "OK"))
+      (let* ((parts (split-string (subseq r 3) #\Space))
+             (dflt (ignore-errors (parse-integer (first parts)))))
+        (when dflt
+          (setf (plot-settings-screen-default s) (max 0 (min 100 dflt))
+                (plot-settings-screening s)
+                (loop for item in (rest parts)
+                      for eq = (position #\= item)
+                      for a = (and eq (ignore-errors (parse-integer item :end eq)))
+                      for pc = (and eq (ignore-errors (parse-integer item :start (1+ eq))))
+                      when (and a pc (/= pc (plot-settings-screen-default s))) collect (cons a (max 0 (min 100 pc))))))))
+    s))
 
 (defun pick-plot-window ()
   (let ((a (gpoint "Specify first corner of plot window: ")))
@@ -586,14 +699,32 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
 (defcmd "PLOT" ("PRINT" "PLT") "Plots the drawing to a PDF file or a printer."
   (if (not (use-inplace-editor-p))
       (plot-command-line)
-      (let ((s (let ((s0 (or *plot-settings* (make-plot-settings :units (default-plot-units)))))
+      (let ((s (let ((s0 (or *plot-settings* (last-plot-settings) (make-plot-settings :units (default-plot-units)))))
                  (if (drawing-ctab *dwg*) (funcall 'layout-plot-settings s0) s0)))
-            (printers (system-printers)))
+            (printers (system-printers))
+            (setup ""))
         (loop
-          (multiple-value-bind (action new) (plot-dialog s printers)
+          (multiple-value-bind (action new name) (plot-dialog s printers setup)
             (unless action (return))
             (setf s new *plot-settings* new)
             (cond
+              ((string= action "SCREEN") (screening-dialog s))
+              ((string= action "SAVE")
+               (when (plusp (length name))
+                 (save-plot-store :setups (cons (cons name (plot-settings-plist s))
+                                                (remove name (plot-setups) :key #'car :test #'string-equal)))
+                 (setf setup name)
+                 (out (format nil "Plot settings saved as \"~A\".~%" name))))
+              ((string= action "LOAD")
+               (let ((e (assoc name (plot-setups) :test #'string-equal)))
+                 (when e
+                   (setf s (plist-plot-settings (cdr e)) setup (car e))
+                   (when (drawing-ctab *dwg*) (setf s (funcall 'layout-plot-settings s))))))
+              ((string= action "DELETE")
+               (when (plusp (length name))
+                 (save-plot-store :setups (remove name (plot-setups) :key #'car :test #'string-equal))
+                 (setf setup "")
+                 (out (format nil "Plot settings \"~A\" deleted.~%" name))))
               ((string= action "PICK")
                (let ((w (pick-plot-window)))
                  (when w (setf (plot-settings-window s) w (plot-settings-area s) "Window"))))
@@ -607,6 +738,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
                (when (and (string-equal (plot-settings-area s) "Window") (null (plot-settings-window s)))
                  (let ((w (pick-plot-window))) (if w (setf (plot-settings-window s) w) (return))))
                (setf *plot-settings* s)
+               (save-plot-store :last s)
                (finish-plot s)
                (return))))))))
 
