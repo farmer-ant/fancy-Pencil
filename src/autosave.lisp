@@ -29,17 +29,30 @@
   (let* ((base (format nil "~A~A-~D-~D" (autosave-dir) (safe-file-part (doc-name d)) (my-pid) (doc-id d))))
     (values (concatenate 'string base ".dxf") (concatenate 'string base ".info"))))
 
+(defun delete-safety-copy (dxf)
+  (ignore-errors (delete-file dxf))
+  (ignore-errors (delete-file (make-pathname :type "info" :defaults (pathname dxf)))))
+
 (defun autosave-forget (d)
-  "Delete D's safety copy (it was saved or closed normally)."
+  "Delete D's safety copy (it was saved or closed normally) - where it was written, even if the
+drawing has been renamed since (Save As) - and the one its present name would give."
   (let ((e (assoc d *autosaves*)))
     (when e
+      (delete-safety-copy (second e))
       (setf *autosaves* (remove e *autosaves*))))
   (multiple-value-bind (dxf info) (autosave-paths d)
     (ignore-errors (delete-file dxf))
     (ignore-errors (delete-file info))))
 
 (defun autosave-forget-all ()
-  (dolist (d (copy-list (symbol-value '*docs*))) (autosave-forget d)))
+  "Closing normally: delete every safety copy this Fancy Pencil made."
+  (dolist (d (copy-list (symbol-value '*docs*))) (autosave-forget d))
+  (dolist (info (ignore-errors (directory (concatenate 'string (autosave-dir) "*.info"))))
+    (let ((pl (read-info info)))
+      (when (and (listp pl) (eql (getf pl :pid) (my-pid)))
+        (delete-safety-copy (namestring (make-pathname :type "dxf" :defaults info))))))
+  (dolist (part (ignore-errors (directory (concatenate 'string (autosave-dir) (format nil "*-~D-*.part" (my-pid))))))
+    (ignore-errors (delete-file part))))
 
 (defun write-safety-copy (d)
   "Copy open drawing D to its safety file, leaving D's own name and saved state as they were."
@@ -129,15 +142,33 @@
       (out (format nil "Recovered ~A. Save it to keep it~:[~; (Save puts it back in ~:*~A)~].~%"
                    (describe-copy c) orig)))))
 
+(defun mark-offered (c)
+  "Note in safety copy C's info that it has been offered once (it is not offered again at startup)."
+  (let ((info (make-pathname :type "info" :defaults (pathname (car c)))))
+    (ignore-errors
+     (with-open-file (o info :direction :output :if-exists :supersede :external-format :utf-8)
+       (with-standard-io-syntax
+         (let ((*print-readably* nil))
+           (prin1 (list* :offered t (cdr c)) o)))))))
+
 (defun offer-recovery ()
-  "At startup: safety copies left by a crash? Offer to open them."
-  (let ((cs (leftover-safety-copies)))
-    (when (and cs (gui-p))
+  "At startup: safety copies left by a crash? Offer them once. Copies offered before stay
+available (File > Recover Safety Copies) without being asked about again; after 30 days they go."
+  (let* ((cs (leftover-safety-copies))
+         (now (get-universal-time))
+         (old (remove-if-not (lambda (c) (and (getf (cdr c) :offered)
+                                              (> (- now (or (getf (cdr c) :time) now)) (* 30 24 3600))))
+                             cs))
+         (new (remove-if (lambda (c) (getf (cdr c) :offered)) cs)))
+    (dolist (c old) (delete-safety-copy (car c)))
+    (when (and new (gui-p))
       (let ((r (gui-confirm (format nil "Fancy Pencil did not close normally last time. It had made safety copies of:~%~%~{    ~A~%~}~%~
-                                         Open them now? (Yes = open; No = keep them for later, File > Recover Safety Copies)"
-                                    (mapcar #'describe-copy cs))
+                                         Open them now?~%~%Yes = open them.~%No = keep them, without asking again: open them any time with~%      File > Recover Safety Copies (they are deleted after 30 days)."
+                                    (mapcar #'describe-copy new))
                             "yesno")))
-        (when (string= r "yes") (dolist (c cs) (open-safety-copy c)))))))
+        (if (string= r "yes")
+            (dolist (c new) (open-safety-copy c))
+            (dolist (c new) (mark-offered c)))))))
 
 (defcmd "DRAWINGRECOVERY" ("RECOVERCOPIES") "Opens safety copies left by Fancy Pencil stopping unexpectedly."
   (let ((cs (leftover-safety-copies)))

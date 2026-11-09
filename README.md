@@ -82,7 +82,8 @@ Every 10 minutes, each open drawing with unsaved changes is copied to
 `~/.local/share/fancypencil/autosave/`. Your own file is not touched, and nothing is copied while a
 drawing has no changes. The copies are deleted when you save or close normally, so any left behind
 mean Fancy Pencil stopped unexpectedly (crash, power cut, forced quit): the next start lists them
-and offers to open them. A recovered drawing opens under its own name, marked as changed, so Save
+and offers to open them - once. Answer No and they are kept (for 30 days) without being asked
+about again. A recovered drawing opens under its own name, marked as changed, so Save
 puts it back where it belongs. File > Recover Safety Copies (DRAWINGRECOVERY) opens or deletes them
 any time. Type `SAVETIME` to change the minutes between copies (0 turns them off).
 
