@@ -752,6 +752,10 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
   hexagons); or **POLYHEDRON** and pick one. Each stands on a face (the soccer ball on a hexagon),
   centred on the point you give in the working plane, one base edge along X - or [Center] puts its
   middle at the point. Size: the edge length, or [Radius] from the centre to a corner.
+  Type **W** (Wireframe) at the first prompt, or use the Wireframe entries of the menu, to get the
+  shape as its edges: 3D lines gathered in a block (one object to move, copy or rotate), with
+  endpoint, midpoint, nearest and intersection snaps on every edge and corner at its true height.
+  **EXPLODE** it for separate lines. **S** (Solid) switches back.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
 * **REVOLVE** shapes about an axis (two points, X, Y, Z, or a line) by any angle.
