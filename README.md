@@ -745,6 +745,12 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
 
 * **BOX** (corners, [Center], [Cube], [Length] then height), **WEDGE**, **CYLINDER**, **CONE**
   (with [Top radius] for a cut-off cone), **SPHERE**, **TORUS**. Heights may be negative.
+- Platonic solids and the soccer ball (Solids → Platonic Solids & Soccer Ball): **TETRAHEDRON**
+  (4 triangles), cube (6 squares), **OCTAHEDRON** (8 triangles), **DODECAHEDRON** (12 pentagons),
+  **ICOSAHEDRON** (20 triangles) and **SOCCERBALL**, the truncated icosahedron (12 pentagons and 20
+  hexagons); or **POLYHEDRON** and pick one. Each stands on a face (the soccer ball on a hexagon),
+  centred on the point you give in the working plane, one base edge along X - or [Center] puts its
+  middle at the point. Size: the edge length, or [Radius] from the centre to a corner.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
 * **REVOLVE** shapes about an axis (two points, X, Y, Z, or a line) by any angle.
