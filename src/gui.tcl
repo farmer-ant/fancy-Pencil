@@ -3347,7 +3347,7 @@ proc osnapmenu {X Y} {
 # ---------------------------------------------------------------- plot dialog
 # Returns "CANCEL" or  action \x1f device \x1f paper \x1f landscape \x1f area \x1f scale \x1f units \x1f
 #                      center \x1f mono \x1f lineweights \x1f copies      (action: OK, PREVIEW or PICK)
-proc plotdlg {devices device papers paper landscape area scales scale units center mono lw copies wintext} {
+proc plotdlg {devices device papers paper landscape area scales scale units center mono lw copies wintext {setups {}} {setup ""} {scrtext ""}} {
     set w .plot
     catch {destroy $w}
     toplevel $w -background $::panel
@@ -3355,10 +3355,25 @@ proc plotdlg {devices device papers paper landscape area scales scale units cent
     wm transient $w [dlg_owner $w]
     array unset ::pl
     array set ::pl [list device $device paper $paper landscape $landscape area $area scale $scale units $units \
-                        center $center mono $mono lw $lw copies $copies result CANCEL]
+                        center $center mono $mono lw $lw copies $copies result CANCEL setup $setup]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
     set r 0
+    # saved settings: pick one to load it; Save As keeps the dialog's settings under a name
+    ttk::label $f.lsetup -text "Saved settings"
+    set sf [ttk::frame $f.sf]
+    ttk::combobox $sf.cb -textvariable ::pl(setup) -values $setups -state readonly -width 22
+    bind $sf.cb <<ComboboxSelected>> {set ::pl(result) LOAD; destroy .plot}
+    ttk::button $sf.save -text "Save As..." -command plotdlg_saveas
+    ttk::button $sf.del -text "Delete" -command {if {$::pl(setup) ne ""} {set ::pl(result) DELETE; destroy .plot}}
+    pack $sf.cb -side left
+    pack $sf.save $sf.del -side left -padx {6 0}
+    grid $f.lsetup -row $r -column 0 -sticky w -pady 3 -padx {0 10}
+    grid $sf -row $r -column 1 -columnspan 3 -sticky w -pady 3
+    incr r
+    ttk::separator $f.sep0 -orient horizontal
+    grid $f.sep0 -row $r -column 0 -columnspan 4 -sticky ew -pady 6
+    incr r
     foreach {lbl var vals} [list "Printer / plotter" device $devices "Paper size" paper $papers] {
         ttk::label $f.l$var -text $lbl
         ttk::combobox $f.$var -textvariable ::pl($var) -values $vals -state readonly -width 34
@@ -3395,10 +3410,16 @@ proc plotdlg {devices device papers paper landscape area scales scale units cent
     ttk::checkbutton $opts.c -text "Center the plot" -variable ::pl(center)
     ttk::checkbutton $opts.m -text "Black ink only (monochrome)" -variable ::pl(mono)
     ttk::checkbutton $opts.w -text "Plot lineweights" -variable ::pl(lw)
+    set so [ttk::frame $opts.s]
+    ttk::button $so.b -text "Screening %..." -command {set ::pl(result) SCREEN; destroy .plot}
+    ttk::label $so.l -text $scrtext -style Dim.TLabel
+    pack $so.b -side left
+    pack $so.l -side left -padx 8
     pack $opts.c $opts.m $opts.w -side top -anchor w
+    pack $so -side top -anchor w -pady {4 0}
     grid $opts -row $r -column 0 -columnspan 3 -sticky w -pady {6 0}; incr r
     canvas $f.pv -width 180 -height 140 -background $::panel -highlightthickness 0
-    grid $f.pv -row 0 -column 3 -rowspan 8 -padx {16 0} -sticky n
+    grid $f.pv -row 2 -column 3 -rowspan 8 -padx {16 0} -sticky n
     set bb [ttk::frame $f.bb]
     ttk::button $bb.pre -text "Preview" -command {set ::pl(result) PREVIEW; destroy .plot}
     ttk::button $bb.ok -text "Plot" -command {set ::pl(result) OK; destroy .plot}
@@ -3413,7 +3434,111 @@ proc plotdlg {devices device papers paper landscape area scales scale units cent
     tkwait window $w
     if {$::pl(result) eq "CANCEL"} { return CANCEL }
     return [join [list $::pl(result) $::pl(device) $::pl(paper) $::pl(landscape) $::pl(area) $::pl(scale) \
-                      $::pl(units) $::pl(center) $::pl(mono) $::pl(lw) $::pl(copies)] \x1f]
+                      $::pl(units) $::pl(center) $::pl(mono) $::pl(lw) $::pl(copies) $::pl(setup)] \x1f]
+}
+proc plotdlg_saveas {} {
+    set t .plot.saveas
+    catch {destroy $t}
+    toplevel $t -background $::panel
+    wm title $t "Save Plot Settings"
+    wm transient $t .plot
+    set f [ttk::frame $t.f -padding 12]
+    pack $f
+    ttk::label $f.l -text "Name for these settings:"
+    set ::pl(newname) $::pl(setup)
+    ttk::entry $f.e -textvariable ::pl(newname) -width 30
+    ttk::button $f.ok -text "Save" -command {
+        if {[string trim $::pl(newname)] ne ""} { set ::pl(setup) [string trim $::pl(newname)]; set ::pl(result) SAVE; destroy .plot }
+    }
+    ttk::button $f.no -text "Cancel" -command {destroy .plot.saveas}
+    grid $f.l -row 0 -column 0 -columnspan 2 -sticky w
+    grid $f.e -row 1 -column 0 -columnspan 2 -sticky ew -pady 6
+    grid $f.ok -row 2 -column 0 -sticky w
+    grid $f.no -row 2 -column 1 -sticky e
+    bind $t <Return> [list $f.ok invoke]
+    bind $t <Escape> {destroy .plot.saveas}
+    wm geometry $t +[expr {[winfo rootx .plot] + 60}]+[expr {[winfo rooty .plot] + 60}]
+    focus $f.e
+    $f.e selection range 0 end
+    catch {grab $t}
+}
+
+# Screening: how much ink each colour gets when plotted (100% full, 50% half - a grey in black and
+# white, a paler shade in colour - 0% none). Rows: {aci hex percent}.
+proc screendlg {rows dflt mono} {
+    set w .screen
+    catch {destroy $w}
+    toplevel $w -background $::panel
+    wm title $w "Plot Screening"
+    wm transient $w [dlg_owner $w]
+    set ::scr(result) CANCEL
+    set ::scr(dflt) $dflt
+    set ::scr(mono) $mono
+    set f [ttk::frame $w.f -padding 12]
+    pack $f -fill both -expand 1
+    ttk::label $f.h -text "Ink for each color: 100% full strength, lower for lighter.\nIn black ink only (monochrome) a color at 50% plots mid grey." -justify left
+    grid $f.h -row 0 -column 0 -columnspan 5 -sticky w -pady {0 8}
+    set r 1
+    set ::scr(acis) {}
+    foreach row $rows {
+        lassign $row aci hex pct
+        lappend ::scr(acis) $aci
+        set ::scr(p$aci) $pct
+        frame $f.sw$aci -width 18 -height 14 -background $hex -relief solid -borderwidth 1
+        ttk::label $f.l$aci -text "Color $aci[expr {$aci <= 7 ? " ([lindex {- red yellow green cyan blue magenta white/black} $aci])" : ""}]"
+        ttk::spinbox $f.s$aci -from 0 -to 100 -increment 5 -width 5 -textvariable ::scr(p$aci) -command [list screendlg_show $aci]
+        bind $f.s$aci <KeyRelease> [list screendlg_show $aci]
+        ttk::label $f.pct$aci -text "%"
+        canvas $f.pv$aci -width 70 -height 14 -background white -highlightthickness 1 -highlightbackground "#8a94a3"
+        grid $f.sw$aci -row $r -column 0 -padx {0 6} -pady 2
+        grid $f.l$aci -row $r -column 1 -sticky w -padx {0 10}
+        grid $f.s$aci -row $r -column 2
+        grid $f.pct$aci -row $r -column 3 -sticky w
+        grid $f.pv$aci -row $r -column 4 -padx {8 0}
+        screendlg_show $aci $hex
+        incr r
+    }
+    ttk::label $f.ld -text "All other colors"
+    ttk::spinbox $f.sd -from 0 -to 100 -increment 5 -width 5 -textvariable ::scr(dflt)
+    ttk::label $f.pd -text "%"
+    grid $f.ld -row $r -column 1 -sticky w -pady {8 2}
+    grid $f.sd -row $r -column 2 -pady {8 2}
+    grid $f.pd -row $r -column 3 -sticky w -pady {8 2}
+    incr r
+    set bb [ttk::frame $f.bb]
+    ttk::button $bb.all -text "All 100%" -command {foreach a $::scr(acis) { set ::scr(p$a) 100; screendlg_show $a }; set ::scr(dflt) 100}
+    ttk::button $bb.ok -text "OK" -command {set ::scr(result) OK; destroy .screen}
+    ttk::button $bb.no -text "Cancel" -command {destroy .screen}
+    pack $bb.all -side left
+    pack $bb.no $bb.ok -side right -padx 3
+    grid $bb -row $r -column 0 -columnspan 5 -sticky ew -pady {12 0}
+    bind $w <Escape> {destroy .screen}
+    wm geometry $w +[expr {[winfo rootx .] + 200}]+[expr {[winfo rooty .] + 80}]
+    safegrab $w
+    tkwait window $w
+    if {$::scr(result) ne "OK"} { return CANCEL }
+    set out [list OK [screendlg_num $::scr(dflt)]]
+    foreach a $::scr(acis) { lappend out "$a=[screendlg_num $::scr(p$a)]" }
+    return [join $out " "]
+}
+proc screendlg_num {v} {
+    if {![string is double -strict $v]} { return 100 }
+    return [expr {max(0, min(100, round($v)))}]
+}
+# a sample of the line as it will plot (grey when monochrome)
+proc screendlg_show {aci {hex ""}} {
+    set c .screen.f.pv$aci
+    if {![winfo exists $c]} return
+    if {$hex ne ""} { set ::scr(hex$aci) $hex }
+    set k [expr {[screendlg_num $::scr(p$aci)] / 100.0}]
+    if {$::scr(mono) || $aci == 7} { set rgb {0 0 0} } else {
+        lassign [winfo rgb . $::scr(hex$aci)] r g b
+        set rgb [list [expr {$r / 65535.0}] [expr {$g / 65535.0}] [expr {$b / 65535.0}]]
+    }
+    set col "#"
+    foreach v $rgb { append col [format %02x [expr {round(255 * (1 - (1 - $v) * $k))}]] }
+    $c delete all
+    $c create rectangle 4 4 66 11 -fill $col -outline ""
 }
 proc plotdlg_preview {} {
     set c .plot.f.pv
