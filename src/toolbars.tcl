@@ -69,6 +69,7 @@ proc tbx_from_menu {name title m} {
             continue
         }
         if {$t ni {command radiobutton}} continue
+        if {[$m entrycget $i -state] eq "disabled" || [$m entrycget $i -command] eq ""} continue
         set cmd [$m entrycget $i -command]
         if {[string match "*DOCSWITCH*" $cmd] || [string match "*OPENRECENT*" $cmd]} continue
         set key [string toupper [lindex $cmd end]]
@@ -328,6 +329,13 @@ proc tbx_variant {key} {
         "DRAFTPLANE OBJECT" { return {{F a 2 15 14 18 18 5 6 2} {L 4 14 16 5}} }
         "DRAFTPLANE FACE" { return [concat [tbx_cube right] {{T 4 3 F}}] }
         "DRAFTPLANE VIEW" { return {{R 2 2 18 18} {F a 5 5 15 5 15 15 5 15}} }
+        "POLYHEDRON CUBE S" { return [tbx_cube top] }
+        "TETRAHEDRON W" { return {{L 10 2 2 16 12 18 10 2} {L 12 18 18 13 10 2} {D 2 16 18 13}} }
+        "OCTAHEDRON W" { return {{L 10 1 3 10 10 19 17 10 10 1} {L 10 1 10 19} {D 3 10 17 10}} }
+        "DODECAHEDRON W" { return {{L 10 1 18.5 7 15.5 17 4.5 17 1.5 7 10 1} {l 10 5 14 8 12.5 13 7.5 13 6 8 10 5}} }
+        "ICOSAHEDRON W" { return {{L 10 1 18 5.5 18 14.5 10 19 2 14.5 2 5.5 10 1} {l 10 6 15 14 5 14 10 6} {l 2 5.5 10 6 18 5.5}} }
+        "SOCCERBALL W" { return {{O 1 1 19 19} {l 10 6 14 9 12.5 14 7.5 14 6 9 10 6} {l 10 6 10 1} {l 14 9 18.5 7} {l 12.5 14 15 18} {l 7.5 14 5 18} {l 6 9 1.5 7}} }
+        "POLYHEDRON CUBE W" { return {{L 2 6 10 2 18 6 18 14 10 18 2 14 2 6} {L 2 6 10 10 18 6} {L 10 10 10 18}} }
         "UCS FACE" { return [concat [tbx_cube right] {{T 4 3 UCS}}] }
         "UCS*" {
             set ops {{> 4 16 4 3} {> 4 16 17 16}}

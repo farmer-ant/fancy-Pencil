@@ -263,9 +263,14 @@ mcmd .mb.view "Regen" REGEN
 foreach {l c} {Box BOX Wedge WEDGE Cylinder CYLINDER Cone CONE Sphere SPHERE Torus TORUS} { mcmd .mb.solid $l $c }
 menu .mb.solid.poly -tearoff 0
 .mb.solid add cascade -label "Platonic Solids & Soccer Ball" -menu .mb.solid.poly
-foreach {l c} {"Tetrahedron (4 faces)" TETRAHEDRON "Cube (6 faces)" {POLYHEDRON Cube} "Octahedron (8 faces)" OCTAHEDRON
-               "Dodecahedron (12 faces)" DODECAHEDRON "Icosahedron (20 faces)" ICOSAHEDRON
-               "Truncated Icosahedron (soccer ball)" SOCCERBALL} { mcmd .mb.solid.poly $l $c }
+foreach {l c} {"Tetrahedron (4 faces)" {TETRAHEDRON S} "Cube (6 faces)" {POLYHEDRON Cube S} "Octahedron (8 faces)" {OCTAHEDRON S}
+               "Dodecahedron (12 faces)" {DODECAHEDRON S} "Icosahedron (20 faces)" {ICOSAHEDRON S}
+               "Truncated Icosahedron (soccer ball)" {SOCCERBALL S}} { mcmd .mb.solid.poly $l $c }
+.mb.solid.poly add separator
+.mb.solid.poly add command -label "Wireframes (lines, explodable):" -state disabled
+foreach {l c} {"Tetrahedron wireframe" {TETRAHEDRON W} "Cube wireframe" {POLYHEDRON Cube W} "Octahedron wireframe" {OCTAHEDRON W}
+               "Dodecahedron wireframe" {DODECAHEDRON W} "Icosahedron wireframe" {ICOSAHEDRON W}
+               "Soccer ball wireframe" {SOCCERBALL W}} { mcmd .mb.solid.poly $l $c }
 mcmd .mb.solid "Helix (path for a spring or thread)" HELIX
 mcmd .mb.solid "3D Print (STL / 3MF / OBJ)..." 3DPRINT
 mcmd .mb.solid "Import STL / OBJ Model..." STLIN
