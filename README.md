@@ -213,6 +213,12 @@ lettered tile. Rest the mouse on an icon to see its name.
   Light / Dark slider that makes the same color lighter or darker, a hex box and a preview), plus ready-made color schemes (Dark,
   Light, High contrast, Blueprint, Warm, Green screen). Changes show at once, with a preview;
   "Standard Look" puts everything back. Icons are drawn as lines, so they stay sharp at any size.
+- **Customize Toolbars** (button in Toolbar Options, View > Toolbars, or the right-click menu): make
+  your own toolbars (New Toolbar..., Rename..., Delete Toolbar) and put any command on them, from a
+  list of every command with a search box; take commands off any toolbar, and put them in any order
+  (Move Up / Move Down, or drag them up and down the list). The standard toolbars can be rearranged
+  too ("Standard Contents" puts one back). On the toolbars themselves, **Shift + drag** a button to
+  move it along its toolbar or onto another. Everything is remembered.
 - Long toolbars wrap into extra columns (or rows) to fit. The layout is remembered between
   sessions, in `~/.config/fancypencil/toolbars.tcl`.
 
