@@ -52,6 +52,7 @@ proc tbx_add {name title items {kind cmd}} {
     lappend ::tbx_names $name
     set ::tbx(t,$name) $title
     set ::tbx(i,$name) $items
+    if {![info exists ::tbx(orig,$name)]} { set ::tbx(orig,$name) $items }
     set ::tbx(k,$name) $kind
     set ::tbx(c,$name) [lindex [split $name _] 0]
 }
@@ -459,6 +460,13 @@ proc tbx_save {} {
         file mkdir [file dirname $::tbx_file]
         set fd [open $::tbx_file w]
         puts $fd "# Fancy Pencil toolbar layout (written by the program; delete it to get the standard layout)"
+        foreach n $::tbx_names {
+            if {[info exists ::tbx(user,$n)]} {
+                puts $fd [list [list :custom $n $::tbx(t,$n) $::tbx(i,$n)]]
+            } elseif {$::tbx(i,$n) ne $::tbx(orig,$n)} {
+                puts $fd [list [list :items $n $::tbx(i,$n)]]
+            }
+        }
         foreach r $out { puts $fd [list $r] }
         puts $fd [list [concat :opts [array get ::tbo]]]
         close $fd
@@ -479,7 +487,23 @@ proc tbx_load {} {
             }
             continue
         }
-        if {[catch {lassign [lindex $line 0] n d ln pos g last}]} continue
+        set rec [lindex $line 0]
+        if {[lindex $rec 0] eq ":custom"} {
+            lassign $rec - n title items
+            if {[regexp {^user\d+$} $n] && $n ni $::tbx_names} {
+                tbx_add $n $title [tbx_valid_items $items]
+                if {$n ni $::tbx_names} { tbx_add_empty $n $title }
+                set ::tbx(user,$n) 1
+                set ::tbx(d,$n) hidden; set ::tbx(last,$n) top; set ::tbx(line,$n) 0; set ::tbx(pos,$n) 0
+            }
+            continue
+        }
+        if {[lindex $rec 0] eq ":items"} {
+            lassign $rec - n items
+            if {$n in $::tbx_names} { set ::tbx(i,$n) [tbx_valid_items $items] }
+            continue
+        }
+        if {[catch {lassign $rec n d ln pos g last}]} continue
         if {$n ni $::tbx_names || $d ni {top bottom left right float hidden}} continue
         if {![string is double -strict $ln] || ![string is double -strict $pos]} continue
         set ::tbx(d,$n) $d; set ::tbx(line,$n) $ln; set ::tbx(pos,$n) $pos
@@ -558,6 +582,8 @@ proc tbx_make {w n vert maxrun} {
         if {$vert} { grid $c -row $run -column $other -padx $::tbo(pad) -pady $::tbo(pad) } else { grid $c -row $other -column $run -padx $::tbo(pad) -pady $::tbo(pad) }
         bind $c <Enter> [list tbx_benter $c $n $label]
         bind $c <Leave> [list tbx_bleave $c]
+        bind $c <Shift-ButtonPress-1> [list tbx_bdrag_start $n $i]
+        bind $c <Shift-ButtonRelease-1> {tbx_bdrag_end %X %Y; break}
         bind $c <ButtonPress-1> [list $c configure -background $::tbx_ac]
         bind $c <ButtonRelease-1> [list tbx_bclick $c $n $i %X %Y]
         bind $c <Button-3> {tbx_rmenu %X %Y}
@@ -845,6 +871,8 @@ proc tbx_options {} {
     incr r
     set bb [ttk::frame $f.bb]
     ttk::button $bb.def -text "Standard Look" -command tbx_opt_defaults
+    ttk::button $bb.cust -text "Customize Toolbars..." -command tbx_customize
+    pack $bb.cust -side left -padx 6
     ttk::button $bb.close -text "Close" -command {destroy .tbopt}
     pack $bb.def -side left
     pack $bb.close -side right
@@ -1051,6 +1079,293 @@ proc tbx_opt_changed {args} {
     set ::tbx_optid [after 150 { tbx_colors; tbx_layout }]
 }
 
+# Shift + drag a button onto another place on any toolbar (or another toolbar) to move it there
+proc tbx_bdrag_start {n i} {
+    tbx_tip_hide
+    set ::tbx_bdrag [list $n $i]
+    . configure -cursor fleur
+}
+proc tbx_btn_at {X Y} {
+    set w [winfo containing $X $Y]
+    while {$w ne ""} {
+        if {[regexp {\.b\.c(\d+)$} $w -> j]} {
+            set n [lindex [split [winfo parent [winfo parent $w]] .] end]
+            if {$n eq "tb"} { set n [string range [lindex [split [winfo parent [winfo parent [winfo parent $w]]] .] end] 4 end] }
+            if {$n in $::tbx_names} { return [list $n $j] }
+        }
+        if {[regexp {\.b$} $w]} {
+            set n [lindex [split [winfo parent $w] .] end]
+            if {$n eq "tb"} { set n [string range [lindex [split [winfo parent [winfo parent $w]] .] end] 4 end] }
+            if {$n in $::tbx_names} { return [list $n end] }
+        }
+        set w [winfo parent $w]
+    }
+    return ""
+}
+proc tbx_bdrag_end {X Y} {
+    . configure -cursor {}
+    if {![info exists ::tbx_bdrag]} return
+    lassign $::tbx_bdrag n i
+    unset ::tbx_bdrag
+    set to [tbx_btn_at $X $Y]
+    if {$to eq ""} return
+    lassign $to m j
+    if {$::tbx(k,$m) ne $::tbx(k,$n)} return
+    set it [lindex $::tbx(i,$n) $i]
+    set ::tbx(i,$n) [lreplace $::tbx(i,$n) $i $i]
+    if {$j eq "end" || ($m eq $n && $j > [llength $::tbx(i,$m)])} { set j [llength $::tbx(i,$m)] }
+    set ::tbx(i,$m) [linsert $::tbx(i,$m) $j $it]
+    tbx_layout
+    if {[winfo exists .tbcust]} { tbc_fill_on }
+}
+
+proc tbx_valid_items {items} {
+    set out {}
+    foreach it $items { if {[llength $it] == 3} { lappend out $it } }
+    return $out
+}
+# a toolbar with nothing on it yet (tbx_add skips empty ones)
+proc tbx_add_empty {name title} {
+    lappend ::tbx_names $name
+    set ::tbx(t,$name) $title
+    set ::tbx(i,$name) {}
+    set ::tbx(orig,$name) {}
+    set ::tbx(k,$name) cmd
+    set ::tbx(c,$name) tools
+}
+
+# ---------------------------------------------------------------- Customize Toolbars
+# Make your own toolbars and put any command on them, in any order; change the order of (or
+# take commands off) the standard ones. Drag a command up or down the list to move it.
+proc tbx_catalogue {} {
+    set out {}
+    set seen {}
+    foreach n $::tbx_names {
+        if {[info exists ::tbx(user,$n)] || $::tbx(k,$n) ne "cmd"} continue
+        foreach it $::tbx(orig,$n) {
+            lassign $it label cmd key
+            if {$cmd in $seen} continue
+            lappend seen $cmd
+            lappend out [list "$::tbx(t,$n): $label" $it]
+        }
+    }
+    return $out
+}
+proc tbx_customize {} {
+    set t .tbcust
+    if {[winfo exists $t]} { wm deiconify $t; raise $t; return }
+    toplevel $t -background $::panel
+    wm title $t "Customize Toolbars"
+    catch {wm attributes $t -type utility}
+    wm transient $t .
+    wm minsize $t 640 420
+    set f [ttk::frame $t.f -padding 10]
+    pack $f -fill both -expand 1
+    # which toolbar
+    set top [ttk::frame $f.top]
+    ttk::label $top.l -text "Toolbar"
+    ttk::combobox $top.cb -state readonly -width 30 -textvariable ::tbc(title)
+    bind $top.cb <<ComboboxSelected>> tbc_pick
+    ttk::button $top.new -text "New Toolbar..." -command tbc_new
+    ttk::button $top.ren -text "Rename..." -command tbc_rename
+    ttk::button $top.del -text "Delete Toolbar" -command tbc_delete
+    ttk::button $top.rst -text "Standard Contents" -command tbc_restore
+    pack $top.l $top.cb -side left -padx {0 6}
+    pack $top.new $top.ren $top.del $top.rst -side left -padx 2
+    grid $top -row 0 -column 0 -columnspan 3 -sticky w -pady {0 8}
+    # its commands
+    ttk::label $f.lon -text "On this toolbar (drag to reorder)"
+    listbox $f.on -height 18 -width 34 -exportselection 0 -activestyle none -background $::panel2 -foreground $::fg \
+        -selectbackground $::accent -highlightthickness 0 -borderwidth 1 -relief solid
+    set mid [ttk::frame $f.mid]
+    ttk::button $mid.up -text "Move Up" -command {tbc_move -1}
+    ttk::button $mid.down -text "Move Down" -command {tbc_move 1}
+    ttk::button $mid.rm -text "Remove >" -command tbc_remove
+    ttk::button $mid.add -text "< Add" -command tbc_addcmd
+    pack $mid.add $mid.rm -side top -fill x -pady 2
+    pack [ttk::frame $mid.gap -height 20] -side top
+    pack $mid.up $mid.down -side top -fill x -pady 2
+    # every command
+    ttk::label $f.lall -text "All commands (double-click to add)"
+    ttk::entry $f.find -textvariable ::tbc(find)
+    bind $f.find <KeyRelease> tbc_fill_all
+    listbox $f.all -height 16 -width 40 -exportselection 0 -activestyle none -background $::panel2 -foreground $::fg \
+        -selectbackground $::accent -highlightthickness 0 -borderwidth 1 -relief solid
+    bind $f.all <Double-Button-1> tbc_addcmd
+    grid $f.lon -row 1 -column 0 -sticky w
+    grid $f.lall -row 1 -column 2 -sticky w
+    grid $f.on -row 2 -column 0 -rowspan 2 -sticky nsew
+    grid $mid -row 2 -column 1 -rowspan 2 -padx 8 -sticky n
+    grid $f.find -row 2 -column 2 -sticky ew -pady {0 4}
+    grid $f.all -row 3 -column 2 -sticky nsew
+    grid columnconfigure $f 0 -weight 1
+    grid columnconfigure $f 2 -weight 1
+    grid rowconfigure $f 3 -weight 1
+    ttk::label $f.hint -text "Changes show on the toolbars at once and are remembered. Type in the box above the list to find a command.\nOn the toolbars themselves, Shift + drag a button to move it along its toolbar or onto another one." -style Dim.TLabel -justify left
+    grid $f.hint -row 4 -column 0 -columnspan 3 -sticky w -pady {8 0}
+    ttk::button $f.close -text "Close" -command {destroy .tbcust}
+    grid $f.close -row 5 -column 2 -sticky e -pady {8 0}
+    # drag to reorder
+    bind $f.on <ButtonPress-1> {set ::tbc(drag) [%W nearest %y]}
+    bind $f.on <B1-Motion> {tbc_drag [%W nearest %y]}
+    bind $f.on <ButtonRelease-1> {unset -nocomplain ::tbc(drag)}
+    set ::tbc(find) ""
+    tbc_fill_toolbars
+    if {![info exists ::tbc(name)] || $::tbc(name) ni $::tbx_names} { set ::tbc(name) [lindex $::tbx_names 1] }
+    set ::tbc(title) $::tbx(t,$::tbc(name))
+    tbc_fill_on
+    tbc_fill_all
+    wm geometry $t +[expr {[winfo rootx .c] + 60}]+[expr {[winfo rooty .c] + 30}]
+}
+proc tbc_fill_toolbars {} {
+    set titles {}
+    foreach n $::tbx_names { lappend titles $::tbx(t,$n) }
+    .tbcust.f.top.cb configure -values $titles
+}
+proc tbc_pick {} {
+    foreach n $::tbx_names { if {$::tbx(t,$n) eq $::tbc(title)} { set ::tbc(name) $n; break } }
+    tbc_fill_on
+}
+proc tbc_fill_on {} {
+    set lb .tbcust.f.on
+    $lb delete 0 end
+    foreach it $::tbx(i,$::tbc(name)) { $lb insert end [lindex $it 0] }
+    set user [info exists ::tbx(user,$::tbc(name))]
+    .tbcust.f.top.del state [expr {$user ? "!disabled" : "disabled"}]
+    .tbcust.f.top.ren state [expr {$user ? "!disabled" : "disabled"}]
+    .tbcust.f.top.rst state [expr {$user ? "disabled" : "!disabled"}]
+    .tbcust.f.mid.add state [expr {$::tbx(k,$::tbc(name)) eq "cmd" ? "!disabled" : "disabled"}]
+}
+proc tbc_fill_all {} {
+    set lb .tbcust.f.all
+    $lb delete 0 end
+    set ::tbc(allitems) {}
+    set q [string tolower [string trim $::tbc(find)]]
+    foreach e [tbx_catalogue] {
+        lassign $e text it
+        if {$q ne "" && [string first $q [string tolower $text]] < 0} continue
+        $lb insert end $text
+        lappend ::tbc(allitems) $it
+    }
+}
+# a change: redraw the toolbars (a moment later) and remember
+proc tbc_changed {{keep ""}} {
+    tbc_fill_on
+    if {$keep ne ""} { .tbcust.f.on selection clear 0 end; .tbcust.f.on selection set $keep; .tbcust.f.on see $keep }
+    catch {after cancel $::tbc(id)}
+    set ::tbc(id) [after 200 {tbx_layout; tbx_menus_fill .mb.view.tbars}]
+}
+proc tbc_addcmd {} {
+    set n $::tbc(name)
+    if {$::tbx(k,$n) ne "cmd"} return
+    set sel [.tbcust.f.all curselection]
+    if {![llength $sel]} return
+    set it [lindex $::tbc(allitems) [lindex $sel 0]]
+    set at [.tbcust.f.on curselection]
+    set at [expr {[llength $at] ? [lindex $at 0] + 1 : [llength $::tbx(i,$n)]}]
+    set ::tbx(i,$n) [linsert $::tbx(i,$n) $at $it]
+    # a new toolbar shows once it has something on it
+    if {$::tbx(d,$n) eq "hidden" && [llength $::tbx(i,$n)] == 1 && [info exists ::tbx(user,$n)]} { tbx_setvis $n 1 }
+    tbc_changed $at
+}
+proc tbc_remove {} {
+    set n $::tbc(name)
+    set sel [.tbcust.f.on curselection]
+    if {![llength $sel]} return
+    set i [lindex $sel 0]
+    set ::tbx(i,$n) [lreplace $::tbx(i,$n) $i $i]
+    tbc_changed [expr {min($i, [llength $::tbx(i,$n)] - 1)}]
+}
+proc tbc_move {dir} {
+    set n $::tbc(name)
+    set sel [.tbcust.f.on curselection]
+    if {![llength $sel]} return
+    set i [lindex $sel 0]; set j [expr {$i + $dir}]
+    if {$j < 0 || $j >= [llength $::tbx(i,$n)]} return
+    set it [lindex $::tbx(i,$n) $i]
+    set ::tbx(i,$n) [linsert [lreplace $::tbx(i,$n) $i $i] $j $it]
+    tbc_changed $j
+}
+proc tbc_drag {to} {
+    if {![info exists ::tbc(drag)]} return
+    set from $::tbc(drag)
+    set n $::tbc(name)
+    if {$to == $from || $to < 0 || $to >= [llength $::tbx(i,$n)]} return
+    set it [lindex $::tbx(i,$n) $from]
+    set ::tbx(i,$n) [linsert [lreplace $::tbx(i,$n) $from $from] $to $it]
+    set ::tbc(drag) $to
+    tbc_changed $to
+}
+proc tbc_ask {title prompt init} {
+    set t .tbcust.ask
+    catch {destroy $t}
+    toplevel $t -background $::panel
+    wm title $t $title
+    wm transient $t .tbcust
+    set f [ttk::frame $t.f -padding 12]
+    pack $f
+    set ::tbc(answer) $init
+    set ::tbc(ok) 0
+    ttk::label $f.l -text $prompt
+    ttk::entry $f.e -textvariable ::tbc(answer) -width 30
+    ttk::button $f.ok -text "OK" -command {set ::tbc(ok) 1; destroy .tbcust.ask}
+    ttk::button $f.no -text "Cancel" -command {destroy .tbcust.ask}
+    grid $f.l -row 0 -column 0 -columnspan 2 -sticky w
+    grid $f.e -row 1 -column 0 -columnspan 2 -sticky ew -pady 6
+    grid $f.ok -row 2 -column 0 -sticky w
+    grid $f.no -row 2 -column 1 -sticky e
+    bind $t <Return> [list $f.ok invoke]
+    bind $t <Escape> [list $f.no invoke]
+    wm geometry $t +[expr {[winfo rootx .tbcust] + 80}]+[expr {[winfo rooty .tbcust] + 60}]
+    focus $f.e
+    $f.e selection range 0 end
+    catch {grab $t}
+    tkwait window $t
+    set a [string trim $::tbc(answer)]
+    return [expr {$::tbc(ok) && $a ne "" ? $a : ""}]
+}
+proc tbc_new {} {
+    set title [tbc_ask "New Toolbar" "Name of the new toolbar:" "My Tools"]
+    if {$title eq ""} return
+    set k 1
+    while {"user$k" in $::tbx_names} { incr k }
+    set n user$k
+    tbx_add_empty $n $title
+    set ::tbx(user,$n) 1
+    set ::tbx(d,$n) hidden; set ::tbx(last,$n) top; set ::tbx(line,$n) 0; set ::tbx(pos,$n) 0
+    set ::tbc(name) $n
+    set ::tbc(title) $title
+    tbc_fill_toolbars
+    tbc_changed
+}
+proc tbc_rename {} {
+    set n $::tbc(name)
+    if {![info exists ::tbx(user,$n)]} return
+    set title [tbc_ask "Rename Toolbar" "New name:" $::tbx(t,$n)]
+    if {$title eq ""} return
+    set ::tbx(t,$n) $title
+    set ::tbc(title) $title
+    tbc_fill_toolbars
+    tbc_changed
+}
+proc tbc_delete {} {
+    set n $::tbc(name)
+    if {![info exists ::tbx(user,$n)]} return
+    catch {destroy .tbf_$n}
+    set ::tbx_names [lsearch -all -inline -not -exact $::tbx_names $n]
+    foreach k [array names ::tbx *,$n] { unset ::tbx($k) }
+    set ::tbc(name) [lindex $::tbx_names 1]
+    set ::tbc(title) $::tbx(t,$::tbc(name))
+    tbc_fill_toolbars
+    tbc_changed
+}
+proc tbc_restore {} {
+    set n $::tbc(name)
+    if {[info exists ::tbx(user,$n)]} return
+    set ::tbx(i,$n) $::tbx(orig,$n)
+    tbc_changed
+}
+
 proc tbx_reset {} {
     foreach n $::tbx_names { catch {destroy .tbf_$n}; unset -nocomplain ::tbx(g,$n) }
     tbx_defaults
@@ -1070,6 +1385,7 @@ proc tbx_menus_fill {m} {
     $m add command -label "Reset Toolbar Layout" -command tbx_reset
     $m add separator
     $m add command -label "Toolbar Options (size, colors)..." -command tbx_options
+    $m add command -label "Customize Toolbars (your own, any order)..." -command tbx_customize
 }
 proc tbx_showmain {} {
     foreach n $::tbx_names { if {![string match *_* $n] && $::tbx(d,$n) eq "hidden"} { tbx_setvis $n 1 } }
