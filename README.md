@@ -771,11 +771,15 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
   stays with the struts, running down their middles (its snaps are the frame's centre lines).
 - **STRUTS** (`WIRESOLID`, Solids → Struts from Wireframe...) does the same for any wireframe you have
   drawn or traced: select lines, polylines, 3D polylines or blocks of them (a polyhedron wireframe,
-  for instance), choose Rectangle / Polygon / Circle and its size, and each straight edge becomes a
+  for instance), choose Rectangle / Polygon / Circle / PLine and its size, and each straight edge becomes a
   solid the length of the edge, with balls at the corners if you like. On a closed frame rectangles
   turn their depth outward; on a flat frame the depth stands up out of its plane. Each strut is its
-  own solid (UNION them to make one); the wireframe you selected stays as it was. Curves are skipped -
-  use SWEEP with a circle for those. In the Shaded style the wires are hidden inside the struts;
+  own solid (UNION them to make one); the wireframe you selected stays as it was. A polyline with
+  arc segments - and an arc, circle, ellipse, spline or helix - gets one strut that follows the whole
+  curve, square to it the whole way, with balls at its two ends (none on a closed loop). Pick
+  **PLine** for the section to use a closed polyline you drew as the cross-section: its X runs
+  across the strut (the width) and its Y is the depth. A lone straight line's depth stands up
+  (world Z). In the Shaded style the wires are hidden inside the struts;
   the Wireframe style (or the 2D view) shows them.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
