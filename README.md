@@ -756,6 +756,15 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
   shape as its edges: 3D lines gathered in a block (one object to move, copy or rotate), with
   endpoint (every corner), midpoint and nearest snaps on every edge, at their true heights.
   **EXPLODE** it for separate lines. **S** (Solid) switches back.
+  **F** (Frame) makes the shape as solid struts along its edges instead: you choose the section -
+  **Rectangle** (width, and depth pointing outward), **Polygon** (number of sides and size) or
+  **Circle** (diameter) - and whether to put a ball at each corner.
+- **STRUTS** (`WIRESOLID`, Solids → Struts from Wireframe...) does the same for any wireframe you have
+  drawn or traced: select lines, polylines, 3D polylines or blocks of them (a polyhedron wireframe,
+  for instance), choose Rectangle / Polygon / Circle and its size, and each straight edge becomes a
+  solid the length of the edge, with balls at the corners if you like. On a closed frame rectangles
+  turn their depth outward; on a flat frame the depth stands up out of its plane. Each strut is its
+  own solid (UNION them to make one). Curves are skipped - use SWEEP with a circle for those.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
 * **REVOLVE** shapes about an axis (two points, X, Y, Z, or a line) by any angle.

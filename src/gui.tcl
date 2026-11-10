@@ -271,6 +271,12 @@ foreach {l c} {"Tetrahedron (4 faces)" {TETRAHEDRON S} "Cube (6 faces)" {POLYHED
 foreach {l c} {"Tetrahedron wireframe" {TETRAHEDRON W} "Cube wireframe" {POLYHEDRON Cube W} "Octahedron wireframe" {OCTAHEDRON W}
                "Dodecahedron wireframe" {DODECAHEDRON W} "Icosahedron wireframe" {ICOSAHEDRON W}
                "Soccer ball wireframe" {SOCCERBALL W}} { mcmd .mb.solid.poly $l $c }
+.mb.solid.poly add separator
+.mb.solid.poly add command -label "Frames (solid struts along the edges):" -state disabled
+foreach {l c} {"Tetrahedron frame" {TETRAHEDRON F} "Cube frame" {POLYHEDRON Cube F} "Octahedron frame" {OCTAHEDRON F}
+               "Dodecahedron frame" {DODECAHEDRON F} "Icosahedron frame" {ICOSAHEDRON F}
+               "Soccer ball frame" {SOCCERBALL F}} { mcmd .mb.solid.poly $l $c }
+.mb.solid add command -label "Struts from Wireframe..." -command {menucmd STRUTS}
 mcmd .mb.solid "Helix (path for a spring or thread)" HELIX
 mcmd .mb.solid "3D Print (STL / 3MF / OBJ)..." 3DPRINT
 mcmd .mb.solid "Import STL / OBJ Model..." STLIN

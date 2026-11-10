@@ -1,0 +1,48 @@
+;; STRUTS: solid bars along wireframe edges; polyhedron Frame mode.
+;; Run: sbcl --non-interactive --load load.lisp --load tests/test-struts.lisp
+(in-package :fancy-pencil)
+(setf *ui* :tty *output-fn* (lambda (s) s))
+(load-aliases)
+(current-doc)
+(defvar *pass* 0) (defvar *fail* 0)
+(defmacro chk (name form expect)
+  `(let ((v (handler-case ,form (error (c) (format nil "ERROR ~A" c)))))
+     (if (equalp v ,expect) (incf *pass*) (incf *fail*))
+     (format t "~:[FAIL~;ok  ~] ~A: ~S~%" (equalp v ,expect) ,name v)))
+(defun al (s) (alisp-eval-string s))
+(defun close-to (a b) (< (abs (- a b)) (* 1d-6 (max 1 (abs b)))))
+(defun solids () (remove-if-not (lambda (e) (equal (ent-type e) "POLYFACE")) (live-entities)))
+;; one line, rectangle section 0.5 x 0.2: volume = length * area
+(al "(command \"line\" '(0 0 0) '(10 0 0) \"\")")
+(al "(command \"struts\" (entlast) \"\" \"r\" 0.5 0.2 \"n\")")
+(chk "a rectangle strut along the line" (length (solids)) 1)
+(chk "its volume: 10 x 0.5 x 0.2" (close-to (mesh-volume (ename-data (first (solids)))) 1d0) t)
+(chk "it runs the length of the line" (let ((xs (mapcar #'px (mesh-verts (ename-data (first (solids))))))) (list (close-to (reduce #'min xs) 0d0) (close-to (reduce #'max xs) 10d0))) '(t t))
+;; a flat frame: depth stands up out of its plane
+(let ((m (strut-mesh (pt 0 0 0) (pt 4 0 0) '(:rectangle 0.4 1.0) (pt 2 5 0) (pt 0 0 1))))
+  (chk "flat frame: the depth stands up (height 1)" (let ((zs (mapcar #'pz (mesh-verts m)))) (close-to (- (reduce #'max zs) (reduce #'min zs)) 1d0)) t))
+;; circle and polygon volumes
+(let ((c (strut-mesh (pt 0 0 0) (pt 0 0 5) '(:circle 1d0) (pt 3 0 0) nil))
+      (h (strut-mesh (pt 0 0 0) (pt 0 0 5) '(:polygon 6 2d0) (pt 3 0 0) nil)))
+  (chk "round strut: close to pi r^2 L" (< (abs (- (mesh-volume c) (* pi 0.25 5))) 0.05) t)
+  (chk "hexagon strut: 6-sided prism volume" (close-to (mesh-volume h) (* 5 (/ (* 3 (sqrt 3d0)) 2))) t))
+;; a polyhedron wireframe block -> struts with corner balls
+(al "(command \"erase\" \"all\" \"\")")
+(al "(command \"dodecahedron\" \"w\" '(0 0 0) 3)")
+(al "(command \"struts\" (entlast) \"\" \"c\" 0.3 \"y\")")
+(chk "dodecahedron wireframe: 30 struts + 20 corner balls" (length (solids)) 50)
+;; Frame mode straight from the polyhedron command
+(al "(command \"erase\" \"all\" \"\")")
+(al "(command \"icosahedron\" \"f\" '(0 0 0) 4 \"p\" 6 0.4 \"n\")")
+(chk "icosahedron Frame: 30 hexagonal struts" (length (solids)) 30)
+(let* ((m (ename-data (first (solids)))) (n (length (mesh-faces m))))
+  (chk "each strut: 6 sides + 2 ends" n 8))
+;; rectangles turn their depth outward on a polyhedron
+(let* ((c (pt 0 0 0)) (m (strut-mesh (pt 1 0 1) (pt -1 0 1) '(:rectangle 0.1 1.0) c nil))
+       (zs (mapcar #'pz (mesh-verts m))))
+  (chk "rectangle depth points away from the middle" (close-to (- (reduce #'max zs) (reduce #'min zs)) 1d0) t))
+(al "(command \"erase\" \"all\" \"\")")
+(al "(command \"circle\" '(0 0) 3)")
+(al "(command \"struts\" (entlast) \"\")")
+(chk "a circle is skipped (curves: SWEEP)" (length (solids)) 0)
+(format t "~%Strut tests: ~D passed, ~D failed.~%" *pass* *fail*)
