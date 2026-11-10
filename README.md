@@ -758,13 +758,16 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
   **EXPLODE** it for separate lines. **S** (Solid) switches back.
   **F** (Frame) makes the shape as solid struts along its edges instead: you choose the section -
   **Rectangle** (width, and depth pointing outward), **Polygon** (number of sides and size) or
-  **Circle** (diameter) - and whether to put a ball at each corner.
+  **Circle** (diameter) - and whether to put a ball at each corner. The wireframe is made too and
+  stays with the struts, running down their middles (its snaps are the frame's centre lines).
 - **STRUTS** (`WIRESOLID`, Solids → Struts from Wireframe...) does the same for any wireframe you have
   drawn or traced: select lines, polylines, 3D polylines or blocks of them (a polyhedron wireframe,
   for instance), choose Rectangle / Polygon / Circle and its size, and each straight edge becomes a
   solid the length of the edge, with balls at the corners if you like. On a closed frame rectangles
   turn their depth outward; on a flat frame the depth stands up out of its plane. Each strut is its
-  own solid (UNION them to make one). Curves are skipped - use SWEEP with a circle for those.
+  own solid (UNION them to make one); the wireframe you selected stays as it was. Curves are skipped -
+  use SWEEP with a circle for those. In the Shaded style the wires are hidden inside the struts;
+  the Wireframe style (or the 2D view) shows them.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
 * **REVOLVE** shapes about an axis (two points, X, Y, Z, or a line) by any angle.
