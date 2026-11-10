@@ -779,7 +779,11 @@ outlines, sharp edges and a few lines (isolines) along curved sides.
   curve, square to it the whole way, with balls at its two ends (none on a closed loop). Pick
   **PLine** for the section to use a closed polyline you drew as the cross-section: its X runs
   across the strut (the width) and its Y is the depth. A lone straight line's depth stands up
-  (world Z). In the Shaded style the wires are hidden inside the struts;
+  (world Z). **Ends** (at the same prompt) sets how far every strut stops short of its wire's ends -
+  a negative distance runs them past the ends instead; it is remembered, and the prompt shows it.
+  Corner balls stay on the true corners. Where struts cross, select them and right-click:
+  **Solid Editing → Union / Subtract / Intersect / Slice** (Subtract takes the selected solids
+  as the ones to cut, then asks for what to remove). In the Shaded style the wires are hidden inside the struts;
   the Wireframe style (or the 2D view) shows them.
 * **EXTRUDE** closed shapes (circles, closed polylines, ellipses, closed splines) into solids, open
   ones into surfaces: by a height, a [Direction], or along a [Path].
