@@ -106,7 +106,17 @@ largest face, that face centred on ORIGIN; else centred on ORIGIN."
     (:icosahedron "Icosahedron" "20 triangles")
     (:soccer "Truncated icosahedron" "soccer ball: 12 pentagons, 20 hexagons")))
 
-(defvar *polyhedron-wireframe* nil "Make polyhedra as wireframes (lines in a block) rather than solids.")
+(defvar *polyhedron-wireframe* nil "Make polyhedra as wireframes (lines in a block) rather than solids;
+:frame for solid struts along the edges.")
+
+(defun mesh-edge-segments (mesh)
+  (let ((vs (coerce (mesh-verts mesh) 'vector)))
+    (remove-duplicates
+     (loop for f in (mesh-faces mesh)
+           append (loop for (a b) on (append f (list (first f))) while b
+                        collect (let ((i (min (abs a) (abs b))) (j (max (abs a) (abs b))))
+                                  (cons (aref vs (1- i)) (aref vs (1- j))))))
+     :test #'equalp)))
 
 (defun unique-block-name (base)
   (if (not (find-block base)) base
@@ -131,11 +141,13 @@ largest face, that face centred on ORIGIN; else centred on ORIGIN."
 (defun polyhedron-command (kind)
   (let* ((info (assoc kind *polyhedra*)) (p nil) (stand t))
     (loop
-      (setf p (gpoint (format nil "~A (~A), ~:[solid~;wireframe~]. Specify center of the face it stands on or [Center/~:[Wireframe~;Solid~]]: "
-                              (second info) (third info) *polyhedron-wireframe* *polyhedron-wireframe*)
-                      :keywords '("Center" "Wireframe" "Solid")))
+      (setf p (gpoint (format nil "~A (~A), ~A. Specify center of the face it stands on or [Center/Solid/Wireframe/Frame]: "
+                              (second info) (third info)
+                              (case *polyhedron-wireframe* ((nil) "solid") (:frame "frame of solid struts") (t "wireframe")))
+                      :keywords '("Center" "Solid" "Wireframe" "Frame")))
       (cond ((equal p "Wireframe") (setf *polyhedron-wireframe* t))
             ((equal p "Solid") (setf *polyhedron-wireframe* nil))
+            ((equal p "Frame") (setf *polyhedron-wireframe* :frame))
             (t (return))))
     (when (equal p "Center")
       (setf stand nil p (gpoint "Specify center point: ")))
@@ -150,9 +162,12 @@ largest face, that face centred on ORIGIN; else centred on ORIGIN."
                 ((pointp r) (setf edge (dist p r))))
           (when (and (or edge radius) (plusp (or edge radius)))
             (let ((mesh (polyhedron-mesh kind (pt3 p) :edge edge :radius radius :stand stand)))
-              (if *polyhedron-wireframe*
-                  (add-polyhedron-wireframe mesh (second info) (pt3 p))
-                  (add-solid mesh (second info))))))))))
+              (case *polyhedron-wireframe*
+                ((nil) (add-solid mesh (second info)))
+                (:frame (out (format nil "~A frame: ~D edges.~%" (second info) (length (mesh-edge-segments mesh))))
+                        (struts-for (mesh-edge-segments mesh)
+                                    :centre (v* (reduce #'v+ (mesh-verts mesh)) (/ 1d0 (length (mesh-verts mesh))))))
+                (t (add-polyhedron-wireframe mesh (second info) (pt3 p)))))))))))
 
 (defcmd "POLYHEDRON" ("PLATONIC") "Creates a Platonic solid (tetrahedron, cube, octahedron, dodecahedron, icosahedron) or a truncated icosahedron (soccer ball)."
   (let ((k (gkw "Enter shape [Tetrahedron/Cube/Octahedron/Dodecahedron/Icosahedron/Soccer ball] <Tetrahedron>: "

@@ -195,6 +195,7 @@ gl DODECAHEDRON {{P 10 1 18.5 7 15.5 17 4.5 17 1.5 7} {F a 10 5 14 8 12.5 13 7.5
 gl ICOSAHEDRON  {{P 10 1 18 5.5 18 14.5 10 19 2 14.5 2 5.5} {F a 10 6 15 14 5 14} {l 10 1 10 6} {l 2 5.5 10 6 18 5.5} {l 2 14.5 5 14 10 19 15 14 18 14.5} {l 5 14 2 5.5} {l 15 14 18 5.5}}
 gl SOCCERBALL   {{O 1 1 19 19} {F a 10 6 14 9 12.5 14 7.5 14 6 9} {l 10 6 10 1} {l 14 9 18.5 7} {l 12.5 14 15 18} {l 7.5 14 5 18} {l 6 9 1.5 7}}
 gl POLYHEDRON   {{F p 10 2 2 16 12 18} {F a 10 2 12 18 18 13}}
+gl STRUTS       {{l 2 18 18 2} {W 2 12 8 18} {W 12 2 18 8} {o 0.5 10.5 3.5 13.5} {o 16.5 6.5 19.5 9.5}}
 gl HISTORY      [list $::tbx_page {l 7 7 13 7} {l 7 10 13 10} {l 7 13 13 13} {l 7 16 11 16}]
 # Draw
 gl LINE         [concat {{L 3 17 17 3}} [tbx_dots {3 17 17 3}]]
@@ -329,6 +330,12 @@ proc tbx_variant {key} {
         "DRAFTPLANE OBJECT" { return {{F a 2 15 14 18 18 5 6 2} {L 4 14 16 5}} }
         "DRAFTPLANE FACE" { return [concat [tbx_cube right] {{T 4 3 F}}] }
         "DRAFTPLANE VIEW" { return {{R 2 2 18 18} {F a 5 5 15 5 15 15 5 15}} }
+        "TETRAHEDRON F" { return {{W 10 2 2 16} {W 2 16 12 18} {W 12 18 10 2} {W 12 18 18 13} {W 18 13 10 2}} }
+        "OCTAHEDRON F" { return {{W 10 1 3 10} {W 3 10 10 19} {W 10 19 17 10} {W 17 10 10 1} {W 10 1 10 19}} }
+        "DODECAHEDRON F" { return {{W 10 1 18.5 7} {W 18.5 7 15.5 17} {W 15.5 17 4.5 17} {W 4.5 17 1.5 7} {W 1.5 7 10 1}} }
+        "ICOSAHEDRON F" { return {{W 10 1 18 5.5} {W 18 5.5 18 14.5} {W 18 14.5 10 19} {W 10 19 2 14.5} {W 2 14.5 2 5.5} {W 2 5.5 10 1} {W 2 5.5 18 5.5}} }
+        "SOCCERBALL F" { return {{O 1 1 19 19} {W 10 6 14 9} {W 14 9 12.5 14} {W 12.5 14 7.5 14} {W 7.5 14 6 9} {W 6 9 10 6}} }
+        "POLYHEDRON CUBE F" { return {{W 2 6 10 2} {W 10 2 18 6} {W 18 6 18 14} {W 18 14 10 18} {W 10 18 2 14} {W 2 14 2 6} {W 10 10 10 18}} }
         "POLYHEDRON CUBE S" { return [tbx_cube top] }
         "TETRAHEDRON W" { return {{L 10 2 2 16 12 18 10 2} {L 12 18 18 13 10 2} {D 2 16 18 13}} }
         "OCTAHEDRON W" { return {{L 10 1 3 10 10 19 17 10 10 1} {L 10 1 10 19} {D 3 10 17 10}} }
