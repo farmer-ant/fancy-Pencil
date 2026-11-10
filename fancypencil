@@ -24,4 +24,8 @@ done
 if [ -n "$NEWFONTS" ] && command -v fc-cache >/dev/null 2>&1; then
     fc-cache -f "$FONTDEST" >/dev/null 2>&1
 fi
-exec sbcl --noinform --disable-debugger --load "$DIR/load.lisp" --eval '(fancy-pencil:main)' --end-toplevel-options "$@"
+# memory for big models (solids with many faces): half the computer's memory, from 2 GB up to 16 GB
+# (it is only reserved, not used, until needed)
+HEAP=$(awk '/MemTotal/ { m = int($2 / 1024 / 2); if (m < 2048) m = 2048; if (m > 16384) m = 16384; print m }' /proc/meminfo 2>/dev/null)
+[ -n "$HEAP" ] || HEAP=4096
+exec sbcl --dynamic-space-size "$HEAP" --noinform --disable-debugger --load "$DIR/load.lisp" --eval '(fancy-pencil:main)' --end-toplevel-options "$@"
