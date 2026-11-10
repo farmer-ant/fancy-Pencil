@@ -68,7 +68,12 @@
       (alisp-cancel () nil)
       (alisp-exit () nil)
       (alisp-error (c) (out (format nil "~A~%" (alisp-error-msg c))))
-      (error (c) (out (format nil "; error: ~A~%" (cl-error-text c))))))))
+      (error (c) (out (format nil "; error: ~A~%" (cl-error-text c))))
+      (storage-condition ()
+        (ignore-errors (sb-ext:gc :full t))
+        (out (format nil "~A ran out of memory and was stopped (Fancy Pencil keeps running). Part of it~%~
+                          may have been done: U undoes it. Working on fewer objects at a time helps.~%" name))
+        (when (gui-p) (ignore-errors (gui-regen))))))))
 
 (defun execute-command (text)
   "Run what was typed at the Command: prompt."
