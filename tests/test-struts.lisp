@@ -16,6 +16,7 @@
 (al "(command \"line\" '(0 0 0) '(10 0 0) \"\")")
 (al "(command \"struts\" (entlast) \"\" \"r\" 0.5 0.2 \"n\")")
 (chk "a rectangle strut along the line" (length (solids)) 1)
+(chk "the line itself stays" (count "LINE" (live-entities) :key #'ent-type :test #'equal) 1)
 (chk "its volume: 10 x 0.5 x 0.2" (close-to (mesh-volume (ename-data (first (solids)))) 1d0) t)
 (chk "it runs the length of the line" (let ((xs (mapcar #'px (mesh-verts (ename-data (first (solids))))))) (list (close-to (reduce #'min xs) 0d0) (close-to (reduce #'max xs) 10d0))) '(t t))
 ;; a flat frame: depth stands up out of its plane
@@ -31,10 +32,13 @@
 (al "(command \"dodecahedron\" \"w\" '(0 0 0) 3)")
 (al "(command \"struts\" (entlast) \"\" \"c\" 0.3 \"y\")")
 (chk "dodecahedron wireframe: 30 struts + 20 corner balls" (length (solids)) 50)
+(chk "the wireframe block stays too" (count "INSERT" (live-entities) :key #'ent-type :test #'equal) 1)
 ;; Frame mode straight from the polyhedron command
 (al "(command \"erase\" \"all\" \"\")")
 (al "(command \"icosahedron\" \"f\" '(0 0 0) 4 \"p\" 6 0.4 \"n\")")
 (chk "icosahedron Frame: 30 hexagonal struts" (length (solids)) 30)
+(chk "Frame keeps the wireframe with the struts" (let ((i (find "INSERT" (live-entities) :key #'ent-type :test #'equal)))
+                                                   (and i (length (block-def-entities (find-block (dxf 2 (ename-data i))))))) 30)
 (let* ((m (ename-data (first (solids)))) (n (length (mesh-faces m))))
   (chk "each strut: 6 sides + 2 ends" n 8))
 ;; rectangles turn their depth outward on a polyhedron

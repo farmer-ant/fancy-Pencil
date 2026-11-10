@@ -165,6 +165,8 @@ largest face, that face centred on ORIGIN; else centred on ORIGIN."
               (case *polyhedron-wireframe*
                 ((nil) (add-solid mesh (second info)))
                 (:frame (out (format nil "~A frame: ~D edges.~%" (second info) (length (mesh-edge-segments mesh))))
+                        ;; the wireframe stays, with the struts built along it
+                        (add-polyhedron-wireframe mesh (second info) (pt3 p))
                         (struts-for (mesh-edge-segments mesh)
                                     :centre (v* (reduce #'v+ (mesh-verts mesh)) (/ 1d0 (length (mesh-verts mesh))))))
                 (t (add-polyhedron-wireframe mesh (second info) (pt3 p)))))))))))
