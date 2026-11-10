@@ -135,7 +135,15 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
      head
      (remove nil
      (if sel
-         (list (when (some (lambda (e) (equal (ent-type e) "HATCH")) sel) (list "Hatch Edit..." "HATCHEDIT"))
+         (list (when (some (lambda (e) (equal (ent-type e) "POLYFACE")) sel)
+                 (list :sub "Solid Editing"
+                       (list (list "Union (join the selected solids)" "UNION")
+                             (list "Subtract (from the selected, then pick what to remove)" "SUBTRACT")
+                             (list "Intersect (keep what they share)" "INTERSECT")
+                             :sep
+                             (list "Slice" "SLICE"))))
+               (when (some (lambda (e) (equal (ent-type e) "POLYFACE")) sel) :sep)
+               (when (some (lambda (e) (equal (ent-type e) "HATCH")) sel) (list "Hatch Edit..." "HATCHEDIT"))
                (when (some (lambda (e) (equal (ent-type e) "HATCH")) sel) :sep)
                (list "Erase" "ERASE") (list "Move" "MOVE") (list "Copy Selection" "COPY")
                (list "Scale" "SCALE") (list "Rotate" "ROTATE") (list "Mirror" "MIRROR")
@@ -167,6 +175,9 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
                (list "Paste" "PASTECLIP") (list "Paste as Block" "PASTEBLOCK")
                :sep
                (list "Create Block..." "BLOCK") (list "Edit Block..." "BEDIT")
+               :sep
+               (list :sub "Solid Editing" (list (list "Union" "UNION") (list "Subtract" "SUBTRACT")
+                                                (list "Intersect" "INTERSECT") :sep (list "Slice" "SLICE")))
                :sep
                (list "Select All" "SELECTALL"))))
      (list :sep (list "Object Snap Settings..." "'OSNAP")))))

@@ -15,6 +15,31 @@
 
 (defvar *strut-section* '(:circle 0.1d0) "Last section used: (:circle d) (:polygon n d) (:rectangle w h).")
 (defvar *strut-balls* t "Put a ball at each corner (last answer).")
+(defvar *strut-end-gap* 0d0
+  "How far each strut stops short of the ends of its wire (a negative distance runs past them).")
+
+(defun trim-path-start (pts gap)
+  "PTS with GAP of its length taken off the start (or, when GAP is negative, carried on straight
+back past the start). NIL when nothing is left."
+  (cond ((< (abs gap) 1d-12) pts)
+        ((minusp gap)
+         (let ((dir (unit3 (v- (first pts) (second pts)))))
+           (cons (v+ (first pts) (v* dir (- gap))) (rest pts))))
+        (t (loop for tail on pts
+                 for a = (first tail) and b = (second tail)
+                 while b
+                 do (let ((len (dist a b)))
+                      (if (> len gap)
+                          (return (cons (v+ a (v* (unit3 (v- b a)) gap)) (cdr tail)))
+                          (decf gap len)))
+                 finally (return nil)))))
+
+(defun trim-path (pts gap)
+  "PTS shortened (or lengthened) by GAP at both ends; NIL when nothing is left."
+  (let ((one (trim-path-start pts gap)))
+    (when (cdr one)
+      (let ((two (trim-path-start (reverse (cons (first one) (rest one))) gap)))
+        (and (cdr two) (reverse two))))))
 
 (defun selection-segments (ents)
   "Straight segments ((a . b) ...) of the lines, polylines and blocks in ENTS; the count of objects
@@ -134,11 +159,25 @@ centre in its own plane: ((x . y) ...), or NIL."
                                        sum (- (* (car p) (cdr q)) (* (car q) (cdr p)))))
                          (reverse xy) xy)))))))))
 
+(defun describe-end-gap ()
+  (cond ((< (abs *strut-end-gap*) 1d-12) "at the wire ends")
+        ((plusp *strut-end-gap*) (format nil "~A short of the wire ends" (fmt-num *strut-end-gap*)))
+        (t (format nil "~A past the wire ends" (fmt-num (- *strut-end-gap*))))))
+
 (defun ask-strut-section ()
   "Ask for the section: [Rectangle/Polygon/Circle/PLine] and its sizes. Returns the section or NIL."
   (let* ((last (first *strut-section*))
-         (k (gkw (format nil "Section for the struts [Rectangle/Polygon/Circle/PLine] <~A>: " (section-keyword *strut-section*))
-                 '("Rectangle" "Polygon" "Circle" "PLine") (section-keyword *strut-section*))))
+         (k (loop
+              (let ((k (gkw (format nil "Section for the struts [Rectangle/Polygon/Circle/PLine/Ends] <~A>~:[~*~;, ends ~A~]: "
+                                    (section-keyword *strut-section*) (/= *strut-end-gap* 0) (describe-end-gap))
+                            '("Rectangle" "Polygon" "Circle" "PLine" "Ends") (section-keyword *strut-section*))))
+                (if (string-equal k "Ends")
+                    (let ((x (get-user-input :distance
+                                             :prompt (format nil "Distance the struts stop short of each wire end (negative runs past it) <~A>: "
+                                                             (fmt-num *strut-end-gap*)))))
+                      (when (realp x) (setf *strut-end-gap* (d x)))
+                      (out (format nil "Strut ends: ~A.~%" (describe-end-gap))))
+                    (return k))))))
     (flet ((size (prompt default)
              (let ((x (gdist (format nil "~A <~A>: " prompt (fmt-num default)))))
                (cond ((null x) default) ((realp x) (d x)) (t nil)))))
@@ -168,20 +207,26 @@ centre in its own plane: ((x . y) ...), or NIL."
     (:rectangle (max (second section) (third section)))
     (:profile (* 2 (loop for (x . y) in (second section) maximize (sqrt (+ (* x x) (* y y))))))))
 
-(defun build-struts (segs section balls &key centre paths)
+(defun build-struts (segs section balls &key centre paths (gap *strut-end-gap*))
   "Solids along SEGS (and along the curved PATHS, ((points . closed) ...)) with SECTION, and balls
-at their corners and open ends when BALLS. Returns the count of solids."
+at their corners and open ends when BALLS. Each strut stops GAP short of its wire's ends (runs
+past them when GAP is negative). Returns the count of solids."
   (let* ((all-pts (append (loop for s in segs append (list (car s) (cdr s))) (loop for p in paths append (car p))))
          (centre (or centre (if all-pts (v* (reduce #'v+ all-pts) (/ 1d0 (length all-pts))) (pt 0 0 0))))
          (flat (segments-flat-normal (append segs (loop for p in paths
                                                         append (loop for (a b) on (car p) while b collect (cons a b))))))
          (count 0))
     (dolist (s segs)
-      (add (strut-mesh (car s) (cdr s) section centre flat))
-      (incf count))
+      (let* ((ax (unit3 (v- (cdr s) (car s))))
+             (a (v+ (car s) (v* ax gap))) (b (v- (cdr s) (v* ax gap))))
+        (when (> (vdot3 (v- b a) ax) 1d-9)
+          (add (strut-mesh a b section centre flat))
+          (incf count))))
     (dolist (p paths)
-      (add (path-strut-mesh (car p) (cdr p) section centre flat))
-      (incf count))
+      (let ((pts (if (cdr p) (car p) (trim-path (car p) gap))))
+        (when (cdr pts)
+          (add (path-strut-mesh pts (cdr p) section centre flat))
+          (incf count))))
     (when balls
       (let ((corners nil) (r (/ (section-size section) 2)))
         (flet ((corner (p) (unless (find p corners :test (lambda (a b) (< (dist a b) 1d-7))) (push p corners))))
