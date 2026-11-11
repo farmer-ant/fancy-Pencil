@@ -3,6 +3,9 @@ FANCY PENCIL KIT
 
   Install Fancy Pencil.deb   Double-click it.
   INSTRUCTIONS.txt           This file.
+  Fancy Pencil Manual.pdf    The manual, to read or print (10 x 12 in pages). It is also inside
+                             Fancy Pencil: press F1, or Help > User Manual.
+  Fancy Pencil Manual.odp    The same manual, as a LibreOffice Impress file.
 
 Double-clicking "Install Fancy Pencil.deb" opens your computer's own software installer
 (App Center on Ubuntu, Software Manager / Package Installer on Linux Mint, Software Install on

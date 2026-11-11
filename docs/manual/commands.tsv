@@ -90,7 +90,7 @@ HATCH	BH BHATCH GRADIENT H	Fills an enclosed area with a hatch pattern or solid 
 HATCHEDIT	HE	Changes the pattern, scale or angle of existing hatches.
 HATCHTOBACK		Sends every hatch and fill behind everything else.
 HELIX		Creates a helix (a spring or thread path) or a flat spiral.
-HELP	? F1	Lists commands.
+HELP	?	Lists commands.
 HIDE	HI	Shows the drawing with hidden lines removed (visual style Hidden).
 HISTORY	HIS TEXTSCR	Shows the whole record of this session: every command, answer and message.
 HPSET		Sets the hatch pattern, scale and angle used by HATCH.
@@ -136,6 +136,7 @@ LOGFILEOFF		Stops writing the command line to the log file.
 LOGFILEON		Starts writing everything shown in the command line to a log file.
 LTSCALE	LTS	Sets the global linetype scale factor.
 LWEIGHT	LINEWEIGHT LW	Sets the current lineweight and lineweight display.
+MANUAL	F1 USERMANUAL	Opens the Fancy Pencil Manual (a PDF) in your PDF viewer.
 MASSPROP	MASSPROPERTIES	Mass properties of regions (closed flat objects) and solids: area, volume, centroid, moments of inertia ...
 MATCHPROP	MA PAINTER	Copies properties (layer, color, linetype, text style, dimension style, hatch ...) from one object to others.
 MIRROR	MI	Creates a mirrored copy of objects.
