@@ -19,6 +19,27 @@
   (and (probe-file stamp-file)
        (equal (with-open-file (i stamp-file) (read-line i nil "")) (source-stamp src))))
 
+;; Compiled files go in build/ beside the source - or, when that folder can't be written (a
+;; system-wide install in /opt), in ~/.cache/fancypencil/build/.
+(defun writable-dir-p (dir)
+  (ignore-errors
+   (ensure-directories-exist dir)
+   (let ((f (merge-pathnames ".write-test" dir)))
+     (with-open-file (o f :direction :output :if-exists :supersede) (write-line "x" o))
+     (delete-file f)
+     t)))
+(defun env (name) #+sbcl (sb-ext:posix-getenv name) #+ccl (ccl:getenv name) #-(or sbcl ccl) nil)
+(defparameter *build-dir*
+  (let ((local (merge-pathnames "build/" *root*)))
+    (if (or (writable-dir-p local)
+            ;; a system-wide install compiled when it was installed: use that while it is current
+            (let ((last (car (last *files*))))
+              (stamp-matches-p (merge-pathnames (format nil "~A-~A.stamp" last (lisp-implementation-type)) local)
+                               (merge-pathnames (format nil "src/~A.lisp" last) *root*))))
+        local
+        (let ((cache (or (env "XDG_CACHE_HOME") (concatenate 'string (or (env "HOME") "/tmp") "/.cache"))))
+          (pathname (concatenate 'string cache "/fancypencil/build/"))))))
+
 (let ((*compile-verbose* nil) (*compile-print* nil) (*load-verbose* nil))
   (handler-bind ((style-warning #'muffle-warning)
                  #+sbcl (sb-ext:compiler-note #'muffle-warning))
@@ -26,7 +47,7 @@
      (dolist (f *files*)
       (let ((src (merge-pathnames (format nil "src/~A.lisp" f) *root*)))
         #+(or sbcl ccl)
-        (let* ((fasl (merge-pathnames (format nil "build/~A-~A.fasl" f (lisp-implementation-type)) *root*))
+        (let* ((fasl (merge-pathnames (format nil "~A-~A.fasl" f (lisp-implementation-type)) *build-dir*))
                (stamp (make-pathname :type "stamp" :defaults fasl)))
           (ensure-directories-exist fasl)
           (when (or rebuild (not (probe-file fasl)) (not (stamp-matches-p stamp src)))

@@ -67,7 +67,7 @@
 (defun dwg-install-help ()
   (format nil "Opening and saving .dwg files needs a free DWG converter, and none is installed.~%~%~
 Recommended: ODA File Converter (reads and writes every AutoCAD version).~%~
-The Fancy Pencil Kit installer (\"Install Fancy Pencil\") can fetch and install it for you, or~%~
+Help > Get ODA File Converter... fetches and installs it for you, or~%~
 download it from https://www.opendesign.com/guestfiles/oda_file_converter~%~
 (.deb for Ubuntu/Debian, .rpm for Fedora/openSUSE, AppImage for others), then install it with~%~
     sudo apt install ./ODAFileConverter_*.deb~%~%~
@@ -149,3 +149,10 @@ To save .dwg, install ODA File Converter (free from opendesign.com):~%    sudo a
      (let ((buf (make-string 4096)))
        (let ((n (read-sequence buf s)))
          (search "SECTION" (subseq buf 0 n)))))))
+
+(defcmd "GETODA" ("ODA") "Opens a window that downloads and installs the free ODA File Converter (for .dwg files)."
+  (let ((helper (merge-pathnames "../support/oda-helper.tcl" (or *gui-dir* (script-directory) ""))))
+    (if (probe-file helper)
+        (progn (run-shell (format nil "wish ~A >/dev/null 2>&1 &" (shell-quote (namestring (probe-file helper)))))
+               (out (format nil "Opening the ODA File Converter helper...~%")))
+        (out (format nil "~A~%" (dwg-install-help))))))
