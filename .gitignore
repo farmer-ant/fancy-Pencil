@@ -2,3 +2,4 @@ build/
 *.fasl
 fonts/
 /Drawing1.dxf
+.~lock.*#
