@@ -1,55 +1,40 @@
 FANCY PENCIL KIT
 ================
 
-Everything needed to put Fancy Pencil on a Linux computer
-(Ubuntu, Debian, Mint, Fedora, openSUSE or Arch).
+  install            Double-click it. That's all.
+  INSTRUCTIONS.txt   This file.
 
-What is in this folder
-----------------------
-  Install Fancy Pencil.sh        The installer: right-click > Run as a Program.
-  Install Fancy Pencil.desktop   Starts the same installer on desktops that run these by
-                                 double-click (Mint, KDE, Xfce).
-  fancypencil.tar.gz             The whole Fancy Pencil program, newest version.
-  VERSION.txt                    The version of fancypencil.tar.gz.
-  setup.sh                       The same installer for a terminal, without windows.
-  INSTRUCTIONS.txt               This file.
-
-
-INSTALLING
-----------
-Right-click  "Install Fancy Pencil.sh"  and choose  "Run as a Program".
-
-  - Linux Mint (Nemo), KDE (Dolphin) and Xfce (Thunar) can also just double-click
-    "Install Fancy Pencil" (the .desktop file) - choose "Trust and Launch" / "Execute" if asked.
-  - If "Run as a Program" isn't in the menu, the file lost its "executable" mark on the way
-    (USB sticks and Windows-formatted drives do that): right-click it > Properties >
-    Permissions > tick "Allow executing file as program", or use the terminal way below.
-  - The terminal way: open a terminal in this folder (right-click in the folder >
-    Open in Terminal) and type:
-        sh "Install Fancy Pencil.sh"
-
-The installer then walks you through it in a few windows:
+"install" is a complete program with Fancy Pencil packed inside it. It opens a window with
+the Fancy Pencil logo and walks you through:
 
   1. Where to put Fancy Pencil (a folder called "Fancy Pencil" in your home folder, unless you
-     choose another).
-  2. Options: the app menu entry, a desktop icon, and picture/PDF support.
-  3. ODA File Converter, for .dwg drawings (see below).
-  4. Your password, once, so it can install the system packages Fancy Pencil runs on
-     (SBCL and Tk).
-  5. It unpacks Fancy Pencil, prepares it, and offers to start it.
+     choose another), and whether to add it to the app menu and the desktop.
+  2. ODA File Converter, for AutoCAD .dwg drawings: it opens the download in your web
+     browser, you pick the downloaded file, and it is installed with everything else.
+  3. Your password, once, so it can install what Fancy Pencil runs on (SBCL and Tk).
+  4. It unpacks Fancy Pencil, prepares it, and offers to start it.
 
-To update later, put the newer kit here and run the installer again. Your settings are kept.
+To update later, double-click a newer "install". Your settings, toolbars and drawings are kept.
+
+It works on Ubuntu 22.04 and newer, Linux Mint 21 and newer, Debian 12, Fedora and openSUSE
+(64-bit), and on Arch. Nothing else needs to be installed first.
+
+
+IF DOUBLE-CLICKING DOESN'T START IT
+-----------------------------------
+The file has lost its "executable" mark on the way (downloads and some USB sticks do that):
+
+    right-click "install" > Properties > turn on "Executable as Program"
+    (older versions: Permissions tab > tick "Allow executing file as program")
+
+then double-click it again. Or, in a terminal in this folder:   chmod +x install && ./install
+
+The first time it runs it gives itself the Fancy Pencil logo in the file manager.
 A record of what it did is kept in ~/.cache/fancypencil-install.log
 
 
-OPENING DWG FILES - ODA FILE CONVERTER
---------------------------------------
-Fancy Pencil reads and writes AutoCAD .dwg drawings through the free ODA File Converter, from
-the Open Design Alliance. The installer offers to fetch it: it opens the download in your web
-browser, and when it has downloaded you pick the file and it is installed with the rest.
-
-To get it yourself:
-
+ODA FILE CONVERTER BY HAND
+--------------------------
   Download page:   https://www.opendesign.com/guestfiles/oda_file_converter
 
   Direct downloads (Linux, 64-bit):
@@ -59,42 +44,23 @@ To get it yourself:
       https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.rpm
     Any other Linux (AppImage):
       https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.AppImage
+  (If a direct link stops working, ODA has a newer version - use the download page.)
 
-  (If a direct link stops working, ODA has released a newer version - use the download page.)
-
-  Then, in the folder where it downloaded:
+  Then double-click "install" again and choose "I have downloaded it", or in a terminal:
     .deb       sudo apt install ./ODAFileConverter_*.deb
-    .rpm       sudo dnf install ./ODAFileConverter_*.rpm      (openSUSE: sudo zypper install ...)
-    AppImage   mkdir -p ~/.local/bin
-               cp ODAFileConverter_*.AppImage ~/.local/bin/ODAFileConverter
+    .rpm       sudo dnf install ./ODAFileConverter_*.rpm
+    AppImage   mkdir -p ~/.local/bin && cp ODAFileConverter_*.AppImage ~/.local/bin/ODAFileConverter
                chmod +x ~/.local/bin/ODAFileConverter
-
-  Or simply run the installer again: if ODA File Converter is missing it offers it again, and
-  it will pick up a file you have already downloaded.
-
-Fancy Pencil finds it by itself. Everything else works without it.
-
-
-BY HAND (what the installer does)
----------------------------------
-    sudo apt install sbcl tk                     (Fedora: sudo dnf install sbcl tk)
-    mkdir -p ~/"Fancy Pencil" && cd ~/"Fancy Pencil"
-    tar xzf "/path/to/kit/fancypencil.tar.gz"
-    cd fancypencil
-    sh install.sh                                (adds it to the app menu)
-    ./fancypencil
-
-Pictures and PDF pages:  sudo apt install imagemagick poppler-utils
 
 
 MOVING YOUR SETTINGS TO ANOTHER COMPUTER
 ----------------------------------------
-Your preferences, recent files, command aliases and toolbars are kept in ~/.config/fancypencil
+Your preferences, recent files, command aliases and toolbars are in ~/.config/fancypencil
 (a hidden folder in your home folder). Copy that folder to the other computer to keep them.
 
 
-IF IT WON'T START
------------------
+IF FANCY PENCIL WON'T START
+---------------------------
 Run it from a terminal (cd into the fancypencil folder, then ./fancypencil) to see any message.
 When started from the app menu, messages go to ~/.cache/fancypencil.log
 If it is stuck:   pkill -f fancypencil
