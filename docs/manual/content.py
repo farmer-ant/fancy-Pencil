@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.10"
+VERSION = "0.4.11"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -36,6 +36,7 @@ ch(
 ("p", "Chapters 2 to 4 get you started: installing, the window, and how commands are given. The chapters after "
       "them each cover one kind of work. Chapter 19 lists the keyboard shortcuts, and the Command Reference at "
       "the end lists every command with its aliases."),
+("p", "This manual is also inside Fancy Pencil: press `F1` or choose **Help > User Manual** to open it on screen."),
 ("p", "Things you type are shown like `this`. A command's alias (its short name) is shown in brackets: "
       "LINE (`L`). Menu paths are written with arrows: **Format > Layer**. Keys are written `Ctrl+S`, `F3`."),
 )
@@ -658,6 +659,7 @@ ch(
  ["`Ctrl+8`", "QUICKCALC", "Calculator."],
  ["`Ctrl+Tab`", "", "Next drawing tab (`Ctrl+Shift+Tab`: previous)."],
  ["`Ctrl+F4`", "CLOSE", "Close the drawing."],
+ ["`F1`", "MANUAL", "Open this manual."],
  ["`F2`", "HISTORY", "Command history."],
  ["`F3`", "OSNAP", "Object snaps on/off."],
  ["`F5`", "ISOPLANE", "Next isoplane (isometric drafting)."],

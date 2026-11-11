@@ -156,3 +156,14 @@ To save .dwg, install ODA File Converter (free from opendesign.com):~%    sudo a
         (progn (run-shell (format nil "wish ~A >/dev/null 2>&1 &" (shell-quote (namestring (probe-file helper)))))
                (out (format nil "Opening the ODA File Converter helper...~%")))
         (out (format nil "~A~%" (dwg-install-help))))))
+
+(defun manual-path ()
+  "The Fancy Pencil Manual PDF that comes with the program, or NIL."
+  (let ((root (merge-pathnames "../" (or *gui-dir* (script-directory) ""))))
+    (probe-file (merge-pathnames "docs/Fancy-Pencil-Manual.pdf" root))))
+
+(defcmd "MANUAL" ("USERMANUAL") "Opens the Fancy Pencil Manual (a PDF) in your PDF viewer."
+  (let ((pdf (manual-path)))
+    (cond ((null pdf) (out (format nil "The manual isn't installed with this copy of Fancy Pencil.~%")))
+          (t (run-shell (format nil "(xdg-open ~A >/dev/null 2>&1 &)" (shell-quote (namestring pdf))))
+             (out (format nil "Opening the Fancy Pencil Manual...~%"))))))

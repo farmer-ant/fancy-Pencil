@@ -938,7 +938,7 @@ a DXF next to it instead and leave the DWG untouched."
           (when (and ap (<= 0 ap 8)) (setf (sysvar "AUPREC") ap)))
         (touch))))
 
-(defcmd "HELP" ("?" "F1") "Lists commands."
+(defcmd "HELP" ("?") "Lists commands."
   (let (names) (maphash (lambda (k v) (declare (ignore v)) (push k names)) *commands*)
     (out (format nil "~%Fancy Pencil commands (aliases in parentheses):~%"))
     (dolist (n (sort names #'string<))

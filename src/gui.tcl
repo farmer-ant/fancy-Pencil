@@ -384,6 +384,7 @@ foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pic
                "Multiple Pedit" MPEDIT "Text Case" TCASE "Text Number (TCOUNT)" TCOUNT "Text to MText" TXT2MTXT
                "Move/Copy/Rotate (MOCORO)" MOCORO "Copy Multiple (COPYM)" COPYM "Flatten" FLATTEN
                "Select Similar" SELECTSIMILAR "List nested (XLIST)" XLIST "Burst" BURST} { mcmd .mb.express $l $c }
+mcmd .mb.help "User Manual (F1)" MANUAL
 mcmd .mb.help "Command Reference" HELP
 mcmd .mb.help "Get ODA File Converter (for .dwg)..." GETODA
 mcmd .mb.help "About Fancy Pencil" ABOUT
@@ -852,6 +853,7 @@ proc histmove {d} {
 }
 
 bind all <Escape> {.cmd.e delete 0 end; emit E; break}
+bind all <F1> {emit MENU MANUAL; break}
 bind all <F2> {emit K F2; break}
 bind all <F3> {emit K F3; break}
 bind all <F7> {emit K F7; break}
