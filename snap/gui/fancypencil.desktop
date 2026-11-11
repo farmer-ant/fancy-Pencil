@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Fancy Pencil
+GenericName=2D and 3D Drafting
+Comment=Drafting with AutoCAD-style commands and AutoLISP
+Exec=fancypencil %F
+Icon=${SNAP}/meta/gui/fancypencil.png
+Terminal=false
+Categories=Graphics;VectorGraphics;Engineering;
+Keywords=CAD;drafting;drawing;DXF;AutoLISP;
+MimeType=image/vnd.dxf;image/x-dxf;application/dxf;
+StartupWMClass=Fancypencil
+StartupNotify=true

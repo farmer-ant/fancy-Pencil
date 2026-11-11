@@ -64,7 +64,15 @@
     (ensure-directories-exist d)
     d))
 
+(defparameter *snap-dwg-note*
+  "This copy of Fancy Pencil comes from the Snap Store, which keeps programs in their own~%~
+safe box - so it can't use the ODA File Converter installed on your computer, and opens~%~
+and saves DXF drawings only. For .dwg files, install the Fancy Pencil Kit edition~%~
+(Install Fancy Pencil.deb) instead, or convert .dwg to .dxf with ODA File Converter.~%")
+
 (defun dwg-install-help ()
+  (if (in-snap-p) (format nil *snap-dwg-note*) (dwg-install-help-1)))
+(defun dwg-install-help-1 ()
   (format nil "Opening and saving .dwg files needs a free DWG converter, and none is installed.~%~%~
 Recommended: ODA File Converter (reads and writes every AutoCAD version).~%~
 Help > Get ODA File Converter... fetches and installs it for you, or~%~
@@ -151,6 +159,7 @@ To save .dwg, install ODA File Converter (free from opendesign.com):~%    sudo a
          (search "SECTION" (subseq buf 0 n)))))))
 
 (defcmd "GETODA" ("ODA") "Opens a window that downloads and installs the free ODA File Converter (for .dwg files)."
+  (when (in-snap-p) (out (format nil *snap-dwg-note*)) (return-from command-body nil))
   (let ((helper (merge-pathnames "../support/oda-helper.tcl" (or *gui-dir* (script-directory) ""))))
     (if (probe-file helper)
         (progn (run-shell (format nil "wish ~A >/dev/null 2>&1 &" (shell-quote (namestring (probe-file helper)))))

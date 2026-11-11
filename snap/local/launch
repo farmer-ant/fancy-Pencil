@@ -1,0 +1,20 @@
+#!/bin/sh
+# Starts Fancy Pencil inside the Snap Store package: points SBCL and Tcl/Tk at the copies
+# inside the package, and starts in your own home folder.
+ARCH_LIB="$SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
+[ -d "$ARCH_LIB" ] || ARCH_LIB=$(ls -d "$SNAP"/usr/lib/*-linux-gnu 2>/dev/null | head -1)
+export SBCL_HOME="$SNAP/usr/lib/sbcl"
+export TCL_LIBRARY="$SNAP/usr/share/tcltk/tcl8.6"
+export TK_LIBRARY="$SNAP/usr/share/tcltk/tk8.6"
+export LD_LIBRARY_PATH="$ARCH_LIB:$SNAP/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export PATH="$SNAP/usr/bin:$SNAP/bin:$PATH"
+export FANCYPENCIL_WISH="$SNAP/usr/bin/wish8.6"
+# ImageMagick's settings and picture-format modules inside the package
+for D in "$ARCH_LIB"/ImageMagick-6*; do
+    [ -d "$D" ] || continue
+    export MAGICK_CODER_MODULE_PATH="$D/modules-Q16/coders"
+    export MAGICK_CODER_FILTER_PATH="$D/modules-Q16/filters"
+done
+for D in "$SNAP"/etc/ImageMagick-6; do [ -d "$D" ] && export MAGICK_CONFIGURE_PATH="$D"; done
+cd "${SNAP_REAL_HOME:-$HOME}" 2>/dev/null || cd "$HOME"
+exec "$SNAP/opt/fancypencil/fancypencil" "$@"

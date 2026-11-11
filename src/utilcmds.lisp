@@ -621,8 +621,15 @@
                t)
       (error () nil))))
 
+(defun user-home ()
+  "Your own home folder (inside the Snap Store package, $HOME is the package's private one)."
+  (let ((h (or (let ((r (getenv "SNAP_REAL_HOME"))) (and r (plusp (length r)) r)) (getenv "HOME") "/tmp")))
+    (concatenate 'string (string-right-trim "/" h) "/")))
+
+(defun in-snap-p () (let ((s (getenv "SNAP"))) (and s (plusp (length s)))))
+
 (defun user-documents-dir ()
-  (let* ((home (concatenate 'string (string-right-trim "/" (or (getenv "HOME") "/tmp")) "/"))
+  (let* ((home (user-home))
          (docs (concatenate 'string home "Documents/")))
     (if (probe-file docs) docs home)))
 
