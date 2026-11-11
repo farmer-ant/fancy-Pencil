@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install Fancy Pencil
+Comment=Install or update Fancy Pencil from this kit
+Exec=sh -c 'cd "$(dirname "$0")" && exec sh "./Install Fancy Pencil.sh"' %k
+Icon=system-software-install
+Terminal=false

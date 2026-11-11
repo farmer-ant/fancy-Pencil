@@ -48,7 +48,13 @@
     (let ((oda (or (which "ODAFileConverter")
                    (find-if #'probe-file '("/usr/bin/ODAFileConverter" "/usr/local/bin/ODAFileConverter"))
                    (let ((g (directory "/opt/ODAFileConverter*/ODAFileConverter")))
-                     (and g (namestring (first g)))))))
+                     (and g (namestring (first g))))
+                   ;; the AppImage, as the Fancy Pencil Kit installer puts it (or in ~/Applications)
+                   (let ((home (getenv "HOME")))
+                     (and home
+                          (or (let ((f (format nil "~A/.local/bin/ODAFileConverter" home))) (and (probe-file f) f))
+                              (let ((g (directory (format nil "~A/Applications/ODAFileConverter*.AppImage" home))))
+                                (and g (namestring (first g))))))))))
       (cond (oda (values :oda oda))
             ((which "dwg2dxf") (values :libredwg (which "dwg2dxf")))
             (t nil)))))
@@ -61,7 +67,9 @@
 (defun dwg-install-help ()
   (format nil "Opening and saving .dwg files needs a free DWG converter, and none is installed.~%~%~
 Recommended: ODA File Converter (reads and writes every AutoCAD version).~%~
-Download the Ubuntu .deb from opendesign.com (search \"ODA File Converter\"), then install it with~%~
+The Fancy Pencil Kit installer (\"Install Fancy Pencil\") can fetch and install it for you, or~%~
+download it from https://www.opendesign.com/guestfiles/oda_file_converter~%~
+(.deb for Ubuntu/Debian, .rpm for Fedora/openSUSE, AppImage for others), then install it with~%~
     sudo apt install ./ODAFileConverter_*.deb~%~%~
 Or: LibreDWG's dwg2dxf (open source; opening only).~%~%~
 Meanwhile you can save the drawing from AutoCAD (or another CAD program) as DXF and open that."))
