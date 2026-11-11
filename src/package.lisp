@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.4.11")
+(defparameter *version* "0.4.12")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)

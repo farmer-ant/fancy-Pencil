@@ -679,7 +679,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
   (let ((f (drawing-filename *dwg*)))
     (if f (namestring (make-pathname :type "pdf" :defaults (pathname f)))
         (namestring (merge-pathnames (make-pathname :name (pathname-name (untitled-name)) :type "pdf")
-                                     (let ((h (or (getenv "HOME") "/tmp"))) (if (char= (char h (1- (length h))) #\/) h (concatenate (quote string) h "/"))))))))
+                                     (user-home))))))
 
 (defun finish-plot (s)
   (if (string-equal (plot-settings-device s) "PDF file")

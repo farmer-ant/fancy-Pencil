@@ -1,0 +1,74 @@
+# The Snap Store package of Fancy Pencil (what Ubuntu's App Center installs).
+# Build it on Ubuntu with:   snapcraft        (see docs/SNAP-STORE.md)
+name: fancypencil
+title: Fancy Pencil
+version: '0.4.12'
+summary: 2D and 3D drafting with AutoCAD-style commands and AutoLISP
+description: |
+  Fancy Pencil is a drafting program that works like AutoCAD: the same commands,
+  the same prompts, and your AutoLISP routines.
+
+  - Draw lines, polylines, circles, arcs, ellipses, splines, helixes and hatches
+  - Edit with Move, Copy, Rotate, Scale, Mirror, Offset, Trim, Extend, Fillet,
+    Chamfer, Array, Stretch, Align and grips
+  - Text, dimensions, leaders and multileaders, in text and dimension styles
+  - Layers, linetypes, lineweights, colors, blocks and draw order
+  - 3D solids: boxes, cylinders, spheres, extrude, revolve, sweep, loft,
+    union, subtract, intersect and slice; Platonic solids and wireframe struts
+  - Layouts with viewports, and plotting to PDF or any printer at true scale
+  - AutoLISP: about 250 functions, defun c: commands, ssget filters, *error*
+  - Reads and writes DXF (AutoCAD 2000 and R12)
+
+  The Fancy Pencil Manual is built in: press F1, or Help > User Manual.
+
+  This Snap Store edition opens and saves DXF drawings. For .dwg files, use the
+  Fancy Pencil Kit edition, which works with the free ODA File Converter.
+license: GPL-3.0-or-later
+icon: snap/gui/fancypencil.png
+base: core24
+grade: stable
+confinement: strict
+
+platforms:
+  amd64:
+
+apps:
+  fancypencil:
+    command: bin/fancypencil-launch
+    extensions: [gnome]
+    plugs:
+      - home
+      - removable-media
+      - cups
+
+parts:
+  launcher:
+    plugin: dump
+    source: snap/local
+    organize:
+      launch: bin/fancypencil-launch
+
+  fancypencil:
+    plugin: nil
+    source: .
+    build-packages:
+      - sbcl
+    stage-packages:
+      - sbcl
+      - tk8.6
+      - tcl8.6
+      - imagemagick
+      - poppler-utils
+      - cups-client
+      - fonts-liberation
+      - fonts-dejavu-core
+      - mawk
+    override-build: |
+      D="$CRAFT_PART_INSTALL/opt/fancypencil"
+      mkdir -p "$D"
+      cp -r load.lisp fancypencil.asd fancypencil install.sh LICENSE src support examples "$D"/
+      mkdir -p "$D/docs" && cp docs/Fancy-Pencil-Manual.pdf "$D/docs/"
+      chmod +x "$D/fancypencil"
+      # compile Fancy Pencil now, so it starts quickly
+      (cd "$D" && HOME="$CRAFT_PART_BUILD" sbcl --noinform --non-interactive --load load.lisp)
+      ls "$D/build" | head -3

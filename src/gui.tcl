@@ -3836,8 +3836,13 @@ proc filedlg {save title initial exts} {
 # ---- Fancy Pencil's file chooser
 # Places down the left (home folders, drives, recent folders), the folder's contents on the
 # right (folders first), a type filter and the file name below. Returns the path or "".
+# your own home folder - inside the Snap Store package $HOME is the package's private folder
+proc user_home {} {
+    if {[info exists ::env(SNAP_REAL_HOME)] && $::env(SNAP_REAL_HOME) ne ""} { return $::env(SNAP_REAL_HOME) }
+    return $::env(HOME)
+}
 proc fd_places {} {
-    set home $::env(HOME)
+    set home [user_home]
     set out [list [list "Home" $home]]
     foreach {lbl sub} {Desktop Desktop Documents Documents Downloads Downloads Pictures Pictures} {
         if {[file isdirectory [file join $home $sub]]} { lappend out [list $lbl [file join $home $sub]] }
@@ -3927,7 +3932,7 @@ proc fd_activate {} {
 proc fd_up {} { fd_load [file dirname $::fd(dir)] }
 proc fd_path_enter {} {
     set p [string trim [.fd.top.path get]]
-    if {[string match "~*" $p]} { set p [file join $::env(HOME) [string range $p 2 end]] }
+    if {[string match "~*" $p]} { set p [file join [user_home] [string range $p 2 end]] }
     if {[file isdirectory $p]} { fd_load $p; return }
     if {[file isfile $p] && !$::fd(save)} { set ::fd(result) [file normalize $p]; destroy .fd; return }
     bell
@@ -4032,7 +4037,7 @@ proc fpfiledlg {save title dir name types ext} {
     pack $w.side -side left -fill y
     pack $w.main -side left -fill both -expand 1
     $w.bot.name insert 0 $name
-    if {![file isdirectory $dir]} { set dir $::env(HOME) }
+    if {![file isdirectory $dir]} { set dir [user_home] }
     fd_load $dir
     safegrab $w
     if {$save} { focus $w.bot.name; $w.bot.name selection range 0 end } else { focus $w.main.list }
