@@ -22,7 +22,7 @@ filters, `initget`/`getkword`, `*error*` handlers) run unchanged in most cases.
   [Releases](../../releases) page and double-click it. App Center installs Fancy Pencil with SBCL and
   Tk. This edition opens and saves AutoCAD **.dwg** files with the free ODA File Converter
   (Help > Get ODA File Converter).
-- **Ubuntu App Center** (Snap Store): search for *Fancy Pencil*. This edition opens and saves DXF.
+- **Ubuntu App Center** (Snap Store): coming soon - search for *Fancy Pencil*. That edition opens and saves DXF.
 - **From source**: see [Install and run](#install-and-run-ubuntu--debian) below.
 
 ## The manual
