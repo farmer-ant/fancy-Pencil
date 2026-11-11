@@ -1,0 +1,240 @@
+-BLOCK		Creates a block definition at the command line.
+-OSNAP		Sets running object snap modes at the command line.
+-PLOT		Plots at the command line (for scripts).
+-STYLE		Text styles at the command line.
+-VIEW	V VIEW VIEWS	Changes to a standard view: Top, Bottom, Left, Right, Front, Back or an isometric view.
+3DCORBIT		Continuous orbit: drag and let go, and the view keeps turning.
+3DDISTANCE		Moves the camera closer to the objects or farther away (drag up and down).
+3DFORBIT		Free orbit: turns the view in any direction, without keeping up up.
+3DORBIT	3DO ORBIT	Turns the view around a target point (constrained orbit: up stays up).
+3DPAN		Pans a 3D view (drag).
+3DPRINT	EXPORT3D PRINT3D	Saves solids as a file for a 3D printer's slicer: STL, 3MF or OBJ.
+3DSWIVEL		Turns the camera where it stands, like turning your head: the target moves.
+3DZOOM		Zooms in a 3D view (drag up to zoom in).
+ABOUT		Shows program information.
+ALIASEDIT	ALIASES	Edits command aliases.
+ALIASFILE	PGP	Opens your command alias file (fancypencil.pgp) in a text editor.
+ALIASFOLDER		Opens the folder that holds your command alias file.
+ALIGN	3DALIGN AL	Moves, rotates and optionally scales objects so up to three points line up with three others, in 3D.
+APPLOAD	AP	Loads an AutoLISP (.lsp) file.
+ARC	A	Creates an arc.
+AREA	AA	Calculates the area and perimeter of objects or a polygon of points.
+ARRAY	AR	Creates multiple copies in a rectangular or polar pattern.
+ARRAYPOLAR		Polar array.
+ARRAYRECT		Rectangular array.
+ATTACH		Attaches a picture or a PDF page to the drawing (choose the file).
+BACKGROUND	BGCOLOR BKG	Sets the drawing area's background color.
+BCLOSE		Closes the Block Editor.
+BEDIT	BE BLOCKEDIT REFEDIT	Opens a block in the Block Editor to change it.
+BLOCK	B BMAKE	Creates a block definition from selected objects (Block Definition dialog).
+BOX		Creates a 3D solid box in the working plane.
+BREAK	BR	Breaks the selected object between two points.
+BREAKLINE	BREAKL	Express: draws a break-line symbol.
+BRINGTOFRONT		Draws the selected objects over everything else.
+BSAVE		Saves the Block Editor's changes into the block.
+BURST		Express: explodes blocks, turning attribute definitions into text.
+CAL		Calculates an expression (numbers, points, geometry picked in the drawing).
+CHAMFER	CHA	Bevels the edges of objects.
+CHANGELAYER	CL LAYCHANGE	Moves selected objects to a layer you choose from a list.
+CHPROP	CHANGE	Changes the layer or color of objects.
+CIRCLE	C	Creates a circle.
+CLEARRECENT		Empties the recent files list.
+CLOSE		Closes the current drawing.
+CLOSEALL		Closes all open drawings.
+COLOR	COL DDCOLOR	Sets the color for new objects (the Select Color dialog in the window).
+CONE		Creates a 3D solid cone (or a cut-off cone with a top radius).
+COPY	CO CP	Copies objects.
+COPYBASE		Copies objects to the clipboard with a base point you pick (Ctrl+Shift+C).
+COPYCLIP		Copies selected objects to the clipboard (Ctrl+C); paste them into any drawing.
+COPYM		Express: copies objects repeatedly, by repeat, divide or measure.
+CUTCLIP		Copies the selection to the clipboard and erases it (Ctrl+X).
+CYLINDER	CYL	Creates a 3D solid cylinder standing on the working plane.
+DDPTYPE	POINTSTYLE PTYPE	Point Style dialog: how points are shown and how big.
+DESELECT		Clears the current selection (grips).
+DGNATTACH		Attaches a MicroStation DGN file as an underlay.
+DIMALIGNED	DAL DIMALI	Creates an aligned linear dimension.
+DIMANGULAR	DAN DIMANG	Creates an angular dimension.
+DIMBASELINE	DBA DIMBASE	Creates a dimension from the baseline of the last one.
+DIMCONTINUE	DCO DIMCONT	Creates a dimension starting at the second extension line of the last one.
+DIMDIAMETER	DDI DIMDIA	Creates a diameter dimension for a circle or arc.
+DIMLINEAR	DIMLIN DLI	Creates a horizontal or vertical linear dimension.
+DIMRADIUS	DIMRAD DRA	Creates a radius dimension for a circle or arc.
+DIMREGEN		Redraws every dimension's picture from its points and current style.
+DIMSTYLE	D DDIM DIMSTY DST	Creates and restores dimension styles.
+DIST	DI	Measures the distance and angle between two points.
+DIVIDE	DIV	Places evenly spaced point objects along a line, arc or circle.
+DOCCLOSE		Closes an open drawing (used by the file tabs' close buttons).
+DOCNEXT		Switches to the next open drawing (Ctrl+Tab).
+DOCPREV		Switches to the previous open drawing (Ctrl+Shift+Tab).
+DOCSWITCH		Makes another open drawing current (used by the file tabs).
+DODECAHEDRON	DODECA	Creates a dodecahedron: 12 pentagonal faces.
+DRAFTPLANE	DPLANE DRP	Chooses the plane you draw on in the 3D views, without changing the view: Ground, Front, Right, Left, Back, Bottom, through three points, on an object or a solid's face, facing the screen.
+DRAWINGRECOVERY	RECOVERCOPIES	Opens safety copies left by Fancy Pencil stopping unexpectedly.
+DRAWORDER	DR	Changes which objects are drawn on top: Front, Back, Above or Under other objects.
+DWFATTACH		Attaches a DWF or DWFx file as an underlay.
+DXFIN	IMPORT	Imports a DXF drawing into the current drawing.
+DXFOUT		Exports the drawing as DXF (choose AutoCAD 2000 or R12).
+ELEV	ELEVATION	Sets the elevation and thickness for new objects.
+ELLIPSE	EL	Creates an ellipse (and isocircles in isometric drafting).
+ERASE	DELETE E	Removes objects from the drawing.
+EXPLODE	X	Breaks a compound object into its component objects.
+EXTEND	EX	Extends objects to meet the edges of other objects.
+EXTRIM		Express: trims every object crossing a cutting edge on one side.
+EXTRUDE	EXT	Extrudes closed shapes into solids (open ones into surfaces): by a height, along a direction, or along a path.
+FILLET	F	Rounds and fillets the edges of objects.
+FLATTEN		Express: sets the Z coordinate of selected objects to zero.
+GETODA	ODA	Opens a window that downloads and installs the free ODA File Converter (for .dwg files).
+GETSEL		Express: selects objects by layer and type.
+GRID		Turns the grid on or off, or sets spacing.
+HATCH	BH BHATCH GRADIENT H	Fills an enclosed area with a hatch pattern or solid fill.
+HATCHEDIT	HE	Changes the pattern, scale or angle of existing hatches.
+HATCHTOBACK		Sends every hatch and fill behind everything else.
+HELIX		Creates a helix (a spring or thread path) or a flat spiral.
+HELP	? F1	Lists commands.
+HIDE	HI	Shows the drawing with hidden lines removed (visual style Hidden).
+HISTORY	HIS TEXTSCR	Shows the whole record of this session: every command, answer and message.
+HPSET		Sets the hatch pattern, scale and angle used by HATCH.
+ICOSAHEDRON	ICOSA	Creates an icosahedron: 20 triangular faces.
+ID		Displays the coordinates of a location.
+IMAGE	EXTERNALREFERENCES IM IMAGEMANAGER XR XREF	The Image Manager: the pictures and PDF pages attached to the drawing.
+IMAGEATTACH	IAT	Attaches a picture (PNG, JPEG, TIFF, GIF, BMP) to the drawing.
+INSERT	DDINSERT I	Inserts a block or a DXF drawing.
+INTERSECT	IN	Keeps only the part that solids share.
+ISODRAFT		Turns isometric drafting on (choosing an isoplane) or off.
+ISOPLANE		Chooses the isoplane for isometric drafting (Left, Top or Right).
+JOIN	J	Joins lines, arcs and open polylines end to end into one polyline.
+KEEPPROFILES		Keeps (On) or removes (Off) the circles, polylines and paths that EXTRUDE, REVOLVE, SWEEP and LOFT use (DELOBJ).
+LAYCUR		Express: moves selected objects to the current layer.
+LAYDEL		Express: deletes a layer and every object on it.
+LAYER	DDLMODES LA LAYERP	Manages layers.
+LAYFRZ		Express: freezes the layer of a selected object.
+LAYISO		Express: isolates the layers of selected objects (turns the others off).
+LAYLCK		Express: locks the layer of a selected object.
+LAYMCH	LMH MATCHLAYER	Changes selected objects to the layer of a destination object (Match Layer).
+LAYMCUR	LAYERMAKECURRENT LMC	Makes the layer of a selected object current.
+LAYMRG		Express: merges layers into a target layer.
+LAYOFF		Express: turns off the layer of a selected object.
+LAYON		Express: turns all layers on.
+LAYOUT	LO	Makes, copies, deletes, renames and shows layouts (paper space sheets).
+LAYOUTCOPY		Copies a layout from its tab.
+LAYOUTDELETE		Deletes a layout from its tab.
+LAYOUTMOVE		Moves a layout tab one place left or right.
+LAYOUTNEW		Adds a layout (the + after the layout tabs).
+LAYOUTPAGESETUP		Page setup for a layout from its tab.
+LAYOUTRENAME		Renames a layout from its tab.
+LAYOUTTAB		Shows a layout tab by its number (0 = Model); used by the tabs under the drawing.
+LAYTHW		Express: thaws all layers.
+LAYULK		Express: unlocks the layer of a selected object.
+LAYUNISO		Express: restores layers turned off by LAYISO.
+LEADER	LE LEAD QLEADER	Creates a leader: an arrow and a straight or spline line pointing at a note.
+LIMITS	DRAWINGLIMITS	Sets the drawing's size (its limits): the area the grid, ZOOM All and Plot Limits use.
+LINE	L	Creates straight line segments.
+LINETYPE	DDLTYPE LT LTYPE	Loads, sets and lists linetypes.
+LIST	LI LS	Displays property data for selected objects.
+LOFT		Makes a solid (or surface) through cross sections picked in order.
+LOGFILEOFF		Stops writing the command line to the log file.
+LOGFILEON		Starts writing everything shown in the command line to a log file.
+LTSCALE	LTS	Sets the global linetype scale factor.
+LWEIGHT	LINEWEIGHT LW	Sets the current lineweight and lineweight display.
+MASSPROP	MASSPROPERTIES	Mass properties of regions (closed flat objects) and solids: area, volume, centroid, moments of inertia ...
+MATCHPROP	MA PAINTER	Copies properties (layer, color, linetype, text style, dimension style, hatch ...) from one object to others.
+MIRROR	MI	Creates a mirrored copy of objects.
+MLEADER	MLD	Creates a multileader: an arrow, a landing and a note, as one object.
+MOCORO		Express: moves, copies, rotates and scales with one base point.
+MODEL	TILEMODE1	Shows the Model tab.
+MOVE	M	Moves objects.
+MPEDIT		Express Tools: edits several polylines at once.
+MSPACE	MS	Works in model space through a layout viewport.
+MSPACETOGGLE		Switches between paper space and the last viewport (the MODEL/PAPER button).
+MTEXT	MT T	Creates multiline (paragraph) text, typed in place on the drawing.
+MULTIPLE-POINT		Creates points until Enter.
+MVIEW	MV	Makes layout viewports: windows on the sheet that show model space.
+NEW	QNEW	Creates a new drawing in its own tab.
+OCTAHEDRON	OCTA	Creates an octahedron: 8 triangular faces.
+OFFSET	O	Creates concentric circles, parallel lines, and parallel curves.
+OOPS		Restores the last erased objects.
+OPEN		Opens a drawing (DXF, or DWG through a converter), or a 3D model (STL, OBJ) as a solid.
+OPENRECENT		Opens a drawing from the recent files list (File > Recent Files).
+OPTIONS	CURSOR DDSELECT OP	Cursor and selection settings: crosshair size and color, pickbox, snap marker, grips, rollover tips.
+ORTHO		Turns ortho mode on or off.
+OSNAP	DDOSNAP DS DSETTINGS OS	Sets running object snap modes (settings panel).
+OVERKILL		Removes duplicate and overlapping objects.
+PAGESETUP	PAGESETUPS	Sets the current layout's paper size, orientation and units.
+PAN	P	Shifts the view.
+PASTEBLOCK		Pastes the clipboard as one block (Ctrl+Shift+V).
+PASTECLIP		Pastes the clipboard at a point you pick (Ctrl+V).
+PASTEORIG		Pastes the clipboard at the same coordinates it was copied from.
+PDFATTACH		Attaches a page of a PDF file to the drawing.
+PEDIT	PE	Edits polylines.
+PLAN		Back to the plan (Top) view.
+PLINE	PL	Creates a 2D polyline of line and arc segments.
+PLOT	PLT PRINT	Plots the drawing to a PDF file or a printer.
+POINT	PO	Creates a point object.
+POLYGON	POL	Creates a regular polygon.
+POLYHEDRON	PLATONIC	Creates a Platonic solid (tetrahedron, cube, octahedron, dodecahedron, icosahedron) or a truncated icosahedron (soccer ball).
+PRESSPULL	PRESS	Click inside a closed area or on a flat face of a solid (or pick an Edge) and pull it into a solid.
+PROPERTIES	CH DDCHPROP DDMODIFY MO PR PROPS	Shows the Properties palette.
+PSPACE	PS	Goes back to the layout's sheet (paper space) from a viewport.
+PURGE	PU	Removes unused layers and block definitions.
+QSAVE		Saves the current drawing.
+QUICKCALC	QC	Opens QuickCalc: a calculator, unit converter, and geometry from the drawing.
+QUICKPROPERTIES	QP QUICKPROP	Quick Properties: a small panel with the main properties of the selected objects.
+QUIT	EXIT	Exits the program (offering to save each changed drawing).
+RECTANG	REC RECTANGLE	Creates a rectangular polyline.
+REDO	MREDO	Reverses the effects of the previous UNDO.
+REGEN	R RE REDRAW REDRAWALL REGENALL	Regenerates the display.
+REINIT		Reloads the command alias (.pgp) file.
+RENAME	DDRENAME REN	Renames a block, layer, text style or dimension style.
+REVCLOUD	RC	Creates a revision cloud.
+REVOLVE	REV	Revolves shapes about an axis to make solids (or surfaces from open shapes).
+REVSURF		Creates a revolved surface mesh: a curve spun about an axis (SURFTAB1 x SURFTAB2 faces).
+ROTATE	RO	Rotates objects around a base point.
+SAVE		Saves the drawing.
+SAVEAS		Saves the drawing under a new name.
+SAVEASR12		Saves an AutoCAD R12 DXF (no lineweights or hatches).
+SCALE	SC	Enlarges or reduces objects.
+SCRIPT	SCR	Runs a sequence of commands from a script (.scr) file.
+SELECTALL	AI_SELALL	Selects every visible object.
+SELECTSIMILAR	SSIM	Selects all objects of the same type and layer as the selection.
+SENDTOBACK		Draws the selected objects under everything else.
+SETVAR	SET	Lists or changes the values of system variables.
+SLICE	SL	Cuts solids with a plane, keeping one side or both.
+SNAP	SN	Sets snap spacing or turns snap on/off.
+SOCCERBALL	TRUNCICOSA	Creates a truncated icosahedron (a soccer ball): 12 pentagons and 20 hexagons.
+SPELL	SP	Checks the spelling of text in the drawing.
+SPHERE		Creates a 3D solid sphere.
+SPLINE	SPL	Draws a smooth curve through (Fit) or controlled by (CV) the points you pick.
+SSX		Express: selects objects matching a picked object's type, layer and color.
+STLIN	IMPORT3D OBJIN	Brings an STL or OBJ file (from a 3D model or a printing site) in as a solid.
+STLOUT		Saves solids as an STL file for 3D printing.
+STRETCH	S	Stretches objects crossed by a selection window.
+STRUTS	STRUT WIRESOLID	Turns the lines of a wireframe into solid bars the length of each line, with a rectangle, polygon, circle or drawn-polyline section. Polylines with arcs, arcs, circles and splines get one strut that follows the curve.
+STYLE	DDSTYLE ST	Creates, modifies, or sets the current text style.
+SUBTRACT	SU	Removes solids from other solids.
+SURFTAB1		Number of faces around a revolved surface (REVSURF).
+SURFTAB2		Number of faces along a curve of a revolved surface (REVSURF).
+SWEEP		Sweeps shapes along a path (line, arc, polyline, spline, helix) to make solids or surfaces.
+SYSWINDOWS		Lists the open drawings.
+TCASE	CHANGECASE	Changes the case of text, MText and dimension text: Sentence, lower, UPPER, Title, tOGGLE.
+TCOUNT		Express: numbers selected text objects.
+TETRAHEDRON	TETRA	Creates a tetrahedron: 4 triangular faces.
+TEXT	DT DTEXT	Creates single-line text, typed in place on the drawing.
+TEXTEDIT	DDEDIT ED MTEDIT	Edits the contents of a text object (in place on the drawing).
+TEXTTOFRONT		Brings text, dimensions and leaders in front of everything else.
+THICKNESS	TH	Sets the thickness (extrusion height) for new lines, arcs, circles and polylines.
+TOOLBAR	TB TO	Shows the list of toolbars, to turn them on or off (drag a toolbar by its dotted grip to dock it on any edge or float it).
+TOOLBAROPTIONS	TBOPTIONS	Opens the Toolbar Options window: icon size, line weight, spacing and colors.
+TORUS	TOR	Creates a 3D solid torus (a ring), lying in the working plane.
+TRIM	TR	Trims objects to meet the edges of other objects.
+TXT2MTXT	T2M	Express: combines single-line text into one MTEXT object.
+U		Reverses the most recent operation.
+UCS	WORKPLANE WP	Sets the working plane: through three points, on an object's plane, at an origin, turned about an axis, facing the view, or back to World.
+UNDO		Reverses the effect of commands.
+UNION	UNI	Joins solids into one.
+UNITS	DDUNITS UN	Sets the drawing's length and angle units, precision and insertion units.
+VPORTS	VIEWPORTS VPORT	Splits the Model tab into several viewports, each with its own view: Single, Join, 2, 3, 4.
+VPSCALE	VPS	Sets the scale of layout viewports (1:2, 1/4"=1'-0", 2:1, Fit ...).
+VSCURRENT	SHADEMODE VISUALSTYLES VS	Sets the visual style: Wireframe, Hidden, Shaded or Shaded with Edges.
+WEDGE	WE	Creates a 3D solid wedge: full height at the first corner, sloping to the opposite side.
+XLIST		Express: lists the properties of an object nested in a block.
+ZOOM	Z	Changes the view magnification.

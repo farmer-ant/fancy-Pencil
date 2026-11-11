@@ -1,0 +1,12 @@
+(in-package :fancy-pencil)
+(ignore-errors (load-aliases))
+(let ((al (make-hash-table :test 'equal)) names)
+  (maphash (lambda (a c) (push a (gethash c al))) *aliases*)
+  (maphash (lambda (k v) (declare (ignore v)) (push k names)) *commands*)
+  (with-open-file (o "/home/claude/manual/commands.tsv" :direction :output :if-exists :supersede)
+    (dolist (n (sort names #'string<))
+      (let ((as (remove-if (lambda (a) (or (string-equal a n)
+                                           (and (> (length a) 1) (char= (char a 0) #\-) (string-equal (subseq a 1) n))))
+                           (copy-list (gethash n al)))))
+        (format o "~A~C~{~A~^ ~}~C~A~%" n #\Tab (sort as #'string<) #\Tab
+                (substitute #\Space #\Newline (or (gethash n *command-help*) "")))))))
