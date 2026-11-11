@@ -2,13 +2,39 @@
 
 <img src="support/icons/fancypencil-128.png" alt="Fancy Pencil icon" width="96" align="right">
 
-![Fancy Pencil: a drawing made by an AutoLISP program, with grips and the Properties palette](docs/screenshot.png)
+**2D and 3D drafting on Linux that works like AutoCAD, and runs your AutoLISP.**
 
-A 2D drafting program written in Common Lisp that works like AutoCAD and runs AutoLISP.
-Same command names and aliases, the same prompts, a command line with the same input rules,
-object snaps, noun/verb selection, layers, blocks, dimensions, and DXF in and out. Your existing
-AutoLISP routines (`defun c:...`, `command`, `entget`/`entmod`, `ssget` filters, `initget`/`getkword`,
-`*error*` handlers) run unchanged in most cases.
+The same command names and aliases, the same prompts, a command line with the same input rules,
+object snaps, noun/verb selection, layers, blocks, dimensions, hatches, layouts, plotting, 3D solids,
+and DXF in and out. Existing AutoLISP routines (`defun c:...`, `command`, `entget`/`entmod`, `ssget`
+filters, `initget`/`getkword`, `*error*` handlers) run unchanged in most cases.
+
+![Fancy Pencil: a dimensioned plate drawn by an AutoLISP program](docs/store-screenshots/1-drawing.png)
+
+| | |
+|---|---|
+| ![3D solids, shaded](docs/store-screenshots/2-solids.png) | ![A soccer-ball frame of solid struts](docs/store-screenshots/3-soccer-ball-struts.png) |
+| ![A layout with four viewports](docs/store-screenshots/4-layout.png) | ![The Properties palette](docs/store-screenshots/5-properties.png) |
+
+## Get Fancy Pencil
+
+- **Install Fancy Pencil.deb** (Ubuntu 22.04+, Mint 21+, Debian 12): download it from the
+  [Releases](../../releases) page and double-click it. App Center installs Fancy Pencil with SBCL and
+  Tk. This edition opens and saves AutoCAD **.dwg** files with the free ODA File Converter
+  (Help > Get ODA File Converter).
+- **Ubuntu App Center** (Snap Store): search for *Fancy Pencil*. This edition opens and saves DXF.
+- **From source**: see [Install and run](#install-and-run-ubuntu--debian) below.
+
+## The manual
+
+**[Fancy Pencil Manual (PDF)](docs/Fancy-Pencil-Manual.pdf)** - 46 pages covering installing, the
+window, drawing, editing, layers, text, dimensions, blocks, 3D, layouts and plotting, files,
+toolbars, AutoLISP, keyboard shortcuts and every command. It is also built into Fancy Pencil:
+press F1, or Help > User Manual.
+
+## Licence
+
+Fancy Pencil is free software under the [GNU General Public License, version 3 or later](LICENSE).
 
 ## Install and run (Ubuntu / Debian)
 
