@@ -385,6 +385,7 @@ foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pic
                "Move/Copy/Rotate (MOCORO)" MOCORO "Copy Multiple (COPYM)" COPYM "Flatten" FLATTEN
                "Select Similar" SELECTSIMILAR "List nested (XLIST)" XLIST "Burst" BURST} { mcmd .mb.express $l $c }
 mcmd .mb.help "Command Reference" HELP
+mcmd .mb.help "Get ODA File Converter (for .dwg)..." GETODA
 mcmd .mb.help "About Fancy Pencil" ABOUT
 
 # ---------------------------------------------------------------- toolbar

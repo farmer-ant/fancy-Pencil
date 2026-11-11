@@ -1,56 +1,38 @@
 FANCY PENCIL KIT
 ================
 
-  install            Double-click it. That's all.
-  INSTRUCTIONS.txt   This file.
+  Install Fancy Pencil.deb   Double-click it.
+  INSTRUCTIONS.txt           This file.
 
-"install" is a complete program with Fancy Pencil packed inside it. It opens a window with
-the Fancy Pencil logo and walks you through:
+Double-clicking "Install Fancy Pencil.deb" opens your computer's own software installer
+(App Center on Ubuntu, Software Manager / Package Installer on Linux Mint, Software Install on
+Debian). It shows Fancy Pencil with its logo - click Install and enter your password.
+It installs SBCL and Tk (what Fancy Pencil runs on) along with it.
 
-  1. Where to put Fancy Pencil (a folder called "Fancy Pencil" in your home folder, unless you
-     choose another), and whether to add it to the app menu and the desktop.
-  2. ODA File Converter, for AutoCAD .dwg drawings: it opens the download in your web
-     browser, you pick the downloaded file, and it is installed with everything else.
-  3. Your password, once, so it can install what Fancy Pencil runs on (SBCL and Tk).
-  4. It unpacks Fancy Pencil, prepares it, and offers to start it.
+Then start Fancy Pencil from the app menu.
 
-To update later, double-click a newer "install". Your settings, toolbars and drawings are kept.
+To update, double-click a newer "Install Fancy Pencil.deb" the same way. Your settings,
+toolbars and drawings are kept.
 
-It works on Ubuntu 22.04 and newer, Linux Mint 21 and newer, Debian 12, Fedora and openSUSE
-(64-bit), and on Arch. Nothing else needs to be installed first.
+If double-clicking opens it in the wrong program: right-click it > Open With > App Center
+(or "Software Install", or "Package Installer"). Or, in a terminal in this folder:
+    sudo apt install "./Install Fancy Pencil.deb"
 
-
-IF DOUBLE-CLICKING DOESN'T START IT
------------------------------------
-The file has lost its "executable" mark on the way (downloads and some USB sticks do that):
-
-    right-click "install" > Properties > turn on "Executable as Program"
-    (older versions: Permissions tab > tick "Allow executing file as program")
-
-then double-click it again. Or, in a terminal in this folder:   chmod +x install && ./install
-
-The first time it runs it gives itself the Fancy Pencil logo in the file manager.
-A record of what it did is kept in ~/.cache/fancypencil-install.log
+To remove Fancy Pencil:   sudo apt remove fancypencil
 
 
-ODA FILE CONVERTER BY HAND
---------------------------
+OPENING DWG FILES - ODA FILE CONVERTER
+--------------------------------------
+Fancy Pencil opens and saves AutoCAD .dwg drawings through the free ODA File Converter.
+After installing Fancy Pencil, open  "Get ODA File Converter"  from the app menu (or, in Fancy
+Pencil, Help > Get ODA File Converter). Click "Download .deb", then "Install the downloaded
+file..." and pick it.
+
   Download page:   https://www.opendesign.com/guestfiles/oda_file_converter
-
-  Direct downloads (Linux, 64-bit):
-    Ubuntu / Debian / Mint (.deb):
-      https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.deb
-    Fedora / openSUSE (.rpm):
-      https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.rpm
-    Any other Linux (AppImage):
-      https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.AppImage
-  (If a direct link stops working, ODA has a newer version - use the download page.)
-
-  Then double-click "install" again and choose "I have downloaded it", or in a terminal:
-    .deb       sudo apt install ./ODAFileConverter_*.deb
-    .rpm       sudo dnf install ./ODAFileConverter_*.rpm
-    AppImage   mkdir -p ~/.local/bin && cp ODAFileConverter_*.AppImage ~/.local/bin/ODAFileConverter
-               chmod +x ~/.local/bin/ODAFileConverter
+  Direct download (Ubuntu / Debian / Mint):
+    https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.deb
+  (If the direct link stops working, ODA has a newer version - use the download page.)
+  By hand:   sudo apt install ./ODAFileConverter_*.deb
 
 
 MOVING YOUR SETTINGS TO ANOTHER COMPUTER
@@ -61,6 +43,6 @@ Your preferences, recent files, command aliases and toolbars are in ~/.config/fa
 
 IF FANCY PENCIL WON'T START
 ---------------------------
-Run it from a terminal (cd into the fancypencil folder, then ./fancypencil) to see any message.
+In a terminal type  fancypencil  to see any message.
 When started from the app menu, messages go to ~/.cache/fancypencil.log
 If it is stuck:   pkill -f fancypencil
