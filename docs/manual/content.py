@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.18"
+VERSION = "0.4.19"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -422,8 +422,15 @@ ch(
 ("h2", "Zoom and pan"),
 ("ul", [
  "Turn the mouse **wheel** to zoom at the cursor; **middle-drag** to pan; **middle double-click** to see everything.",
- "**ZOOM** (`Z`): Extents (`E`), All, Window (`W`), Previous (`P`), Center, or a scale factor. **PAN** (`P`).",
+ "**ZOOM** (`Z`): Extents (`E`), All, Object (`O`: the objects you pick), Window (`W`), Previous (`P`), Center, or a scale factor. **PAN** (`P`).",
 ]),
+("h2", "When the drawing looks like a speck"),
+("p", "If Zoom Extents shows your work as a dot, something in the drawing is far away from the rest, or "
+      "far too big: a 3D move that went a hundred million units up, or a circle miles across. "
+      "**STRAYS** (Tools > Find Stray Objects) finds them. It lists the drawing's groups of objects, with "
+      "their size and where they are, and any very large objects. Pick a group to select it and zoom to it; "
+      "then **MOVE** puts it back, or **ERASE** removes it. To keep a large object but out of the way, put it "
+      "on a layer of its own and freeze that layer."),
 ("h2", "The view picker and standard views"),
 ("img", "viewpicker.png", 1.25, "The view picker."),
 ("p", "The **view picker** at the top right shows a cube for each standard view: Top in the middle, the "

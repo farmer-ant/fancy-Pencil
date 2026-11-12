@@ -175,14 +175,14 @@ seen edge-on (Front/Back/Left/Right), on the plane facing the viewer through the
     (setf *vx* (/ (+ x0 x1) 2) *vy* (/ (+ y0 y1) 2)
           *vscale* (max 1d-9 (* fill (min (/ *cw* w) (/ *ch* h)))))
     (gui-regen)))
-(defun view-extents ()
-  "Extents of the drawing in view coordinates (projected, with heights and thickness)."
-  (when (and (paper-space-p) (fboundp 'layout-extents))
+(defun view-extents (&optional ents)
+  "Extents of the drawing (or of ENTS) in view coordinates (projected, with heights and thickness)."
+  (when (and (null ents) (paper-space-p) (fboundp 'layout-extents))
     (return-from view-extents (funcall 'layout-extents)))
   (if (not (projected-view-p))
-      (drawing-extents)
+      (if ents (drawing-extents ents) (drawing-extents))
       (let ((u0 nil) (v0 nil) (u1 nil) (v1 nil))
-        (dolist (e (live-entities))
+        (dolist (e (or ents (live-entities)))
           (when (entity-visible-p e)
             (let ((b (ignore-errors (entity-bbox e))) (data (ent-data e)))
               ;; an object in another plane, a solid or a 3D line: its own 3D edges

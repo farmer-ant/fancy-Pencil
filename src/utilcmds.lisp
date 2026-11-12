@@ -9,8 +9,8 @@
 ;;; ---------- view ----------
 
 (defcmd "ZOOM" ("Z") "Changes the view magnification."
-  (let ((r (gpoint "Specify corner of window, enter a scale factor (nX or nXP), or [All/Center/Extents/Previous/Window] <real time>: "
-                   :keywords '("All" "Center" "Extents" "Previous" "Window" "E" "A" "P" "W") :flags 128)))
+  (let ((r (gpoint "Specify corner of window, enter a scale factor (nX or nXP), or [All/Center/Extents/Object/Previous/Window] <real time>: "
+                   :keywords '("All" "Center" "Extents" "Object" "Previous" "Window" "E" "A" "O" "P" "W") :flags 128)))
     ;; nXP: inside a layout viewport, its scale (n paper units per model unit)
     (when (and (stringp r)
                (let ((u (string-upcase (string-trim " " r)))) (and (> (length u) 2) (string= (subseq u (- (length u) 2)) "XP")
@@ -39,6 +39,9 @@
                  (let ((b (or (drawing-extents) (list 0 0 12 9))))
                    (zoom-to-box (min 0 (first b)) (min 0 (second b)) (max 12 (third b)) (max 9 (fourth b))))))
             ((member r '("Previous" "P") :test #'string-equal) (zoom-previous))
+            ((member r '("Object" "O") :test #'string-equal)
+             (let ((ents (get-selection "Select objects: ")))
+               (when ents (funcall 'zoom-to-entities ents))))
             ((member r '("Window" "W") :test #'string-equal)
              (let* ((a (gpoint "Specify first corner: "))
                     (b (get-user-input :corner :base a :prompt "Specify opposite corner: ")))
