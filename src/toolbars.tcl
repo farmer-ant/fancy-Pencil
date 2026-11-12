@@ -809,14 +809,49 @@ proc tbx_float {n} {
     } else {
         wm geometry $t +[expr {[winfo rootx .c] + 80}]+[expr {[winfo rooty .c] + 60}]
     }
+    set ::tbx(born,$n) [clock milliseconds]
     bind $t <Configure> [list tbx_float_moved $n %W]
 }
 proc tbx_float_moved {n w} {
     if {$w ne ".tbf_$n"} return
     if {[info exists ::tbx_gathering] && $::tbx_gathering} return
-    set ::tbx(g,$n) +[winfo rootx $w]+[winfo rooty $w]
+    set g +[winfo rootx $w]+[winfo rooty $w]
+    set moved [expr {![info exists ::tbx(g,$n)] || $::tbx(g,$n) ne $g}]
+    set ::tbx(g,$n) $g
     catch {after cancel $::tbx_saveid}
     set ::tbx_saveid [after 600 tbx_save]
+    # moved by its title bar (the window system, not the grip): when it comes to rest at an
+    # edge of the window, dock it there, as AutoCAD does
+    if {$moved && [clock milliseconds] - $::tbx(born,$n) > 1500} {
+        catch {after cancel $::tbx(settle,$n)}
+        set ::tbx(settle,$n) [after 700 [list tbx_float_settle $n]]
+    }
+}
+proc tbx_float_settle {n} {
+    set w .tbf_$n
+    if {![winfo exists $w] || $::tbx(d,$n) ne "float" || [info exists ::tbx_dragging]} return
+    # where it rests (recorded when it moved; the window itself may be being redrawn)
+    if {![regexp {^\+(-?\d+)\+(-?\d+)$} $::tbx(g,$n) -> gx gy]} return
+    set ww [expr {max([winfo width $w], [winfo reqwidth $w])}]
+    set wh [expr {max([winfo height $w], [winfo reqheight $w])}]
+    # the point where it was held: the middle of its title bar, just above the toolbar
+    set X [expr {$gx + $ww / 2}]
+    set Y [expr {$gy - 8}]
+    set tg [tbx_target $n $X $Y]
+    if {[lindex $tg 0] eq "float"} {
+        # also try its middle, and its nearer ends, for a toolbar parked across an edge
+        foreach {px py} [list $X [expr {$gy + $wh / 2}] $gx [expr {$gy + $wh / 2}] [expr {$gx + $ww}] [expr {$gy + $wh / 2}]] {
+            set tg [tbx_target $n $px $py]
+            if {[lindex $tg 0] ne "float"} break
+        }
+    }
+    lassign $tg d ln pos
+    if {$d eq "float"} return
+    set ::tbx(line,$n) $ln; set ::tbx(pos,$n) $pos
+    set ::tbx(d,$n) $d
+    set ::tbx(last,$n) $d
+    tbx_layout
+    tbx_save
 }
 
 # ---------------------------------------------------------------- showing / hiding
