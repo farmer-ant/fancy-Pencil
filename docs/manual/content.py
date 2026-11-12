@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.14"
+VERSION = "0.4.15"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))

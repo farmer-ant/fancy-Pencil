@@ -517,7 +517,18 @@ proc tbx_layout {} {
     foreach d {top bottom left right} { tbx_layout_dock $d }
     foreach n $::tbx_names {
         set ::tbx_vis($n) [expr {$::tbx(d,$n) ne "hidden"}]
-        if {$::tbx(d,$n) eq "float"} { tbx_float $n } else { catch {destroy .tbf_$n} }
+        if {$::tbx(d,$n) eq "float"} {
+            # leave a floating toolbar alone unless its contents or looks changed: rebuilding
+            # it makes the window system place it again
+            if {![winfo exists .tbf_$n] || ![info exists ::tbx(sig,$n)] || $::tbx(sig,$n) ne [tbx_float_sig $n]} {
+                tbx_float $n
+            } elseif {[info exists ::tbx(g,$n)] && [regexp {^\+(-?\d+)\+(-?\d+)$} $::tbx(g,$n) -> gx gy]
+                      && $::tbx(g,$n) ne [tbx_float_pos .tbf_$n]} {
+                # moved by the program (dragged by its grip): put it there, and count that as home
+                set ::tbx(home,$n) [list $gx $gy]
+                wm geometry .tbf_$n $::tbx(g,$n)
+            }
+        } else { catch {destroy .tbf_$n} }
     }
     tbx_save
 }
@@ -788,7 +799,19 @@ proc tbx_target {n X Y} {
 }
 
 # ---------------------------------------------------------------- floating toolbars
+proc tbx_float_sig {n} {
+    return "$::tbx(t,$n)|$::tbx(i,$n)|[lsort -stride 2 [array get ::tbo]]|$::tbx_bg"
+}
+# where a floating toolbar's window is, as the window system has it: +X+Y of its frame
+proc tbx_float_pos {w} {
+    if {[regexp {[+-]-?\d+[+-]-?\d+$} [wm geometry $w] pos]} {
+        regexp {^([+-]-?\d+)([+-]-?\d+)$} $pos -> x y
+        return "+[expr {$x}]+[expr {$y}]"
+    }
+    return +[winfo rootx $w]+[winfo rooty $w]
+}
 proc tbx_float {n} {
+    set ::tbx(sig,$n) [tbx_float_sig $n]
     set t .tbf_$n
     if {[winfo exists $t]} { destroy $t }
     toplevel $t -background $::tbx_bg
@@ -810,19 +833,27 @@ proc tbx_float {n} {
         wm geometry $t +[expr {[winfo rootx .c] + 80}]+[expr {[winfo rooty .c] + 60}]
     }
     set ::tbx(born,$n) [clock milliseconds]
+    unset -nocomplain ::tbx(home,$n)
     bind $t <Configure> [list tbx_float_moved $n %W]
 }
 proc tbx_float_moved {n w} {
     if {$w ne ".tbf_$n"} return
     if {[info exists ::tbx_gathering] && $::tbx_gathering} return
-    set g +[winfo rootx $w]+[winfo rooty $w]
-    set moved [expr {![info exists ::tbx(g,$n)] || $::tbx(g,$n) ne $g}]
+    set g [tbx_float_pos $w]
+    regexp {^\+(-?\d+)\+(-?\d+)$} $g -> gx gy
+    # where the window system first put it, once it has settled after being made
+    if {[clock milliseconds] - $::tbx(born,$n) <= 1500 || ![info exists ::tbx(home,$n)]} {
+        set ::tbx(home,$n) [list $gx $gy]
+        set ::tbx(g,$n) $g
+        return
+    }
     set ::tbx(g,$n) $g
     catch {after cancel $::tbx_saveid}
     set ::tbx_saveid [after 600 tbx_save]
-    # moved by its title bar (the window system, not the grip): when it comes to rest at an
-    # edge of the window, dock it there, as AutoCAD does
-    if {$moved && [clock milliseconds] - $::tbx(born,$n) > 1500} {
+    # moved by its title bar (by you, not by the window system tidying up): when it comes to
+    # rest at an edge of the window, dock it there, as AutoCAD does
+    lassign $::tbx(home,$n) hx hy
+    if {abs($gx - $hx) + abs($gy - $hy) > 40} {
         catch {after cancel $::tbx(settle,$n)}
         set ::tbx(settle,$n) [after 700 [list tbx_float_settle $n]]
     }
@@ -834,9 +865,9 @@ proc tbx_float_settle {n} {
     if {![regexp {^\+(-?\d+)\+(-?\d+)$} $::tbx(g,$n) -> gx gy]} return
     set ww [expr {max([winfo width $w], [winfo reqwidth $w])}]
     set wh [expr {max([winfo height $w], [winfo reqheight $w])}]
-    # the point where it was held: the middle of its title bar, just above the toolbar
+    # the point where it was held: the middle of its title bar, at the top of its frame
     set X [expr {$gx + $ww / 2}]
-    set Y [expr {$gy - 8}]
+    set Y [expr {$gy + 10}]
     set tg [tbx_target $n $X $Y]
     if {[lindex $tg 0] eq "float"} {
         # also try its middle, and its nearer ends, for a toolbar parked across an edge
@@ -847,6 +878,14 @@ proc tbx_float_settle {n} {
     }
     lassign $tg d ln pos
     if {$d eq "float"} return
+    # a safety catch: if toolbars keep docking by themselves (some window systems keep moving
+    # windows about), stop doing it for this session
+    set now [clock milliseconds]
+    set recent {}
+    foreach t [expr {[info exists ::tbx_autodocks] ? $::tbx_autodocks : {}}] { if {$now - $t < 10000} { lappend recent $t } }
+    if {[llength $recent] >= 3 || [info exists ::tbx_autodock_off]} { set ::tbx_autodock_off 1; return }
+    lappend recent $now
+    set ::tbx_autodocks $recent
     set ::tbx(line,$n) $ln; set ::tbx(pos,$n) $pos
     set ::tbx(d,$n) $d
     set ::tbx(last,$n) $d
@@ -1660,6 +1699,7 @@ proc tbx_gather {} {
         if {$::tbx(d,$n) ne "float" || ![winfo exists .tbf_$n]} continue
         lappend moves $n +$x+$y
         set ::tbx(g,$n) +$x+$y
+        set ::tbx(home,$n) [list $x $y]
         wm geometry .tbf_$n +$x+$y
         incr x 34; incr y 34
         if {$y > [winfo rooty .c] + [winfo height .c] - 120} { set y [expr {[winfo rooty .c] + 30}]; incr x 120 }
@@ -1672,6 +1712,8 @@ proc tbx_gather_settle {moves} {
     foreach {n g} $moves {
         if {![winfo exists .tbf_$n]} continue
         set ::tbx(g,$n) $g
+        regexp {^\+(-?\d+)\+(-?\d+)$} $g -> gx gy
+        set ::tbx(home,$n) [list $gx $gy]
         wm geometry .tbf_$n $g
         raise .tbf_$n
     }
