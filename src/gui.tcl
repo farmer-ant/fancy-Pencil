@@ -757,7 +757,7 @@ bind .cmd.e <space> {if {!$::allowspace} {cmdsubmit; break}}
 bind .cmd.e <Up> {histmove -1; break}
 bind .cmd.e <Button-3> {cmdline_popup %X %Y; break}
 bind .h <Button-3> {hist_popup %X %Y; break}
-bind .cmd.e <Down> {histmove 1; break}
+bind .cmd.e <Down> {if {[llength $::promptkw]} {kwmenu} else {histmove 1}; break}
 bind .cmd.e <Delete> {if {[.cmd.e get] eq ""} {emit MENU ERASE; break}}
 bind .cmd.e <KeyPress> {if {$::grread} {if {"%A" ne ""} {emit G [scan "%A" %%c]}; break}}
 proc cmdsubmit {} {
@@ -805,6 +805,8 @@ proc dyn_draw {} {
     }
     set cx [expr {$x + 20}]; set cy [expr {$y + 22}]
     set font {Helvetica 9}
+    # a command with options: a down arrow says the Down key lists them
+    if {$prompt ne "" && [llength $::promptkw]} { append prompt "  \u25BE" }
     if {$prompt ne ""} {
         set id [.c create text [expr {$cx + 5}] [expr {$cy + 3}] -text $prompt -anchor nw -font $font -fill "#e8ecf1" -tags {tmp dyn}]
         lassign [.c bbox $id] a b c d
@@ -843,6 +845,34 @@ bind .cmd.e <Tab> {
     if {$::dynon && $::dyn ne "" && [lindex $::dyn 4] >= 0 && [lindex $::dyn 5] ne ""} {
         set t [.cmd.e get]; .cmd.e delete 0 end; emit DYNTAB $t; break
     }
+}
+# Down arrow while a command offers options (ZOOM: All, Center, ...): a menu of them at the
+# cursor, as with AutoCAD's dynamic input. Arrow keys and Enter pick, Escape closes it.
+proc kwmenu {} {
+    set m .kwm
+    catch {destroy $m}
+    menu $m -tearoff 0
+    set i 0; set act 0
+    foreach k $::promptkw {
+        lassign $k label def
+        $m add command -label [expr {$def ? "\u2022 $label" : "   $label"}] \
+            -command [list apply {{kw} {.cmd.e delete 0 end; .cmd.e insert 0 $kw; cmdsubmit}} $label]
+        if {$def} { set act $i }
+        incr i
+    }
+    bind $m <Escape> {%W unpost; focus .cmd.e; break}
+    bind $m <Unmap> {+after idle {catch {focus .cmd.e}}}
+    lassign [winfo pointerxy .] X Y
+    set cx [winfo rootx .c]; set cy [winfo rooty .c]
+    if {$X < $cx || $Y < $cy || $X > $cx + [winfo width .c] || $Y > $cy + [winfo height .c]} {
+        # the mouse is off the drawing: open it just above the command line
+        set X [winfo rootx .cmd.e]
+        set Y [expr {[winfo rooty .cmd.e] - [winfo reqheight $m]}]
+    } else {
+        incr X 16; incr Y 16
+    }
+    tk_popup $m $X $Y
+    $m activate $act
 }
 proc histmove {d} {
     set n [llength $::cmdhist]
@@ -910,8 +940,10 @@ proc hist {s} {
     .h see end
     .h configure -state disabled
 }
-proc setprompt {s spaces} {
+set ::promptkw {}
+proc setprompt {s spaces {kws {}}} {
     .cmd.p configure -text $s
+    set ::promptkw $kws
     set ::allowspace $spaces
     focus .cmd.e
 }

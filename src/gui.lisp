@@ -1342,6 +1342,23 @@ several), else the current layer. Only shows it; the current layer is not change
               (gui-highlight new t)
               (refresh-grips) (refresh-palette)))))))
 
+(defun prompt-option-list (req)
+  "The options of prompt REQ, for the Down-arrow menu: a Tcl list of {label default-p}. They are
+the [A/B/C] list in the prompt, as AutoCAD shows them; failing that, the keywords asked for."
+  (let* ((prompt (or (inreq-prompt req) ""))
+         (kws (inreq-keywords req))
+         (kws (if (stringp kws) (parse-keywords kws) kws))
+         (lb (position #\[ prompt :from-end t)) (rb (and lb (position #\] prompt :start lb)))
+         (opts (if (and rb kws)
+                   (remove-if (lambda (o) (or (zerop (length o)) (find #\{ o) (find #\} o)))
+                              (mapcar (lambda (o) (string-trim " " o)) (split-string (subseq prompt (1+ lb) rb) #\/)))
+                   (remove-duplicates (remove-if (lambda (k) (< (length k) 2)) kws)
+                                      :test #'string-equal :from-end t)))
+         ;; the default, as AutoCAD shows it: <Name> at the end of the prompt
+         (lt (position #\< prompt :from-end t)) (gt (and lt (position #\> prompt :start lt)))
+         (def (and gt (string-trim " " (subseq prompt (1+ lt) gt)))))
+    (format nil "~{~A~^ ~}" (mapcar (lambda (k) (format nil "{{~A} ~D}" k (if (and def (string-equal k def)) 1 0))) opts))))
+
 (defun gui-acquire (req)
   (let ((*req* req) (*acq-result* nil) (*dyn-lock* (list nil nil)) (*dyn-active* 0))
     (when (/= *drawn-modcount* (drawing-modcount *dwg*)) (gui-regen) (gui-sync))
@@ -1351,7 +1368,7 @@ several), else the current layer. Only shows it; the current layer is not change
       (refresh-tabs)
       (refresh-grips)
       (refresh-palette))
-    (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
+    (tk "setprompt ~A ~D ~A" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0) (tq (prompt-option-list req)))
     (when *mouse-in* (update-cursor *mouse-sx* *mouse-sy*))
     (draw-temp)
     (setf *prompt-owner* req)
@@ -1360,7 +1377,7 @@ several), else the current layer. Only shows it; the current layer is not change
                do (handle-event (next-event))
                   ;; a nested prompt (window corner, grip edit...) changed the label: put ours back
                   (unless (or *acq-result* (eq *prompt-owner* req))
-                    (tk "setprompt ~A ~D" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0))
+                    (tk "setprompt ~A ~D ~A" (tq (string-right-trim '(#\Newline) (inreq-prompt req))) (if (inreq-spaces req) 1 0) (tq (prompt-option-list req)))
                     (setf *prompt-owner* req)
                     (draw-temp)))
       (setf *snap-bit* nil))
