@@ -230,6 +230,7 @@ TOOLBAROPTIONS	TBOPTIONS	Opens the Toolbar Options window: icon size, line weigh
 TORUS	TOR	Creates a 3D solid torus (a ring), lying in the working plane.
 TRIM	TR	Trims objects to meet the edges of other objects.
 TXT2MTXT	T2M	Express: combines single-line text into one MTEXT object.
+TXTEXP	EXPLODETEXT TEXTEXPLODE	Explodes text into closed polylines tracing each letter's outline (Express Tools).
 U		Reverses the most recent operation.
 UCS	WORKPLANE WP	Sets the working plane: through three points, on an object's plane, at an origin, turned about an axis, facing the view, or back to World.
 UNDO		Reverses the effect of commands.

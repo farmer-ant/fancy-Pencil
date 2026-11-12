@@ -522,7 +522,10 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
 (defcmd "EXPLODE" ("X") "Breaks a compound object into its component objects."
   (let ((ents (get-selection)) (n 0))
     (dolist (e ents)
-      (let ((parts (explode-data (ent-data e))))
+      (let* ((data (ent-data e))
+             (parts (cond ((equal (dxf 0 data) "MTEXT") (mtext-to-text-entities data))      ; lines of TEXT
+                          ((text-entity-p data) (text-outline-entities data))              ; letter outlines
+                          (t (explode-data data)))))
         (if parts
             (progn (delete-entity e) (dolist (p parts) (add-entity (rem-dxf 5 p))) (incf n))
             (out (format nil "1 object could not be exploded.~%")))))
