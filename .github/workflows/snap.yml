@@ -25,6 +25,26 @@ jobs:
           name: fancypencil-snap
           path: ${{ steps.build.outputs.snap }}
 
+      - name: Test the snap (install it, run AutoLISP, open the window)
+        run: |
+          set -x
+          sudo snap install --dangerous "${{ steps.build.outputs.snap }}"
+          snap connections fancypencil || true
+          # AutoLISP at the command line, no window
+          OUT=$(printf '(princ (strcat "AUTOLISP-OK " (itoa (+ 2 3)) " " (getvar "acadver")))\n' | timeout 600 fancypencil --tty 2>&1 | tail -20)
+          echo "$OUT"
+          echo "::notice title=tty::$(echo "$OUT" | grep -o 'AUTOLISP-OK.*' | head -1)"
+          echo "$OUT" | grep -q "AUTOLISP-OK 5" || { echo "::error title=tty::$(echo "$OUT" | tail -5 | tr '\n' ' ')"; exit 1; }
+          # the window, on a virtual screen
+          sudo apt-get install -y -q xvfb x11-utils >/dev/null
+          Xvfb :99 -screen 0 1600x1000x24 & sleep 2
+          DISPLAY=:99 fancypencil > /tmp/gui.log 2>&1 & sleep 45
+          WIN=$(DISPLAY=:99 xwininfo -root -tree | grep -i -m3 "fancy" | tr -s ' ' | tr '\n' ';')
+          LOG=$(cat ~/snap/fancypencil/current/.cache/fancypencil.log /tmp/gui.log 2>/dev/null | tail -8 | tr '\n' ' ')
+          echo "::notice title=gui windows::${WIN:-none}"
+          echo "::notice title=gui log::${LOG:-empty}"
+          [ -n "$WIN" ] || { echo "::error title=gui::no Fancy Pencil window"; exit 1; }
+
       - name: Publish to the Snap Store (stable)
         if: ${{ env.SNAPCRAFT_STORE_CREDENTIALS != '' }}
         uses: snapcore/action-publish@v1
