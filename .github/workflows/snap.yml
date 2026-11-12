@@ -1,0 +1,33 @@
+# Builds Fancy Pencil's Snap Store package on every change, and publishes it to the store's
+# stable channel when the repository has the SNAPCRAFT_STORE_CREDENTIALS secret.
+name: Snap package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  snap:
+    runs-on: ubuntu-24.04
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the snap
+        id: build
+        uses: snapcore/action-build@v1
+
+      - name: Keep the built snap
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancypencil-snap
+          path: ${{ steps.build.outputs.snap }}
+
+      - name: Publish to the Snap Store (stable)
+        if: ${{ env.SNAPCRAFT_STORE_CREDENTIALS != '' }}
+        uses: snapcore/action-publish@v1
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: stable
