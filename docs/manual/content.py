@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.12"
+VERSION = "0.4.13"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -550,7 +550,8 @@ ch(
 ("h2", "Turning toolbars on and moving them"),
 ("ul", [
  "**View > Toolbars**, or right-click any toolbar, to turn toolbars on and off. **Reset Toolbar Layout** brings back the standard one.",
- "Drag a toolbar by its dotted grip. Drop it near an edge to dock it there - top, bottom, left or right - or in the middle of the drawing to float it.",
+ "Drag a toolbar by its dotted grip. Drop it near an edge to dock it there - top, bottom, left or right, even just outside the window's edge - or in the middle of the drawing to float it.",
+ "**Bring Floating Toolbars Back** (View > Toolbars) gathers every floating toolbar into the top left of the drawing, if any have wandered off or ended up behind other windows.",
 ]),
 ("h2", "Toolbar Options"),
 ("p", "**Toolbar Options** (View > Toolbars, or `TOOLBAROPTIONS`) stays open while you work: sliders for icon "
