@@ -564,6 +564,8 @@ proc tbx_layout_dock {d} {
     update idletasks
     set size 0
     foreach w [winfo children $D] { incr size [expr {$vert ? [winfo reqwidth $w] + 2 : [winfo reqheight $w] + 2}] }
+    # an empty dock: 1, not 0 - Tk takes 0 as "no wish" and keeps the old size
+    set size [expr {max(1, $size)}]
     if {$vert} { $D configure -width $size } else { $D configure -height $size }
 }
 proc tbx_make {w n vert maxrun} {
@@ -1775,3 +1777,42 @@ proc tbx_first_layout {} {
     tbx_layout
 }
 after idle tbx_first_layout
+
+# ---------------------------------------------------------------- Clean Screen (Ctrl+0)
+# Hides the ribbon and every toolbar, so the drawing gets the whole window; again to bring
+# them back. Like AutoCAD's Clean Screen.
+set ::clean_screen 0
+proc cleanscreen {{on toggle}} {
+    if {$on eq "toggle"} { set on [expr {!$::clean_screen}] }
+    if {$on == $::clean_screen} return
+    if {$on} {
+        set ::clean_saved {}
+        foreach w {.tb .dock_t .dock_b .dock_l .dock_r} {
+            if {![winfo exists $w] || [catch {pack info $w} info]} continue
+            set parent [dict get $info -in]
+            set slaves [pack slaves $parent]
+            set i [lsearch -exact $slaves $w]
+            # remember who came after it, to put it back in the same place
+            set after [lrange $slaves [expr {$i + 1}] end]
+            lappend ::clean_saved [list $w $info $after]
+        }
+        foreach rec $::clean_saved { pack forget [lindex $rec 0] }
+        set ::clean_floats {}
+        foreach n $::tbx_names {
+            if {[winfo exists .tbf_$n] && [winfo ismapped .tbf_$n]} { lappend ::clean_floats $n; wm withdraw .tbf_$n }
+        }
+    } else {
+        foreach rec [lreverse $::clean_saved] {
+            lassign $rec w info after
+            set before ""
+            foreach a $after { if {[winfo exists $a] && ![catch {pack info $a}]} { set before $a; break } }
+            if {$before ne ""} { pack $w {*}$info -before $before } else { pack $w {*}$info }
+        }
+        foreach n $::clean_floats { if {[winfo exists .tbf_$n]} { wm deiconify .tbf_$n } }
+        set ::clean_saved {}; set ::clean_floats {}
+    }
+    set ::clean_screen $on
+}
+bind all <Control-Key-0> {cleanscreen; break}
+.mb.view insert [.mb.view index "Toolbars"] checkbutton -label "Clean Screen (Ctrl+0)" -variable ::clean_screen_menu -command {cleanscreen $::clean_screen_menu}
+trace add variable ::clean_screen write {apply {{a b c} { set ::clean_screen_menu $::clean_screen }}}

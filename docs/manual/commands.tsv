@@ -38,6 +38,8 @@ CHAMFER	CHA	Bevels the edges of objects.
 CHANGELAYER	CL LAYCHANGE	Moves selected objects to a layer you choose from a list.
 CHPROP	CHANGE	Changes the layer or color of objects.
 CIRCLE	C	Creates a circle.
+CLEANSCREENOFF		Brings the ribbon and toolbars back after Clean Screen (Ctrl+0).
+CLEANSCREENON		Clean Screen: hides the ribbon and all toolbars so the drawing has the whole window (Ctrl+0).
 CLEARRECENT		Empties the recent files list.
 CLOSE		Closes the current drawing.
 CLOSEALL		Closes all open drawings.
