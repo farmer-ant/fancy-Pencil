@@ -210,6 +210,7 @@ SPLINE	SPL	Draws a smooth curve through (Fit) or controlled by (CV) the points y
 SSX		Express: selects objects matching a picked object's type, layer and color.
 STLIN	IMPORT3D OBJIN	Brings an STL or OBJ file (from a 3D model or a printing site) in as a solid.
 STLOUT		Saves solids as an STL file for 3D printing.
+STRAYS	FINDSTRAYS	Finds objects lying far from the rest of the drawing, or far too big for it, to move back or erase.
 STRETCH	S	Stretches objects crossed by a selection window.
 STRUTS	STRUT WIRESOLID	Turns the lines of a wireframe into solid bars the length of each line, with a rectangle, polygon, circle or drawn-polyline section. Polylines with arcs, arcs, circles and splines get one strut that follows the curve.
 STYLE	DDSTYLE ST	Creates, modifies, or sets the current text style.

@@ -359,6 +359,7 @@ mcmd .mb.tools "Properties  (Ctrl+1)" PROPERTIES
 mcmd .mb.tools "Quick Properties" QUICKPROPERTIES
 mcmd .mb.tools "Command History  (F2)" HISTORY
 mcmd .mb.tools "QuickCalc  (Ctrl+8)" QUICKCALC
+mcmd .mb.tools "Find Stray Objects" STRAYS
 mcmd .mb.tools "Image Manager..." IMAGE
 mcmd .mb.tools "Load AutoLISP..." APPLOAD
 menu .mb.tools.alias -tearoff 0

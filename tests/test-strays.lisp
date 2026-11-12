@@ -1,0 +1,30 @@
+;; STRAYS (finds far-away and giant objects) and ZOOM Object.
+;; Run: sbcl --non-interactive --load load.lisp --load tests/test-strays.lisp
+(in-package :fancy-pencil)
+(setf *ui* :tty *output-fn* (lambda (s) s))
+(load-aliases)
+(current-doc)
+(defvar *pass* 0) (defvar *fail* 0)
+(defmacro chk (name form expect)
+  `(let ((v (handler-case ,form (error (c) (format nil "ERROR ~A" c)))))
+     (if (equalp v ,expect) (incf *pass*) (incf *fail*))
+     (format t "~:[FAIL~;ok  ~] ~A: ~S~%" (equalp v ,expect) ,name v)))
+(defun al (s) (alisp-eval-string s))
+
+;; a little building, with a copy flung 1e8 up and a circle a million across
+(al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) \"c\")")
+(al "(command \"circle\" '(5 5) 3)")
+(al "(command \"line\" '(0 0 100000000) '(10 0 100000000) \"\")")
+(al "(command \"line\" '(0 10 100000000) '(10 10 100000000) \"\")")
+(al "(command \"circle\" '(5 5) 600000)")
+(multiple-value-bind (groups giants) (find-strays)
+  (chk "two groups" (mapcar #'length groups) '(5 2))
+  (chk "one giant" (mapcar #'ent-type giants) '("CIRCLE"))
+  (chk "the far group is the high one" (every (lambda (e) (> (pz (pt3 (dxf 10 (ent-data e)))) 1d7)) (second groups)) t))
+(chk "STRAYS picks a group into the selection" (progn (al "(command \"strays\" \"2\" \"\")") (length *pickfirst*)) 2)
+(al "(command \"move\" \"p\" \"\" '(0 0 0) '(0 0 -100000000))")
+(chk "moved back: one group" (length (find-strays)) 1)
+(chk "nothing far when tidy" (progn (al "(command \"erase\" \"all\" \"\")") (al "(command \"line\" '(0 0) '(1 1) \"\")") (length (find-strays))) 1)
+
+(format t "~%~D passed, ~D failed~%" *pass* *fail*)
+(sb-ext:exit :code (if (zerop *fail*) 0 1))
