@@ -87,7 +87,7 @@ Version: $VER
 Section: graphics
 Priority: optional
 Architecture: all
-Depends: sbcl, tk
+Depends: sbcl, tk, fontconfig
 Recommends: imagemagick, poppler-utils
 Installed-Size: $SIZE
 Maintainer: Fancy Pencil <fancypencil@localhost>

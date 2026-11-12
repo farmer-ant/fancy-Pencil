@@ -3,7 +3,7 @@
 # Lisp sends Tcl commands on stdin; this script reports events on stdout,
 # one per line (see `emit`).
 
-package require Tk 8.5
+package require Tk 8.5-
 catch {package require tile}
 
 set ::buf ""
@@ -381,7 +381,7 @@ foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pic
                "Layers On" LAYON "Layers Thaw" LAYTHW "Layer Lock (pick)" LAYLCK "Layer Unlock (pick)" LAYULK
                "Change to Current Layer" LAYCUR "Match Object Layer" LAYMCH "Merge Layers" LAYMRG "Delete Layer" LAYDEL
                "Overkill (delete duplicates)" OVERKILL "Break Line Symbol" BREAKLINE "Extended Trim" EXTRIM
-               "Multiple Pedit" MPEDIT "Text Case" TCASE "Text Number (TCOUNT)" TCOUNT "Text to MText" TXT2MTXT
+               "Multiple Pedit" MPEDIT "Text Case" TCASE "Text Number (TCOUNT)" TCOUNT "Text to MText" TXT2MTXT "Explode Text" TXTEXP
                "Move/Copy/Rotate (MOCORO)" MOCORO "Copy Multiple (COPYM)" COPYM "Flatten" FLATTEN
                "Select Similar" SELECTSIMILAR "List nested (XLIST)" XLIST "Burst" BURST} { mcmd .mb.express $l $c }
 mcmd .mb.help "User Manual (F1)" MANUAL

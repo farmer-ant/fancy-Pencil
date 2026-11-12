@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.16"
+VERSION = "0.4.17"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -278,7 +278,7 @@ ch(
  "**OFFSET** (`O`): a distance, then the object and the side - a parallel copy.",
  "**FILLET** (`F`): two lines (or a polyline with `P`) joined by an arc of the fillet radius (`R`). Radius 0 makes a sharp corner.",
  "**CHAMFER** (`CHA`): the same with a straight cut.",
- "**JOIN** (`J`) joins touching pieces into one; **EXPLODE** (`X`) breaks polylines, blocks and dimensions into their parts; **PEDIT** (`PE`) edits polylines.",
+ "**JOIN** (`J`) joins touching pieces into one; **EXPLODE** (`X`) breaks polylines, blocks, dimensions and text into their parts; **PEDIT** (`PE`) edits polylines.",
 ]),
 ("h2", "Changing properties"),
 ("ul", [
@@ -355,6 +355,13 @@ ch(
 ("p", "**SPELL** (`SP`) checks text, MTEXT, attributes and dimension text, with Change, Change All, Ignore "
       "and Add to Dictionary. While typing, unknown words are underlined in red; right-click one for "
       "suggestions. `Shift+F3` in the editor changes the case of the selected words."),
+("h2", "Text into outlines (TXTEXP)"),
+("p", "**TXTEXP** (Express > Explode Text) turns text into closed polylines that trace each letter, in the "
+      "same font you see on the screen, with the capitals as tall as the text height. Use it for "
+      "lettering to cut, engrave or extrude: **EXTRUDE** the outlines to make raised letters. "
+      "**EXPLODE** (`X`) does the same to TEXT; on MTEXT it first makes one TEXT for each line, so explode "
+      "twice to get outlines. The outlines keep the text's layer and color. Undo puts the text back."),
+("img", "txtexp-crop.png", 4.0, "Above, ordinary text; below, the same text after TXTEXP."),
 )
 
 # ------------------------------------------------------------------ 10

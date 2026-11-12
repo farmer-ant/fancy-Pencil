@@ -360,3 +360,22 @@ width (41) changes, and the insertion point moves to stay at its place in the bo
          (nw (- nr nl))
          (ix (+ nl (* nw colf))))
     (set-dxf 41 (d nw) (set-dxf 10 (pt3 (pt (+ (px p) (* ix (cos rot))) (+ (py p) (* ix (sin rot))) (pz p))) data))))
+
+;;; TXTEXP: text into letter outlines (the shapes and layout are in text3d.lisp)
+(defcmd "TXTEXP" ("TEXTEXPLODE" "EXPLODETEXT") "Explodes text into closed polylines tracing each letter's outline (Express Tools)."
+  (let ((ents (remove-if-not (lambda (e) (text-entity-p (ent-data e))) (get-selection "Select text to explode: ")))
+        (made 0) (done 0))
+    (if (null ents)
+        (out (format nil "No text selected.~%"))
+        (with-undo-group
+            (lambda ()
+              (dolist (e ents)
+                (let ((parts (text-outline-entities (ent-data e))))
+                  (when parts
+                    (delete-entity e)
+                    (dolist (p parts) (add-entity p) (incf made))
+                    (incf done))))))
+        )
+    (when (plusp done)
+      (when (gui-p) (clear-geom-cache) (gui-regen))
+      (out (format nil "~D text object~:P exploded into ~D outline~:P.~%" done made)))))

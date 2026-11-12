@@ -400,6 +400,19 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
                              (let ((s (concatenate 'string vert horiz))) (if (string= s "") "center" s)))))
                   "left")))))
 
+(defun text-baseline-shift (data font h px-size rot x y)
+  "Screen point X,Y moved so that Tk, anchoring the text's box there, puts the baseline where
+AutoCAD does for the justification."
+  (let* ((h72 (or (dxf 72 data) 0)) (h73 (or (dxf 73 data) 0))
+         (hp (* h *vscale*)) (asc (* px-size (ttf-ascent font))) (desc (* px-size (ttf-descent font)))
+         ;; where the baseline goes, above the point (screen pixels)
+         (base (cond ((= h72 4) (- (/ hp 2))) (t (case h73 (1 (* 0.2d0 hp)) (2 (- (/ hp 2))) (3 (- hp)) (t 0d0)))))
+         ;; where Tk's anchor sits, above the baseline
+         (ref (let ((a (text-anchor data)))
+                (case (char a 0) (#\n asc) (#\s (- desc)) (t (/ (- asc desc) 2)))))
+         (up (+ base ref)))
+    (values (- x (* up (sin rot))) (- y (* up (cos rot))))))
+
 (defun render-text (data color tags hl)
   (when (projected-view-p)
     ;; seen at an angle, text is drawn with line strokes lying in its plane
@@ -407,12 +420,18 @@ negative = that percentage of it, positive = drawing units (as in AutoCAD)."
       (loop for pc in (ignore-errors (text-stroke-pieces data))
             append (render-piece (cons :seg (rest pc)) (if hl "#8fc4ff" color) tags))))
   (let* ((h (text-effective-height data))
-         (px-size (round (/ (* h *vscale*) 0.72d0)))
+         ;; TEXT in a font file we can read: capitals exactly H high, standing on the baseline
+         ;; where AutoCAD puts it (and where TXTEXP's outlines go)
+         (font (and (not (equal (dxf 0 data) "MTEXT")) (ignore-errors (text-font data))))
+         (px-size (round (/ (* h *vscale*) (if font (ttf-cap-height font) 0.72d0))))
          (p (text-insertion data))
          (rot (or (dxf 50 data) 0d0))
          (s (text-string-display (or (dxf 1 data) ""))))
     (when (and p (plusp (length s)))
       (multiple-value-bind (x y) (w->s p)
+        (when (and font (<= 3 px-size 3000))
+          (multiple-value-bind (x2 y2) (text-baseline-shift data font h px-size rot x y)
+            (setf x x2 y y2)))
         (cond
           ((< px-size 3)
            ;; too small to read: a short stroke for each line, inside the text's own box (so a
@@ -1524,7 +1543,7 @@ several), else the current layer. Only shows it; the current layer is not change
                (push ev *event-buffer*)))
   (setf *event-buffer* (nreverse *event-buffer*))
   ;; installed font families, so text in a missing font falls back to a look-alike
-  (setf *tk-families* (ignore-errors (split-string (tk-ask "join [font families] \x1f") (code-char 31))))
+  (setf *tk-families* (ignore-errors (split-string (tk-ask "join [font families] [format %c 31]") (code-char 31))))
   (gui-sync)
   (refresh-tabs t))
 

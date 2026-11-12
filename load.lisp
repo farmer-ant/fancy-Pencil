@@ -5,7 +5,7 @@
 (in-package :fancy-pencil-loader)
 
 (defparameter *root* (make-pathname :name nil :type nil :defaults *load-truename*))
-(defparameter *files* '("package" "geom" "db" "plane" "mesh" "vector-font" "text3d" "textstyle" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
+(defparameter *files* '("package" "geom" "db" "plane" "mesh" "vector-font" "ttf" "text3d" "textstyle" "ltype" "hatch" "dxf" "dxf2000" "alisp" "input" "gui" "grips"
                          "commands" "dims" "leader" "mleader" "modify" "modify2" "cmds2" "utilcmds" "dwg" "props" "express" "textcmds" "docs" "uicmds" "clip" "matchprop" "hover" "prefs" "recent" "blockedit" "views" "solids" "csg" "visual" "spell" "plot" "layouts" "massprop" "draworder" "tiles" "snap3d" "raster" "history" "helix" "print3d" "imgview" "surfaces" "acis" "zip" "dwf" "dgn" "underlay" "calc" "spline" "richtext" "navigate" "polyhedra" "struts" "autosave" "main"))
 
 ;; A compiled file is used only if it was built from exactly this source file: each one has a
