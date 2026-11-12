@@ -1188,3 +1188,8 @@ a DXF next to it instead and leave the DWG untouched."
       (list (pt (px (first c)) (py (first c))) (pt (px (third c)) (py (third c)))))))
 
 (defun load-block-from-dxf (name) (let ((*ucs-off* t)) (%load-block-from-dxf name)))
+
+(defcmd "CLEANSCREENON" () "Clean Screen: hides the ribbon and all toolbars so the drawing has the whole window (Ctrl+0)."
+  (when (gui-p) (tk "cleanscreen 1")))
+(defcmd "CLEANSCREENOFF" () "Brings the ribbon and toolbars back after Clean Screen (Ctrl+0)."
+  (when (gui-p) (tk "cleanscreen 0")))

@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.15"
+VERSION = "0.4.16"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -552,6 +552,7 @@ ch(
  "**View > Toolbars**, or right-click any toolbar, to turn toolbars on and off. **Reset Toolbar Layout** brings back the standard one.",
  "Drag a toolbar by its dotted grip. Drop it near an edge to dock it there - top, bottom, left or right, even just outside the window's edge - or in the middle of the drawing to float it.",
  "A floating toolbar can also be dragged by its title bar: let go of it at an edge of the window and it docks there.",
+ "**Clean Screen** (`Ctrl+0`, or View > Clean Screen) hides the ribbon and every toolbar so the drawing gets the whole window; `Ctrl+0` again brings them back.",
  "**Bring Floating Toolbars Back** (View > Toolbars) gathers every floating toolbar into the top left of the drawing, if any have wandered off or ended up behind other windows.",
 ]),
 ("h2", "Toolbar Options"),
@@ -657,6 +658,7 @@ ch(
  ["`Ctrl+Shift+C`", "COPYBASE", "Copy with a base point."],
  ["`Ctrl+Shift+V`", "PASTEBLOCK", "Paste as a block."],
  ["`Ctrl+A`", "SELECTALL", "Select everything."],
+ ["`Ctrl+0`", "CLEANSCREENON", "Clean Screen: hide the ribbon and toolbars (again to show)."],
  ["`Ctrl+1`", "PROPERTIES", "Properties palette."],
  ["`Ctrl+8`", "QUICKCALC", "Calculator."],
  ["`Ctrl+Tab`", "", "Next drawing tab (`Ctrl+Shift+Tab`: previous)."],
