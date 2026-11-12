@@ -736,6 +736,18 @@ proc tbx_target {n X Y} {
     if {$d eq "" && [tbx_inside . $X $Y]} {
         if {$Y < [winfo rooty .main]} { set d top } elseif {$Y >= [winfo rooty .main] + [winfo height .main]} { set d bottom } else { return float }
     }
+    if {$d eq ""} {
+        # just outside an edge of the window (within about an inch): dock on that edge
+        set x0 [winfo rootx .]; set y0 [winfo rooty .]
+        set x1 [expr {$x0 + [winfo width .]}]; set y1 [expr {$y0 + [winfo height .]}]
+        set g 110
+        if {$X >= $x0 && $X < $x1} {
+            if {$Y >= $y1 && $Y < $y1 + $g} { set d bottom } elseif {$Y < $y0 && $Y >= $y0 - $g} { set d top }
+        }
+        if {$d eq "" && $Y >= $y0 && $Y < $y1} {
+            if {$X >= $x1 && $X < $x1 + $g} { set d right } elseif {$X < $x0 && $X >= $x0 - $g} { set d left }
+        }
+    }
     if {$d eq ""} { return float }
     # which row / column of that dock, and where along it
     set D [tbx_dockw $d]
@@ -789,13 +801,19 @@ proc tbx_float {n} {
     set per [expr {$cnt <= 12 ? $cnt : int(ceil(sqrt($cnt * 2.0)))}]
     tbx_make $t.tb $n 0 [expr {max(1, $per)}]
     pack $t.tb
-    if {[info exists ::tbx(g,$n)]} { wm geometry $t $::tbx(g,$n) } else {
+    if {[info exists ::tbx(g,$n)] && [regexp {^\+(-?\d+)\+(-?\d+)$} $::tbx(g,$n) -> gx gy]} {
+        # keep it on the screen (a smaller screen, or a drop at the very edge)
+        set gx [expr {max(0, min($gx, [winfo screenwidth .] - 60))}]
+        set gy [expr {max(0, min($gy, [winfo screenheight .] - 60))}]
+        wm geometry $t +$gx+$gy
+    } else {
         wm geometry $t +[expr {[winfo rootx .c] + 80}]+[expr {[winfo rooty .c] + 60}]
     }
     bind $t <Configure> [list tbx_float_moved $n %W]
 }
 proc tbx_float_moved {n w} {
     if {$w ne ".tbf_$n"} return
+    if {[info exists ::tbx_gathering] && $::tbx_gathering} return
     set ::tbx(g,$n) +[winfo rootx $w]+[winfo rooty $w]
     catch {after cancel $::tbx_saveid}
     set ::tbx_saveid [after 600 tbx_save]
@@ -1597,6 +1615,34 @@ proc tbx_reset {} {
     tbx_defaults
     tbx_layout
 }
+# every floating toolbar back inside the window, in a neat cascade at the drawing's top left
+proc tbx_gather {} {
+    update
+    set ::tbx_gathering 1
+    set x [expr {[winfo rootx .c] + 30}]; set y [expr {[winfo rooty .c] + 30}]
+    set moves {}
+    foreach n $::tbx_names {
+        if {$::tbx(d,$n) ne "float" || ![winfo exists .tbf_$n]} continue
+        lappend moves $n +$x+$y
+        set ::tbx(g,$n) +$x+$y
+        wm geometry .tbf_$n +$x+$y
+        incr x 34; incr y 34
+        if {$y > [winfo rooty .c] + [winfo height .c] - 120} { set y [expr {[winfo rooty .c] + 30}]; incr x 120 }
+    }
+    update idletasks
+    # the window system may still report the old places for a moment: put them right again
+    after 250 [list tbx_gather_settle $moves]
+}
+proc tbx_gather_settle {moves} {
+    foreach {n g} $moves {
+        if {![winfo exists .tbf_$n]} continue
+        set ::tbx(g,$n) $g
+        wm geometry .tbf_$n $g
+        raise .tbf_$n
+    }
+    update idletasks
+    after 250 { set ::tbx_gathering 0; tbx_save }
+}
 proc tbx_menus_fill {m} {
     $m delete 0 end
     set sub 0
@@ -1608,6 +1654,7 @@ proc tbx_menus_fill {m} {
     $m add separator
     $m add command -label "Show All Main Toolbars" -command tbx_showmain
     $m add command -label "Hide All" -command tbx_hideall
+    $m add command -label "Bring Floating Toolbars Back" -command tbx_gather
     $m add command -label "Reset Toolbar Layout" -command tbx_reset
     $m add separator
     $m add command -label "Toolbar Options (size, colors)..." -command tbx_options
