@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.17"
+VERSION = "0.4.18"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -136,7 +136,7 @@ ch(
 ("h2", "Typing commands"),
 ("ul", [
  "Type a command or its alias and press `Enter` or `Space`: `LINE` or `L`, `CIRCLE` or `C`, `TRIM` or `TR`.",
- "Answer the prompts the same way. Options are shown in square brackets: `[Close/Undo]`. Type the capital letters of one (`C`, `U`) to choose it, or click it.",
+ "Answer the prompts the same way. Options are shown in square brackets: `[Close/Undo]`. Type the capital letters of one (`C`, `U`) to choose it, or click it. Or press `Down` (the arrow key) for a menu of them at the cursor; pick one with the arrow keys and `Enter`, or click it.",
  "The value in angle brackets is the default: `<1.0000>`. Press `Enter` to accept it.",
  "`Enter` on an empty prompt repeats the last command. `Esc` cancels. While a command runs, right-click is `Enter`.",
  "Menus, the ribbon and toolbar icons type the command for you; the prompts are the same.",
@@ -684,6 +684,7 @@ ch(
  ["Middle-drag", "PAN", "Pan."],
  ["Middle double-click", "ZOOM E", "Zoom to everything."],
  ["`Shift`+middle-drag", "3DORBIT", "Orbit, at any time."],
+ ["`Down` arrow", "", "During a command: a menu of its options. At the Command prompt: earlier commands (with `Up`)."],
  ["Right-click", "", "Menu at the Command prompt; Enter during a command."],
  ["`Shift`+right-click", "", "One-time object snap menu."],
 ]),
