@@ -219,8 +219,20 @@
                 (push (list :seg (uv p 0) (uv p th)) out))))))
       out)))
 
+(defvar *view-bbox-cache* (make-hash-table :test #'eq #+sbcl :weakness #+sbcl :key)
+  "Each object's view extent, kept until the object or the view changes: data -> (view . box).")
+
 (defun entity-view-bbox (e)
   "E's extent in view coordinates (u0 v0 u1 v1), from its plan extent and height."
+  (let* ((data (ent-data e))
+         ;; (any change to the drawing, such as a block redefined, starts afresh)
+         (key (cons (drawing-modcount *dwg*) (multiple-value-list (view-axes))))
+         (hit (gethash data *view-bbox-cache*)))
+    (if (and hit (equalp (car hit) key))
+        (cdr hit)
+        (cdr (setf (gethash data *view-bbox-cache*) (cons key (entity-view-bbox-1 e)))))))
+
+(defun entity-view-bbox-1 (e)
   (let ((b (ignore-errors (entity-bbox e))))
     (when b
       (multiple-value-bind (elev th) (view-object-height (ent-data e))
@@ -282,12 +294,12 @@
   "Distance on the screen (in drawing units) between world points A and B."
   (if (projected-view-p) (dist2d (w->uv a) (w->uv b)) (dist2d a b)))
 
-(defun view-osnap-candidates (p bits tol)
+(defun view-osnap-candidates (p bits tol &optional base)
   "Object snap candidates near P measured on the screen: endpoints, midpoints, centres, nodes,
 quadrants and nearest, at the objects' real heights (tops of thick objects too)."
-  (let ((q (w->uv p)) (cands nil))
+  (let* ((q (w->uv p)) (cands nil) (ents (view-candidates q tol)))
     (flet ((add (w bit) (when (and w (<= (dist2d (w->uv w) q) tol)) (push (cons w bit) cands))))
-      (dolist (e (view-candidates q tol) cands)
+      (dolist (e ents)
         ;; solids and circles in other planes: centres and quadrants of their round shapes
         (when (and (fboundp 'round-snap-candidates) (member (ent-type e) '("POLYFACE" "CIRCLE" "ARC") :test #'equal))
           (setf cands (append (funcall 'round-snap-candidates e p bits tol #'w->uv) cands)))
@@ -310,7 +322,11 @@ quadrants and nearest, at the objects' real heights (tops of thick objects too).
                        (when (logtest bits 1) (dolist (w (piece-ends pc)) (add (up w z0) 1)))
                        (when (logtest bits 2) (dolist (w (piece-mids pc)) (add (up w z0) 2)))
                        (when (logtest bits 4) (push (cons (up (second pc) z0) 4) cands))
-                       (when (logtest bits 16) (dolist (w (piece-quads pc)) (add (up w z0) 16)))))))))))))))
+                       (when (logtest bits 16) (dolist (w (piece-quads pc)) (add (up w z0) 16))))))))))))
+      ;; edges meeting in space, perpendiculars, and the faces of solids
+      (setf cands (append (view-int-perp-candidates ents p bits base tol) cands))
+      (setf cands (append (face-snap-candidates ents p bits (find 512 cands :key #'cdr)) cands))
+      cands)))
 
 (defun view-work-point (sx sy base)
   "The world point under screen pixel SX,SY in a 3D view, on the work plane through BASE: the

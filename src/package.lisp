@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.4.21")
+(defparameter *version* "0.4.22")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -48,3 +48,4 @@ UP the world directions that point right and up on the screen and DIR pointing a
 (defvar *command-word* "" "The command as typed (\"-HATCH\" for the command-line version of HATCH).")
 (defvar *quick-shown* nil "True while the Quick Properties panel is open.")
 (defvar *undo-ran* 0 "How many times U/UNDO/REDO have run (never rebound, so every thread sees it).")
+(defvar *face-centers* nil "Centre snaps of flat solid faces under the cursor (count as close, after edges).")
