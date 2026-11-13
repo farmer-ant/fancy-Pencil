@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.19"
+VERSION = "0.4.20"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -278,7 +278,7 @@ ch(
  "**OFFSET** (`O`): a distance, then the object and the side - a parallel copy.",
  "**FILLET** (`F`): two lines (or a polyline with `P`) joined by an arc of the fillet radius (`R`). Radius 0 makes a sharp corner.",
  "**CHAMFER** (`CHA`): the same with a straight cut.",
- "**JOIN** (`J`) joins touching pieces into one; **EXPLODE** (`X`) breaks polylines, blocks, dimensions and text into their parts; **PEDIT** (`PE`) edits polylines.",
+ "**JOIN** (`J`) joins touching pieces into one; **EXPLODE** (`X`) breaks polylines, blocks, dimensions, text and solids into their parts; **PEDIT** (`PE`) edits polylines.",
 ]),
 ("h2", "Changing properties"),
 ("ul", [
@@ -485,11 +485,16 @@ ch(
       "`Enter`, then what to remove. **INTERSECT** keeps only the shared part. **SLICE** cuts with a plane, "
       "keeping one side or both. All four are on the right-click menu under **Solid Editing** when solids "
       "are selected."),
+("h2", "Taking a solid apart"),
+("p", "**EXPLODE** (`X`) splits a solid into its faces, as AutoCAD does: each flat face becomes a **region** "
+      "and each curved one a **surface**. A box gives six regions; a cylinder two round regions and one "
+      "surface. The faces keep the solid's layer and color, so you can move one aside, or erase one to "
+      "look inside. Explode a region or surface again to get its edges as lines. Undo puts the solid back."),
 ("h2", "Platonic solids, the soccer ball and struts"),
 ("p", "**TETRAHEDRON**, **OCTAHEDRON**, **DODECAHEDRON**, **ICOSAHEDRON** and **SOCCERBALL** (Solids > Platonic "
       "Solids & Soccer Ball): give the centre and the edge length. Type `W` for a wireframe (3D lines you can "
       "snap to), or `F` for a **Frame** of solid struts along every edge."),
-("img", "soccer-crop.png", 5.0, "A soccer ball frame: round struts with a ball at every corner, Shaded."),
+("img", "soccer-crop.png", 2.9, "A soccer ball frame: round struts with a ball at every corner, Shaded."),
 ("p", "**STRUTS** (`WIRESOLID`) does the same for any wireframe you draw: choose the section - **Rectangle**, "
       "**Polygon**, **Circle**, or **PLine** (a closed polyline you drew) - and whether to put a ball at "
       "every corner. Curved polylines, arcs and circles get one strut that follows the curve. **Ends** sets "
