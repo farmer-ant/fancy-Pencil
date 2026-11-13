@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.20"
+VERSION = "0.4.22"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -160,6 +160,11 @@ ch(
 ("img", "dlg-osnap.png", 4.6, "Object Snap settings (OSNAP)."),
 ("p", "For one point only, type the snap's short name at the prompt: `END`, `MID`, `CEN`, `INT`, `PER`, "
       "`TAN`, `QUA`, `NOD`, `INS`, `NEA` - or `NON` for none. **Shift + right-click** gives a menu of them."),
+("p", "Snaps work on solids in every view, plan or 3D: the corners, edge middles and round edges' centres, "
+      "and also their **faces**. **CEN** over a flat face snaps to the middle of that face; **NEA** with no edge "
+      "near puts the point on the face under the cursor, so you can draw right onto a solid. In the 3D "
+      "views **INT** finds where edges really meet in space, and where a line passes through a face; **PER** "
+      "finds the foot of the perpendicular anywhere along the edge under the cursor."),
 ("h2", "Ortho, Polar, Grid and Snap"),
 ("p", "`F8` ORTHO keeps lines straight across or up and down. `F7` GRID shows a grid and `F9` SNAP makes "
       "the cursor jump in steps. In the isometric views Ortho follows the X and Y of the plane you are "

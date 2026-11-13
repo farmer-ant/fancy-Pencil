@@ -366,3 +366,139 @@ the 2D place distances are measured in (the plane in flat views, the screen in i
     (when (gui-p) (tk "set ::keepprof ~D" (if (eql (sysvar "DELOBJ") 0) 1 0)))
     (out (format nil "~:[Shapes are removed once a solid is made from them~;Shapes are kept after a solid is made from them (DELOBJ 0)~].~%"
                  (eql (sysvar "DELOBJ") 0)))))
+
+;;; ---------------------------------------------------------------- snaps on faces, and in 3D
+;;; Besides its edges, a solid's faces snap: CENter finds the middle of the flat face under the
+;;; cursor, NEArest the point on the face under the cursor (when no edge is near), so you can
+;;; draw straight onto a solid. In the 3D views INTersection finds where edges really meet in
+;;; space, and PERpendicular the foot of the perpendicular on the edge under the cursor.
+
+(defvar *mesh-faces-cache* (make-hash-table :test #'eq #+sbcl :weakness #+sbcl :key))
+
+(defun mesh-snap-faces (data)
+  "Faces of solid DATA for snapping: ((centre-or-NIL triangles) ...), CENTRE (the middle of the
+face's area) only for flat faces. TRIANGLES are lists of three points."
+  (or (gethash data *mesh-faces-cache*)
+      (setf (gethash data *mesh-faces-cache*)
+            (loop for g in (ignore-errors (mesh-face-groups data))
+                  collect (let* ((tris (loop for f in g
+                                             for ps = (mesh-face-points data f)
+                                             append (loop for i from 1 below (1- (length ps))
+                                                          collect (list (first ps) (nth i ps) (nth (1+ i) ps)))))
+                                 (area 0d0) (c (pt 0 0 0)))
+                            (when (facets-flat-p data g)
+                              (dolist (tr tris)
+                                (let ((a (* 0.5d0 (vlen3 (cross3 (v- (second tr) (first tr)) (v- (third tr) (first tr)))))))
+                                  (incf area a)
+                                  (setf c (v+ c (v* (v+ (v+ (first tr) (second tr)) (third tr)) (/ a 3)))))))
+                            (list (and (> area 1d-12) (v* c (/ 1d0 area))) tris))))))
+
+(defun ray-triangle (o dir tr)
+  "Where the line through O along DIR meets triangle TR, or NIL."
+  (destructuring-bind (a b c) tr
+    (let* ((n (cross3 (v- b a) (v- c a))) (den (vdot3 n dir)))
+      (when (> (abs den) 1d-14)
+        (let* ((x (v+ o (v* dir (/ (vdot3 n (v- a o)) den)))))
+          (flet ((side (p q) (vdot3 n (cross3 (v- q p) (v- x p)))))
+            (let ((s1 (side a b)) (s2 (side b c)) (s3 (side c a)) (eps (* -1d-12 (vdot3 n n))))
+              (when (or (and (>= s1 eps) (>= s2 eps) (>= s3 eps)) (and (<= s1 (- eps)) (<= s2 (- eps)) (<= s3 (- eps))))
+                x))))))))
+
+(defun view-ray (p)
+  "The line of sight through the point under the cursor P: (values origin toward-viewer)."
+  (if (projected-view-p)
+      (let ((q (w->uv p))) (values (view-unproject (px q) (py q)) (view-dir)))
+      (values (pt (px p) (py p) 0) (pt 0 0 1))))
+
+(defun face-under-cursor (e p)
+  "(values point centre) where the line of sight through P first meets solid E: the point on its
+nearest face, and that face's centre if it is flat."
+  (multiple-value-bind (o dir) (view-ray p)
+    (let ((best nil) (bc nil) (bd nil))
+      (dolist (f (mesh-snap-faces (ent-data e)))
+        (dolist (tr (second f))
+          (let ((x (ray-triangle o dir tr)))
+            (when x
+              (let ((dp (vdot3 x dir)))
+                (when (or (null bd) (> dp bd)) (setf best x bc (first f) bd dp)))))))
+      (values best bc))))
+
+(defun face-snap-candidates (ents p bits have-nearest)
+  "CENter and NEArest snaps on the faces of the solids in ENTS under the cursor P."
+  (let ((cands nil) (best nil) (bc nil) (bd nil))
+    (when (logtest bits (logior 4 512))
+      (multiple-value-bind (o dir) (view-ray p)
+        (declare (ignore o))
+        (dolist (e ents)
+          (when (equal (ent-type e) "POLYFACE")
+            (multiple-value-bind (x c) (face-under-cursor e p)
+              (when x
+                (let ((dp (vdot3 x dir)))
+                  (when (or (null bd) (> dp bd)) (setf best x bc c bd dp)))))))))
+    (when (and best (logtest bits 512) (not have-nearest)) (push (cons best 512) cands))
+    (when (and bc (logtest bits 4))
+      (let ((cand (cons bc 4))) (push cand *face-centers*) (push cand cands)))
+    cands))
+
+(defun seg-seg-3d (a b c d)
+  "Where segments AB and CD meet in space, or NIL."
+  (let* ((u (v- b a)) (v (v- d c)) (w (v- a c))
+         (uu (vdot3 u u)) (uv (vdot3 u v)) (vv (vdot3 v v)) (uw (vdot3 u w)) (vw (vdot3 v w))
+         (den (- (* uu vv) (* uv uv))))
+    (when (and (> uu 1d-18) (> vv 1d-18) (> den (* 1d-12 uu vv)))
+      (let ((s (/ (- (* uv vw) (* vv uw)) den)) (tt (/ (- (* uu vw) (* uv uw)) den)))
+        (when (and (<= -1d-9 s (+ 1 1d-9)) (<= -1d-9 tt (+ 1 1d-9)))
+          (let ((p (v+ a (v* u s))) (q (v+ c (v* v tt))))
+            (when (< (dist p q) (* 1d-7 (max 1d0 (sqrt uu) (sqrt vv))))
+              (v* (v+ p q) 0.5d0))))))))
+
+(defun entity-snap-segs-3d (e)
+  "E's straight edges as 3D segments (a b), at the heights the 3D views draw them."
+  (multiple-value-bind (elev th) (view-object-height (ent-data e))
+    (loop for pc in (snap-pieces e)
+          when (eq (first pc) :seg)
+            append (let ((a (pt3 (second pc))) (b (pt3 (third pc))))
+                     (loop for dz in (if (zerop th) '(0d0) (list 0d0 th))
+                           collect (list (lift a (+ (pz a) elev dz)) (lift b (+ (pz b) elev dz))))))))
+
+(defun seg-face-candidates (ents segs q tol)
+  "INTersection snaps where SEGS (3D segments (a b) of other objects) pass through the faces of
+the solids among ENTS, near view point Q."
+  (let ((cands nil) (solids (remove-if-not (lambda (e) (equal (ent-type e) "POLYFACE")) ents)))
+    (dolist (sol solids cands)
+      (let ((own (entity-snap-segs-3d sol)))
+        (dolist (s segs)
+          (unless (member s own :test #'equal)
+            (let* ((a (first s)) (dir (v- (second s) a)) (ll (vdot3 dir dir)))
+              (when (> ll 1d-18)
+                (dolist (f (mesh-snap-faces (ent-data sol)))
+                  (dolist (tr (second f))
+                    (let ((x (ray-triangle a dir tr)))
+                      (when x
+                        (let ((k (/ (vdot3 (v- x a) dir) ll)))
+                          (when (and (<= -1d-9 k (+ 1 1d-9)) (<= (dist2d (w->uv x) q) tol))
+                            (push (cons x 32) cands)))))))))))))))
+
+(defun view-int-perp-candidates (ents p bits base tol)
+  "INTersection (edges meeting in space) and PERpendicular snaps in a 3D view."
+  (let* ((q (w->uv p))
+         (segs (loop for e in ents
+                     append (loop for s in (entity-snap-segs-3d e)
+                                  when (<= (piece-dist (list :seg (w->uv (first s)) (w->uv (second s))) q) tol)
+                                    collect s)))
+         (cands nil))
+    (when (logtest bits 32)
+      (loop for (s . rest) on segs
+            do (dolist (s2 rest)
+                 (let ((x (seg-seg-3d (first s) (second s) (first s2) (second s2))))
+                   (when (and x (<= (dist2d (w->uv x) q) tol)) (push (cons x 32) cands))))))
+    ;; a line passing through the face of a solid
+    (when (logtest bits 32)
+      (setf cands (append (seg-face-candidates ents segs q tol) cands)))
+    (when (and base (logtest bits 128))
+      (dolist (s segs)
+        (let* ((a (first s)) (u (v- (second s) a)) (uu (vdot3 u u)))
+          (when (> uu 1d-18)
+            (let ((k (/ (vdot3 (v- (pt3 base) a) u) uu)))
+              (when (<= 0 k 1) (push (cons (v+ a (v* u k)) 128) cands)))))))
+    cands))

@@ -294,8 +294,9 @@
         (when (logtest bits 4) (let ((c (piece-center pc))) (when c (push (cons c 4) cands))))
         (when (logtest bits 8) (when (eq (first pc) :pt) (add (second pc) 8)))
         (when (logtest bits 16) (dolist (q (piece-quads pc)) (add q 16)))
+        ;; (the foot may be anywhere along the edge under the cursor, as in AutoCAD)
         (when (and base (logtest bits 128)) (dolist (q (piece-perp pc base))
-                                              (when (on-piece-p pc q 1d-6) (add q 128))))
+                                              (when (on-piece-p pc q 1d-6) (push (cons q 128) cands))))
         (when (and base (logtest bits 256)) (dolist (q (piece-tangents pc base)) (add q 256)))
         (when (logtest bits 512) (add (piece-nearest pc p) 512)))
       (when (logtest bits 32)
@@ -316,7 +317,10 @@
       (when (fboundp 'round-snap-candidates)
         (dolist (e near-ents)
           (when (member (ent-type e) '("POLYFACE" "CIRCLE" "ARC") :test #'equal)
-            (setf cands (append (funcall 'round-snap-candidates e p bits tol (lambda (w) (pt (px w) (py w)))) cands))))))
+            (setf cands (append (funcall 'round-snap-candidates e p bits tol (lambda (w) (pt (px w) (py w)))) cands)))))
+      ;; the faces of solids: the middle of a flat face, a point on the face under the cursor
+      (when (fboundp 'face-snap-candidates)
+        (setf cands (append (funcall 'face-snap-candidates near-ents p bits (find 512 cands :key #'cdr)) cands))))
     cands))
 
 (defun closed-poly-center (data)
@@ -338,8 +342,8 @@
 (defun find-osnap (p &optional base (bits nil) (tol (aperture-world)))
   "Best snap near P: (values point bit) or NIL."
   (let* ((bits (or bits (osnap-active-bits)))
-         (*ring-centers* nil) (*ring-circles* nil)
-         (cands (and bits (plusp bits) (if (projected-view-p) (view-osnap-candidates p bits tol) (osnap-candidates p bits base tol)))))
+         (*ring-centers* nil) (*ring-circles* nil) (*face-centers* nil)
+         (cands (and bits (plusp bits) (if (projected-view-p) (view-osnap-candidates p bits tol base) (osnap-candidates p bits base tol)))))
     ;; a solid's round edge is many short straight ones: their ends and middles are not real
     ;; points of the shape, so they give way to its centre and quadrants
     (when *ring-circles*
@@ -354,10 +358,12 @@
              ;; coincident candidates: Endpoint beats Midpoint beats Center ... beats Intersection
              (prio '(1 2 4 8 16 64 32 128 256 512))
              ;; (the centre of a round edge you are on counts as close)
-             (score (lambda (c) (+ (if (member c *ring-centers* :test #'eq)
-                                       ;; (of two such centres, the one nearer the viewer)
-                                       (- (* 0.5d0 tol) (* tol 1d-6 (funcall 'view-depth (car c))))
-                                       (view-dist (car c) p))
+             (score (lambda (c) (+ (cond ((member c *ring-centers* :test #'eq)
+                                          ;; (of two such centres, the one nearer the viewer)
+                                          (- (* 0.5d0 tol) (* tol 1d-6 (funcall 'view-depth (car c)))))
+                                         ;; the middle of the face you are on: when no edge snap is nearer
+                                         ((member c *face-centers* :test #'eq) (* 0.9d0 tol))
+                                         (t (view-dist (car c) p)))
                                    (* tol 1d-3 (or (position (cdr c) prio) 10)))))
              (best (reduce (lambda (a b) (if (<= (funcall score a) (funcall score b)) a b)) pool)))
         (values (pt3 (car best)) (cdr best))))))
