@@ -252,7 +252,8 @@ of points by edge number."
 (defun bulge-mid (a b bulge)
   "The middle of the arc from A to B with BULGE (2D)."
   (let* ((m (midpt a b)) (chord (dist2d a b)) (s (* bulge chord 0.5d0))
-         (dir (unit (v- b a))))
+         (l (max 1d-300 (dist2d a b)))
+         (dir (pt (/ (- (px b) (px a)) l) (/ (- (py b) (py a)) l))))
     ;; the arc's middle lies off the chord's middle, to the right for a positive bulge
     (v+ m (v* (pt (py dir) (- (px dir))) s))))
 

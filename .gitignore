@@ -3,3 +3,5 @@ build/
 fonts/
 /Drawing1.dxf
 .~lock.*#
+lib
+support/solids/fancypencil-solids

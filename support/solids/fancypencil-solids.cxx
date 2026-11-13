@@ -36,6 +36,7 @@
 //   circle cx cy cz  nx ny nz  r
 //   spline N  x y z ...                        (N points the curve passes through)
 
+#include <Standard_Version.hxx>
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
