@@ -152,7 +152,7 @@
   (when (eq *ui* :gui)
     (setf *grip-points* (pickfirst-grips))
     (let ((s (grip-pixel-size)) (cmds (list ".c delete grip")))
-      (dolist (g (remove-duplicates *grip-points* :key #'first :test (lambda (a b) (< (dist2d a b) 1d-9))))
+      (dolist (g (remove-duplicates *grip-points* :key #'first :test (lambda (a b) (< (dist a b) 1d-9))))
         (multiple-value-bind (x y) (w->s (first g))
           (when (and (< -20 x (+ *full-cw* 20)) (< -20 y (+ *full-ch* 20)))
             (push (format nil ".c create rectangle ~D ~D ~D ~D -fill #1e6fff -outline #0b2a66 -tags grip"
@@ -180,6 +180,13 @@
 
 (defun hot-grip-item (p) (list :hotgrip p))
 
+(defun grips-on-point (ents p)
+  "For grip STRETCH: ((entity grip-id ...) ...), the grips of ENTS that sit on point P. Compared
+in 3D: the two ends of a line standing straight up have the same X and Y, and must not both move."
+  (loop for e in ents
+        for gs = (remove-if-not (lambda (g) (< (dist (pt3 (car g)) (pt3 p)) 1d-9)) (entity-grips (ent-data e)))
+        when gs collect (cons e (mapcar #'cdr gs))))
+
 (defun grip-edit (gp)
   "Interactive grip editing from the hot grip GP: STRETCH -> MOVE -> ROTATE -> SCALE -> MIRROR."
   (let* ((sel (remove-if-not #'ent-live-p (filter-editable *pickfirst* nil)))
@@ -187,9 +194,7 @@
          (mode :stretch) (base gp) (copy nil) (done nil))
     (flet ((affected ()
              ;; for STRETCH: every selected object with a grip on the hot point
-             (loop for e in sel
-                   for gs = (remove-if-not (lambda (g) (< (dist2d (car g) gp) 1d-9)) (entity-grips (ent-data e)))
-                   when gs collect (cons e (mapcar #'cdr gs))))
+             (grips-on-point sel gp))
            (xf-for (to)
              (case mode
                (:move (xf-move (v- to base)))
