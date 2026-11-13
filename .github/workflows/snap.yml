@@ -35,6 +35,10 @@ jobs:
           echo "$OUT"
           echo "::notice title=tty::$(echo "$OUT" | grep -o 'AUTOLISP-OK.*' | head -1)"
           echo "$OUT" | grep -q "AUTOLISP-OK 5" || { echo "::error title=tty::$(echo "$OUT" | tail -5 | tr '\n' ' ')"; exit 1; }
+          # exact solids: Open CASCADE inside the snap
+          ENG=$(printf 'solidengine\n' | timeout 600 fancypencil --tty 2>&1 | grep -m1 -i "solids are")
+          echo "::notice title=solid engine::${ENG:-no answer}"
+          echo "$ENG" | grep -q "Solids are exact" || { echo "::error title=solid engine::${ENG:-no answer}"; exit 1; }
           # the window, on a virtual screen
           sudo apt-get install -y -q xvfb x11-utils >/dev/null
           Xvfb :99 -screen 0 1600x1000x24 & sleep 2

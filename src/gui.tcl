@@ -152,6 +152,8 @@ mcmd .mb.file "Image Manager..." IMAGE
 .mb.file add separator
 mcmd .mb.file "3D Print: Save STL / 3MF / OBJ..." 3DPRINT
 mcmd .mb.file "Import STL / OBJ Model..." STLIN
+mcmd .mb.file "Export STEP (.step)..." STEPOUT
+mcmd .mb.file "Import STEP (.step)..." STEPIN
 mcmd .mb.file "Export DXF..." DXFOUT
 .mb.file add separator
 mcmd .mb.file "Exit" QUIT
@@ -280,12 +282,15 @@ foreach {l c} {"Tetrahedron frame" {TETRAHEDRON F} "Cube frame" {POLYHEDRON Cube
 mcmd .mb.solid "Helix (path for a spring or thread)" HELIX
 mcmd .mb.solid "3D Print (STL / 3MF / OBJ)..." 3DPRINT
 mcmd .mb.solid "Import STL / OBJ Model..." STLIN
+mcmd .mb.solid "Export STEP (.step)..." STEPOUT
+mcmd .mb.solid "Import STEP (.step)..." STEPIN
 .mb.solid add separator
 foreach {l c} {Extrude EXTRUDE Revolve REVOLVE Sweep SWEEP Loft LOFT Presspull PRESSPULL} { mcmd .mb.solid $l $c }
 mcmd .mb.solid "Revolved Surface (smooth)" "REVOLVE MO SU"
 mcmd .mb.solid "Revolved Surface Mesh (REVSURF)" REVSURF
 .mb.solid add separator
 foreach {l c} {Union UNION Subtract SUBTRACT Intersect INTERSECT Slice SLICE} { mcmd .mb.solid $l $c }
+foreach {l c} {"Fillet Edges" FILLETEDGE "Chamfer Edges" CHAMFEREDGE "Convert to Exact Solid" CONVTOSOLID} { mcmd .mb.solid $l $c }
 .mb.solid add separator
 mcmd .mb.solid "Working Plane on a Face (UCS)" "UCS Face"
 .mb.solid add separator
