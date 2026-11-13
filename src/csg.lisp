@@ -289,6 +289,22 @@ shown when they are sharp (over 20 degrees), open, or lie on one of VISIBLE-SEGM
                     (reduce (lambda (acc m) (csg-op op acc (mesh-polygons m))) meshes-b :initial-value pa))))
     (and polys (polygons-to-mesh polys visible))))
 
+;;; ---------- exact solids (brep.lisp) when they all are, facets otherwise ----------
+
+(defun boolean-solids (op meshes-a meshes-b)
+  "(A1 + A2 ...) OP (B1 + B2 ...): exact when every solid is exact and the engine is there."
+  (if (and (every #'brep-data-p (append meshes-a meshes-b)) (brep-available-p))
+      (with-brep (:fallback (boolean-meshes op meshes-a meshes-b))
+        (let* ((ia (mapcar #'brep-load meshes-a)) (ib (mapcar #'brep-load meshes-b))
+               (a (if (cdr ia)
+                      (let ((u (brep-new-id))) (brep-request (format nil "fuse ~D ~{~D~^ ~}" u ia)) u)
+                      (first ia)))
+               (id (brep-new-id)))
+          (brep-request (format nil "~A ~D ~D ~{~D~^ ~}" (ecase op (:union "fuse") (:subtract "cut") (:intersect "common"))
+                                id a ib))
+          (brep-result id)))
+      (boolean-meshes op meshes-a meshes-b)))
+
 ;;; ---------- commands ----------
 
 (defun pick-solids (prompt)
@@ -308,13 +324,13 @@ shown when they are sharp (over 20 degrees), open, or lie on one of VISIBLE-SEGM
         (dolist (e ents) (delete-entity e))
         (add (append mesh props))
         (out (format nil "~A done~@[ (volume ~A)~].~%" what
-                     (let ((v (mesh-volume mesh))) (and (> v 1d-12) (fmt-num v)))))))
+                     (let ((v (solid-volume mesh))) (and (> v 1d-12) (fmt-num v)))))))
   (when (gui-p) (gui-regen)))
 
 (defcmd "UNION" ("UNI") "Joins solids into one."
   (let ((ents (pick-solids "Select solids to join: ")))
     (if (< (length ents) 2) (out (format nil "Select at least two solids.~%"))
-        (replace-with-result ents (boolean-meshes :union (list (ent-data (first ents))) (mapcar #'ent-data (rest ents))) "Union"))))
+        (replace-with-result ents (boolean-solids :union (list (ent-data (first ents))) (mapcar #'ent-data (rest ents))) "Union"))))
 
 (defcmd "SUBTRACT" ("SU") "Removes solids from other solids."
   (out (format nil "Select solids to subtract from...~%"))
@@ -324,14 +340,14 @@ shown when they are sharp (over 20 degrees), open, or lie on one of VISIBLE-SEGM
       (let ((cut (remove-if (lambda (e) (member e keep)) (pick-solids "Select solids to subtract: "))))
         (if (null cut) (out (format nil "Nothing to subtract.~%"))
             (progn
-              (replace-with-result keep (boolean-meshes :subtract (mapcar #'ent-data keep) (mapcar #'ent-data cut)) "Subtract")
+              (replace-with-result keep (boolean-solids :subtract (mapcar #'ent-data keep) (mapcar #'ent-data cut)) "Subtract")
               (dolist (e cut) (delete-entity e))
               (when (gui-p) (gui-regen))))))))
 
 (defcmd "INTERSECT" ("IN") "Keeps only the part that solids share."
   (let ((ents (pick-solids "Select solids to intersect: ")))
     (if (< (length ents) 2) (out (format nil "Select at least two solids.~%"))
-        (replace-with-result ents (boolean-meshes :intersect (list (ent-data (first ents))) (mapcar #'ent-data (rest ents))) "Intersect"))))
+        (replace-with-result ents (boolean-solids :intersect (list (ent-data (first ents))) (mapcar #'ent-data (rest ents))) "Intersect"))))
 
 (defun half-space-mesh (o n size)
   "A big box filling the side of the plane (O, N) that N points to, SIZE across."
@@ -389,7 +405,13 @@ shown when they are sharp (over 20 degrees), open, or lie on one of VISIBLE-SEGM
                      (let ((props (remove-if-not (lambda (p) (and (consp p) (member (car p) '(8 62 6 370 48)))) data))
                            (local (* 4 (loop for v in (mesh-verts data) maximize (dist v o)))))
                        (declare (ignorable local))
-                       (multiple-value-bind (plus minus loose) (mesh-plane-split data o n)
+                       (multiple-value-bind (plus minus loose)
+                           (if (and (brep-data-p data) (brep-available-p))
+                               (with-brep (:fallback (mesh-plane-split data o n))
+                                 (let ((id1 (brep-new-id)) (id2 (brep-new-id)))
+                                   (brep-request (format nil "halves ~D ~D ~D ~A ~A" id1 id2 (brep-load data) (brep-pt o) (brep-pt n)))
+                                   (values (brep-result id1) (brep-result id2) 0)))
+                               (mesh-plane-split data o n))
                          (when (plusp loose) (incf gappy))
                          (dolist (sn sides)
                            (let ((m (if (plusp (vdot3 sn n)) plus minus)))

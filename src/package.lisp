@@ -49,3 +49,5 @@ UP the world directions that point right and up on the screen and DIR pointing a
 (defvar *quick-shown* nil "True while the Quick Properties panel is open.")
 (defvar *undo-ran* 0 "How many times U/UNDO/REDO have run (never rebound, so every thread sees it).")
 (defvar *face-centers* nil "Centre snaps of flat solid faces under the cursor (count as close, after edges).")
+(defvar *brep-xrecs* nil
+  "While writing a DXF: exact solid shapes to save in OBJECTS, ((entity dictionary xrecord text matrix) ...).")

@@ -180,10 +180,64 @@ smooth shape."
 
 (defvar *last-solid-height* 1d0)
 
+(defun solid-volume (data)
+  "DATA's volume: exact for an exact solid (as placed), else from its facets."
+  (or (and (brep-data-p data) (brep-available-p)
+           (ignore-errors
+            (multiple-value-bind (ls ok) (brep-request (format nil "props ~D" (brep-load data)))
+              (declare (ignore ls))
+              (let ((*read-default-float-format* 'double-float) (*read-eval* nil))
+                (d (read-from-string ok))))))
+      (mesh-volume data)))
+
+(defun exact-solid (what fallback request &rest more)
+  "The exact solid REQUEST makes (format string with ~D for the new shape's number), or the
+facet mesh FALLBACK (a function) when the exact engine isn't there."
+  (with-brep (:fallback (funcall fallback))
+    (let ((id (brep-new-id)))
+      (apply #'brep-request (format nil request id) more)
+      (brep-result id (list) (and what nil)))))
+
+(defun req (head &rest nums) (format nil "~A ~~D ~A" head (apply #'brep-nums nums)))
+
+(defun box-solid (p1 p2 h)
+  (let ((x0 (min (px p1) (px p2))) (y0 (min (py p1) (py p2))) (z0 (+ (pz (pt3 p1)) (min 0 h))))
+    (if (or (< (abs (- (px p1) (px p2))) 1d-12) (< (abs (- (py p1) (py p2))) 1d-12) (< (abs h) 1d-12))
+        (box-mesh p1 p2 h)
+        (exact-solid "Box" (lambda () (box-mesh p1 p2 h))
+                     (req "box" x0 y0 z0 (abs (- (px p1) (px p2))) (abs (- (py p1) (py p2))) (abs h))))))
+
+(defun wedge-solid (p1 p2 h)
+  (let* ((z (pz (pt3 p1))) (y1 (py p1)) (dy (- (py p2) (py p1))))
+    ;; the wedge's side outline (in the XZ plane at P1's Y), carried across to P2's Y
+    (exact-solid "Wedge" (lambda () (wedge-mesh p1 p2 h))
+                 (req "prism" 0 dy 0)
+                 "loop"
+                 (format nil "line ~A ~A" (brep-pt (pt (px p1) y1 z)) (brep-pt (pt (px p2) y1 z)))
+                 (format nil "line ~A ~A" (brep-pt (pt (px p2) y1 z)) (brep-pt (pt (px p1) y1 (+ z h))))
+                 (format nil "line ~A ~A" (brep-pt (pt (px p1) y1 (+ z h))) (brep-pt (pt (px p1) y1 z)))
+                 "end")))
+
+(defun cone-solid (c r1 r2 h)
+  (let ((c (pt3 c)) (up (if (minusp h) -1d0 1d0)))
+    (if (< (abs h) 1d-12)
+        (cone-mesh c r1 r2 h)
+        (exact-solid "Cone" (lambda () (cone-mesh c r1 r2 h))
+                     (if (< (abs (- r1 r2)) 1d-12)
+                         (req "cyl" (px c) (py c) (pz c) 0 0 up 1 0 0 r1 (abs h))
+                         (req "cone" (px c) (py c) (pz c) 0 0 up 1 0 0 r1 r2 (abs h)))))))
+
+(defun sphere-solid (c r)
+  (let ((c (pt3 c))) (exact-solid "Sphere" (lambda () (sphere-mesh c r)) (req "sphere" (px c) (py c) (pz c) r))))
+
+(defun torus-solid (c big small)
+  (let ((c (pt3 c)))
+    (exact-solid "Torus" (lambda () (torus-mesh c big small)) (req "torus" (px c) (py c) (pz c) 0 0 1 big small))))
+
 (defun add-solid (mesh what)
   (let ((e (add mesh)))
     (out (format nil "~A created~@[ (volume ~A)~].~%" what
-                 (let ((v (mesh-volume mesh))) (and (> v 1d-12) (fmt-num v)))))
+                 (let ((v (solid-volume mesh))) (and (> v 1d-12) (fmt-num v)))))
     (when (gui-p) (gui-regen))
     e))
 
@@ -200,14 +254,14 @@ smooth shape."
       (cond
         ((equal p2 "Cube")
          (let ((l (ask-height "Specify length" p1)))
-           (when l (add-solid (box-mesh p1 (v+ (pt3 p1) (pt l l 0)) l) "Box"))))
+           (when l (add-solid (box-solid p1 (v+ (pt3 p1) (pt l l 0)) l) "Box"))))
         ((equal p2 "Length")
          (let* ((l (ask-height "Specify length" p1)) (wd (and l (ask-height "Specify width" p1)))
                 (h (and wd (ask-height "Specify height" p1 *last-solid-height*))))
-           (when h (setf *last-solid-height* h) (add-solid (box-mesh p1 (v+ (pt3 p1) (pt l wd 0)) h) "Box"))))
+           (when h (setf *last-solid-height* h) (add-solid (box-solid p1 (v+ (pt3 p1) (pt l wd 0)) h) "Box"))))
         ((pointp p2)
          (let ((h (ask-height "Specify height" p2 *last-solid-height*)))
-           (when h (setf *last-solid-height* h) (add-solid (box-mesh p1 p2 h) "Box"))))))))
+           (when h (setf *last-solid-height* h) (add-solid (box-solid p1 p2 h) "Box"))))))))
 
 (defcmd "WEDGE" ("WE") "Creates a 3D solid wedge: full height at the first corner, sloping to the opposite side."
   (let ((p1 (gpoint "Specify first corner: ")))
@@ -215,7 +269,7 @@ smooth shape."
       (let ((p2 (get-user-input :corner :base p1 :prompt "Specify other corner: ")))
         (when (pointp p2)
           (let ((h (ask-height "Specify height" p2 *last-solid-height*)))
-            (when h (setf *last-solid-height* h) (add-solid (wedge-mesh p1 p2 h) "Wedge"))))))))
+            (when h (setf *last-solid-height* h) (add-solid (wedge-solid p1 p2 h) "Wedge"))))))))
 
 (defcmd "CYLINDER" ("CYL") "Creates a 3D solid cylinder standing on the working plane."
   (let ((c (gpoint "Specify center point of base: ")))
@@ -223,7 +277,7 @@ smooth shape."
       (let ((r (ask-radius "Specify base radius" c)))
         (when (and r (plusp r))
           (let ((h (ask-height "Specify height" c *last-solid-height*)))
-            (when h (setf *last-solid-height* h) (add-solid (cone-mesh (pt3 c) r r h) "Cylinder"))))))))
+            (when h (setf *last-solid-height* h) (add-solid (cone-solid (pt3 c) r r h) "Cylinder"))))))))
 
 (defcmd "CONE" () "Creates a 3D solid cone (or a cut-off cone with a top radius)."
   (let ((c (gpoint "Specify center point of base: ")))
@@ -240,13 +294,13 @@ smooth shape."
                       ((pointp x) (setf h (dist2d c x)) (return))
                       (t (setf h *last-solid-height*) (return)))))
             (setf *last-solid-height* h)
-            (add-solid (cone-mesh (pt3 c) r (abs top) h) "Cone")))))))
+            (add-solid (cone-solid (pt3 c) r (abs top) h) "Cone")))))))
 
 (defcmd "SPHERE" () "Creates a 3D solid sphere."
   (let ((c (gpoint "Specify center point: ")))
     (when (pointp c)
       (let ((r (ask-radius "Specify radius" c)))
-        (when (and r (plusp r)) (add-solid (sphere-mesh (pt3 c) r) "Sphere"))))))
+        (when (and r (plusp r)) (add-solid (sphere-solid (pt3 c) r) "Sphere"))))))
 
 (defcmd "TORUS" ("TOR") "Creates a 3D solid torus (a ring), lying in the working plane."
   (let ((c (gpoint "Specify center point: ")))
@@ -254,7 +308,7 @@ smooth shape."
       (let ((big (ask-radius "Specify radius" c)))
         (when (and big (plusp big))
           (let ((small (ask-radius "Specify tube radius" c)))
-            (when (and small (plusp small)) (add-solid (torus-mesh (pt3 c) big small) "Torus"))))))))
+            (when (and small (plusp small)) (add-solid (torus-solid (pt3 c) big small) "Torus"))))))))
 
 ;;; ---------- shapes (profiles and paths) from objects ----------
 
@@ -367,7 +421,12 @@ smooth shape."
                  (dolist (e ents)
                    (multiple-value-bind (pts closed normal) (shape-of e)
                      (when (cdr pts)
-                       (add (extrude-mesh pts closed (funcall dirfn normal))) (incf n))))
+                       (let ((dir (funcall dirfn normal)))
+                         (add (with-brep (:fallback (extrude-mesh pts closed dir))
+                                (let ((id (brep-new-id)))
+                                  (apply #'brep-request (format nil "prism ~D ~A" id (brep-pt dir)) (brep-profile-lines e))
+                                  (brep-result id)))))
+                       (incf n))))
                  (delete-profiles ents)
                  (out (format nil "~D object~:P extruded.~%" n))
                  (when (gui-p) (gui-regen)))))))))))
@@ -421,8 +480,14 @@ a closed shape (a revolved surface rather than a solid)."
             (dolist (e ents)
               (multiple-value-bind (pts closed) (shape-of e)
                 (when (cdr pts)
-                  (add (let ((m (revolve-mesh pts closed (first axis) (second axis) angle :surface *revolve-surface*)))
-                         (if (or *revolve-surface* (not closed)) (append m (list (cons :kind "Revolved surface"))) m)))
+                  (add (let ((m (with-brep (:fallback (revolve-mesh pts closed (first axis) (second axis) angle :surface *revolve-surface*))
+                                  (let ((id (brep-new-id)))
+                                    (apply #'brep-request
+                                           (format nil "revol ~D ~A ~A ~A" id (brep-pt (first axis)) (brep-pt (unit3 (second axis)))
+                                                   (brep-num (* angle (/ 180 pi))))
+                                           (brep-profile-lines e :outline *revolve-surface*))
+                                    (brep-result id)))))
+                         (if (or *revolve-surface* (not closed)) (append (rem-dxf :kind m) (list (cons :kind "Revolved surface"))) m)))
                   (incf n))))
             (delete-profiles ents)
             (out (format nil "~D object~:P revolved.~%" n))

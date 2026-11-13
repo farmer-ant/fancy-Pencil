@@ -86,12 +86,14 @@
     (if vs (v* (reduce #'v+ vs) (/ 1d0 (length vs))) (pt 0 0 0))))
 
 (defun xform-mesh (data xf)
-  (let ((fn (xf-fn xf)))
-    (cons (cons 0 "POLYFACE")
-          (mapcar (lambda (p) (if (and (consp p) (eq (car p) :verts))
-                                  (cons :verts (mapcar (lambda (v) (pt3 (funcall fn v))) (cdr p)))
-                                  p))
-                  (rest data)))))
+  (let* ((fn (xf-fn xf))
+         (moved (cons (cons 0 "POLYFACE")
+                      (mapcar (lambda (p) (if (and (consp p) (eq (car p) :verts))
+                                              (cons :verts (mapcar (lambda (v) (pt3 (funcall fn v))) (cdr p)))
+                                              p))
+                              (rest data)))))
+    ;; an exact solid keeps its shape and notes the move (brep.lisp)
+    (if (assoc :brep moved) (funcall 'brep-transform-data moved fn) moved)))
 
 (defvar *verts-vectors* (make-hash-table :test #'eq #+sbcl :weakness #+sbcl :key))
 (defun mesh-verts-vector (data)
@@ -159,7 +161,12 @@
 
 (defun write-mesh-2000 (out data handle owner)
   (let ((layer (or (dxf 8 data) "0")) (vs (mesh-verts data)) (fs (mesh-faces data)))
-    (write-common out (cons (cons 0 "POLYLINE") (rest data)) handle owner)
+    (write-common out (cons (cons 0 "POLYLINE") (rest data)) handle owner
+                  ;; an exact solid: its shape goes in OBJECTS, through the solid's own dictionary
+                  (when (stringp (dxf :brep data))
+                    (let ((dh (h2)) (xh (h2)))
+                      (push (list handle dh xh (dxf :brep data) (dxf :brep-m data)) *brep-xrecs*)
+                      dh)))
     (w out 100 "AcDbPolyFaceMesh") (w out 66 1) (wp out 10 (pt 0 0 0))
     (w out 70 64) (w out 71 (length vs)) (w out 72 (length fs))
     (flet ((vertex-head (sub)

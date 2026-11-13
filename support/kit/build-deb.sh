@@ -6,6 +6,9 @@
 #
 #   sh build-deb.sh fancypencil.tar.gz VERSION OUT.deb
 #
+# With SOLIDS=dir (holding fancypencil-solids and lib/ with Open CASCADE's libraries), the exact
+# solid engine goes in too: /opt/fancypencil/support/solids and /opt/fancypencil/lib.
+#
 # Installs to /opt/fancypencil, with /usr/bin/fancypencil, menu entries for Fancy Pencil and
 # "Get ODA File Converter", icons, and AppStream data (name, logo, description in App Center).
 set -e
@@ -16,6 +19,14 @@ tar xzf "$TAR" -C "$R/opt"
 SRC="$R/opt/fancypencil"
 chmod +x "$SRC/fancypencil"
 rm -rf "$SRC/build" "$SRC/tests"
+ARCH=all
+if [ -n "$SOLIDS" ]; then
+    mkdir -p "$SRC/support/solids" "$SRC/lib"
+    cp "$SOLIDS/fancypencil-solids" "$SRC/support/solids/"
+    cp -P "$SOLIDS"/lib/*.so* "$SRC/lib/"
+    chmod 755 "$SRC/support/solids/fancypencil-solids"
+    ARCH=amd64
+fi
 
 cat > "$R/usr/bin/fancypencil" <<'EOF'
 #!/bin/sh
@@ -86,7 +97,7 @@ Package: fancypencil
 Version: $VER
 Section: graphics
 Priority: optional
-Architecture: all
+Architecture: $ARCH
 Depends: sbcl, tk, fontconfig
 Recommends: imagemagick, poppler-utils
 Installed-Size: $SIZE

@@ -13,8 +13,9 @@ description: |
     Chamfer, Array, Stretch, Align and grips
   - Text, dimensions, leaders and multileaders, in text and dimension styles
   - Layers, linetypes, lineweights, colors, blocks and draw order
-  - 3D solids: boxes, cylinders, spheres, extrude, revolve, sweep, loft,
-    union, subtract, intersect and slice; Platonic solids and wireframe struts
+  - Exact 3D solids (Open CASCADE): boxes, cylinders, spheres, extrude,
+    revolve, union, subtract, intersect, slice, filleted and chamfered edges;
+    STEP export and import; sweep, loft, Platonic solids and wireframe struts
   - Layouts with viewports, and plotting to PDF or any printer at true scale
   - AutoLISP: about 250 functions, defun c: commands, ssget filters, *error*
   - Reads and writes DXF (AutoCAD 2000 and R12)
@@ -53,8 +54,17 @@ parts:
     source: .
     build-packages:
       - sbcl
+      - g++
+      - libocct-foundation-dev
+      - libocct-modeling-data-dev
+      - libocct-modeling-algorithms-dev
+      - libocct-data-exchange-dev
     stage-packages:
       - sbcl
+      - libocct-foundation-7.6t64
+      - libocct-modeling-data-7.6t64
+      - libocct-modeling-algorithms-7.6t64
+      - libocct-data-exchange-7.6t64
       - tk8.6
       - tcl8.6
       - imagemagick
@@ -67,6 +77,8 @@ parts:
     override-build: |
       D="$CRAFT_PART_INSTALL/opt/fancypencil"
       mkdir -p "$D"
+      # the exact solid engine's helper, on Ubuntu's Open CASCADE
+      sh support/solids/build.sh
       cp -r load.lisp fancypencil.asd fancypencil install.sh LICENSE src support examples "$D"/
       mkdir -p "$D/docs" && cp docs/Fancy-Pencil-Manual.pdf "$D/docs/"
       chmod +x "$D/fancypencil"

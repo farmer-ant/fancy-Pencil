@@ -250,9 +250,30 @@ DWG is read from a converted copy in a temporary folder: they are beside the DWG
                        ((and (numberp dx) (numberp dy) (or (/= dy 0) (< dx 0)))
                         (list (cons 50 (* (/ 180 pi) (atan dy dx))))))))))))
 
+(defvar *brep-xrecs-in* nil "While reading: entity handle -> (text . matrix) of exact solids saved by Fancy Pencil.")
+
+(defun brep-xrecords (objects)
+  "Exact solid shapes Fancy Pencil saved in OBJECTS: a hash, entity handle -> (text . matrix)."
+  (let ((dict-owner (make-hash-table :test #'equal)) (h (make-hash-table :test #'equal)))
+    (dolist (g objects)
+      (when (equal (cdr (assoc 0 g)) "DICTIONARY")
+        (setf (gethash (princ-to-string (cdr (assoc 5 g))) dict-owner) (princ-to-string (cdr (assoc 330 g))))))
+    (dolist (g objects h)
+      (when (equal (cdr (assoc 0 g)) "XRECORD")
+        (let ((mark (member-if (lambda (p) (and (consp p) (eql (car p) 1) (equal (cdr p) "FANCYPENCIL-BREP 1"))) g)))
+          (when mark
+            (let* ((owner (princ-to-string (cdr (assoc 330 g))))
+                   (ent (gethash owner dict-owner))
+                   (m (loop for p in (rest mark) when (and (consp p) (eql (car p) 40)) collect (d (cdr p))))
+                   (text (format nil "~{~A~%~}" (loop for p in (rest mark) when (and (consp p) (eql (car p) 1)) collect (cdr p)))))
+              (when ent (setf (gethash ent h) (cons text (and (= (length m) 12) m)))))))))))
+
 (defun with-src-handle (data g)
-  "Remember the entity's handle in the file (for AutoCAD's draw order table)."
-  (let ((h (dxf 5 g)))
+  "Remember the entity's handle in the file (for AutoCAD's draw order table); an exact solid gets
+its shape back."
+  (let* ((h (dxf 5 g))
+         (b (and h *brep-xrecs-in* (equal (dxf 0 data) "POLYFACE") (gethash (princ-to-string h) *brep-xrecs-in*)))
+         (data (if b (append data (list (cons :brep (car b))) (and (cdr b) (list (cons :brep-m (cdr b))))) data)))
     (if (and data h) (append data (list (cons :src-handle (princ-to-string h)))) data)))
 
 (defun handle-number (h)
@@ -318,6 +339,7 @@ DWG is read from a converted copy in a temporary folder: they are beside the DWG
          (blocks (split-entities (section-pairs pairs "BLOCKS")))
          (ents (split-entities (section-pairs pairs "ENTITIES")))
          (objects (split-entities (section-pairs pairs "OBJECTS")))
+         (*brep-xrecs-in* (brep-xrecords objects))
          (paper-blocks nil)
          (count 0))
     (when replace
