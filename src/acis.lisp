@@ -28,7 +28,8 @@
              (str (len) (prog1 (map 'string #'code-char (subseq bytes i (+ i len))) (incf i len)))
              (tok (tag v) (vector-push-extend (cons tag v) rec)))
       ;; "ACIS BinaryFile", then version, record count, body count, flags
-      (unless (and (> n 31) (string= (map 'string #'code-char (subseq bytes 0 15)) "ACIS BinaryFile"))
+      ;; (AutoCAD 2013 writes "ACIS BinaryFile"; 2018 and later "ASM BinaryFile4", laid out the same)
+      (unless (and (> n 31) (member (map 'string #'code-char (subseq bytes 0 15)) '("ACIS BinaryFile" "ASM BinaryFile4") :test #'string=))
         (return-from sab-records nil))
       (setf i 15)
       (let ((version (i32))) (i32) (i32) (i32)

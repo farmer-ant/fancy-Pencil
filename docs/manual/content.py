@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.23"
+VERSION = "0.4.24"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -554,6 +554,10 @@ ch(
 ("p", "With ODA File Converter installed (Chapter 2), OPEN shows DWG files too, and Save writes them back as "
       "DWG (AutoCAD 2018 format). Without it, saving a DWG asks for a DXF name instead and never touches the "
       "DWG."),
+("p", "A DWG (or DXF) brings in its **raster images**, **PDF, DWF and DGN underlays** (looked for beside the "
+      "drawing), **regions** and **3D solids**, **tables**, and its **paper-space layouts** with their viewports. "
+      "A table comes in as a block showing its grid and text: edit it with **EXPLODE** and ordinary text editing. "
+      "Anything Fancy Pencil can't keep is listed when the drawing opens."),
 ("h2", "Safety copies and recovery"),
 ("p", "Every 10 minutes, each drawing with unsaved changes is copied to a safe place; your own file is not "
       "touched. If Fancy Pencil stops unexpectedly, the next start offers to open the copies. "
