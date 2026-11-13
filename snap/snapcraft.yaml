@@ -2,7 +2,7 @@
 # Build it on Ubuntu with:   snapcraft        (see docs/SNAP-STORE.md)
 name: fancypencil
 title: Fancy Pencil
-version: '0.4.22'
+version: '0.4.23'
 summary: 2D and 3D drafting with AutoCAD-style commands and AutoLISP
 description: |
   Fancy Pencil is a drafting program that works like AutoCAD: the same commands,

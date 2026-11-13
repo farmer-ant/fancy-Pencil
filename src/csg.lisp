@@ -371,7 +371,7 @@ shown when they are sharp (over 20 degrees), open, or lie on one of VISIBLE-SEGM
                               (t (list n (v* n -1d0)))))
                  (made 0))
             (declare (ignorable size))
-            (let ((untouched 0) (cut 0))
+            (let ((untouched 0) (cut 0) (gappy 0))
               (dolist (e ents)
                 (let* ((data (ent-data e))
                        (ds (mapcar (lambda (v) (vdot3 (v- v o) n)) (mesh-verts data)))
@@ -388,9 +388,146 @@ shown when they are sharp (over 20 degrees), open, or lie on one of VISIBLE-SEGM
                      (incf cut)
                      (let ((props (remove-if-not (lambda (p) (and (consp p) (member (car p) '(8 62 6 370 48)))) data))
                            (local (* 4 (loop for v in (mesh-verts data) maximize (dist v o)))))
-                       (dolist (sn sides)
-                         (let ((m (boolean-meshes :intersect (list data) (list (half-space-mesh o sn local)))))
-                           (when (and m (mesh-faces m)) (add (append m props)) (incf made))))
+                       (declare (ignorable local))
+                       (multiple-value-bind (plus minus loose) (mesh-plane-split data o n)
+                         (when (plusp loose) (incf gappy))
+                         (dolist (sn sides)
+                           (let ((m (if (plusp (vdot3 sn n)) plus minus)))
+                             (when (and m (mesh-faces m)) (add (append m props)) (incf made)))))
                        (delete-entity e))))))
-              (out (format nil "Sliced: ~D piece~:P (~D solid~:P cut, ~D not touched by the plane).~%" made cut untouched)))
+              (out (format nil "Sliced: ~D piece~:P (~D solid~:P cut, ~D not touched by the plane).~%" made cut untouched))
+              (when (plusp gappy)
+                (out (format nil "Note: ~D of the cut solids had gaps or tangled faces (as some imported meshes do); ~
+                                  where the cut outline doesn't close, the cut is left open.~%" gappy))))
             (when (gui-p) (gui-regen))))))))
+
+;;; ---------------------------------------------------------------- slicing by a plane
+;;; SLICE cuts each face of the solid with the plane, keeps the parts on each side, and closes
+;;; every outline the cut leaves with a flat face. This works on any mesh: a watertight solid gives
+;;; watertight pieces; a mesh with gaps (as some imported ones have) is still cut cleanly, and
+;;; only the cut outlines that close get a face.
+
+(defun mesh-builder ()
+  "A collector of welded corners and faces: (values add-point add-face finish)."
+  (let ((weld (make-hash-table :test #'equal)) (verts nil) (n 0) (faces nil))
+    (values (lambda (p)
+              (let ((k (list (round (px p) 1d-8) (round (py p) 1d-8) (round (pz p) 1d-8))))
+                (or (gethash k weld) (progn (push (pt3 p) verts) (setf (gethash k weld) (incf n))))))
+            (lambda (f) (push f faces))
+            (lambda () (and faces (make-mesh-data (reverse verts) (reverse faces)))))))
+
+(defun clip-polygon-by-plane (pts vis ds side)
+  "The part of the polygon PTS (edge visibility VIS, plane distances DS) on SIDE (+1/-1) of the
+plane: a list of (point . flag), FLAG for the edge to the next point: T, NIL, or :CUT along the plane."
+  (let* ((n (length pts)) (out nil))
+    (dotimes (k n)
+      (let* ((cur (nth k pts)) (nxt (nth (mod (1+ k) n) pts))
+             (dc (* side (nth k ds))) (dn (* side (nth (mod (1+ k) n) ds))) (vk (nth k vis)))
+        (when (>= dc 0) (push (cons cur vk) out))
+        (when (or (and (>= dc 0) (< dn 0)) (and (< dc 0) (> dn 0)))
+          (let* ((tt (/ dc (- dc dn))) (x (v+ cur (v* (v- nxt cur) tt))))
+            (push (cons x (if (>= dc 0) :cut vk)) out)))))
+    (nreverse out)))
+
+(defun chain-cut-loops (segs)
+  "Closed loops (lists of points) made from the cut segments SEGS ((a . b) ...); and how many
+segments could not be joined into a closed loop."
+  (let ((key (lambda (p) (list (round (px p) 1d-7) (round (py p) 1d-7) (round (pz p) 1d-7))))
+        (adj (make-hash-table :test #'equal)) (pos (make-hash-table :test #'equal)) (used (make-hash-table :test #'eq))
+        (loops nil) (loose 0))
+    (dolist (s segs)
+      (let ((ka (funcall key (car s))) (kb (funcall key (cdr s))))
+        (unless (equal ka kb)
+          (setf (gethash ka pos) (car s) (gethash kb pos) (cdr s))
+          (push (cons kb s) (gethash ka adj)) (push (cons ka s) (gethash kb adj)))))
+    (dolist (s segs)
+      (unless (gethash s used)
+        (let* ((start (funcall key (car s))) (cur (funcall key (cdr s))) (lp (list start)) (closed nil))
+          (setf (gethash s used) t)
+          (loop repeat (length segs)
+                do (when (equal cur start) (setf closed t) (return))
+                   (push cur lp)
+                   (let ((next (find-if-not (lambda (e) (gethash (cdr e) used)) (gethash cur adj))))
+                     (unless next (return))
+                     (setf (gethash (cdr next) used) t cur (car next))))
+          (if (and closed (>= (length lp) 3))
+              (push (mapcar (lambda (k) (gethash k pos)) (nreverse lp)) loops)
+              (incf loose (1- (length lp)))))))
+    (values loops loose)))
+
+(defun cap-triangles (loops n)
+  "Flat faces closing the cut LOOPS (in the plane with normal N): ((p1 p2 p3 vis12 vis23 vis31) ...),
+counterclockwise seen from the N side; VIS true for edges on a loop."
+  (multiple-value-bind (ax ay) (ocs-axes n)
+    (let* ((recs (loop for lp in loops for li from 0
+                       collect (loop for p in lp for i from 0
+                                     collect (list (pt (vdot3 p ax) (vdot3 p ay)) p li i (length lp)))))
+           (area (lambda (r) (polygon-area2 (mapcar #'first r))))
+           (inside (lambda (q r) ; point Q inside loop R (even-odd)
+                     (let ((c nil))
+                       (loop for (a b) on (append r (list (first r))) while b
+                             do (let ((pa (first a)) (pb (first b)))
+                                  (when (and (not (eq (> (py pa) (py q)) (> (py pb) (py q))))
+                                             (< (px q) (+ (px pa) (/ (* (- (px pb) (px pa)) (- (py q) (py pa))) (- (py pb) (py pa))))))
+                                    (setf c (not c)))))
+                       c)))
+           (depth (mapcar (lambda (r) (count-if (lambda (o) (and (not (eq o r)) (funcall inside (first (first r)) o))) recs)) recs))
+           (out nil))
+      (loop for r in recs for dp in depth
+            when (evenp dp)
+              do (let* ((outer (if (plusp (funcall area r)) r (reverse r)))
+                        (holes (loop for h in recs for dh in depth
+                                     when (and (= dh (1+ dp)) (funcall inside (first (first h)) r))
+                                       collect (if (minusp (funcall area h)) h (reverse h))))
+                        (poly (bridge-holes outer holes))
+                        (v (coerce poly 'vector)))
+                   (flet ((on-loop (a b) (and (= (third a) (third b))
+                                              (= 1 (mod (- (fourth b) (fourth a)) (fifth a)))
+                                              t))
+                          (on-loop-any (a b) (and (= (third a) (third b))
+                                                  (member (mod (- (fourth b) (fourth a)) (fifth a)) (list 1 (1- (fifth a))))
+                                                  t)))
+                     (declare (ignorable #'on-loop))
+                     (dolist (tr (ear-clip (mapcar #'first poly)))
+                       (let ((a (aref v (first tr))) (b (aref v (second tr))) (c (aref v (third tr))))
+                         (push (list (second a) (second b) (second c)
+                                     (on-loop-any a b) (on-loop-any b c) (on-loop-any c a))
+                               out))))))
+      out)))
+
+(defun mesh-plane-split (data o n)
+  "Mesh DATA cut by the plane through O with normal N: (values part-on-N-side part-on-other-side
+open-segments), each part closed over the cut where the cut outline closes."
+  (let* ((vs (mesh-verts-vector data))
+         (size (loop for v across vs maximize (dist v o)))
+         (eps (* 1d-9 (max 1d0 size)))
+         (dvec (map 'vector (lambda (v) (let ((dd (vdot3 (v- v o) n))) (if (< (abs dd) eps) 0d0 dd))) vs))
+         (segs nil) (parts nil))
+    (dolist (side '(1 -1))
+      (multiple-value-bind (addp addf finish) (mesh-builder)
+        (dolist (f (mesh-faces data))
+          (let* ((pts (mapcar (lambda (i) (aref vs (1- (abs i)))) f))
+                 (vis (mapcar #'plusp f))
+                 (ds (mapcar (lambda (i) (aref dvec (1- (abs i)))) f))
+                 (poly (clip-polygon-by-plane pts vis ds side)))
+            (when (>= (length poly) 3)
+              (let ((idx (mapcar (lambda (e) (funcall addp (car e))) poly)))
+                (when (>= (length (remove-duplicates idx)) 3)
+                  (funcall addf (loop for i in idx for e in poly collect (if (cdr e) i (- i))))))
+              (when (= side 1)
+                (loop for (a b) on (append poly (list (first poly))) while b
+                      when (eq (cdr a) :cut) do (push (cons (car a) (car b)) segs))))))
+        ;; close the cut
+        (multiple-value-bind (loops loose) (chain-cut-loops segs)
+          (when (= side 1) (setf parts (list loose)))
+          (dolist (tr (cap-triangles loops n))
+            (destructuring-bind (a b c vab vbc vca) tr
+              ;; the face looks away from its part: against N for the N side, along N for the other
+              (let ((ia (funcall addp a)) (ib (funcall addp b)) (ic (funcall addp c)))
+                (when (= 3 (length (remove-duplicates (list ia ib ic))))
+                  (funcall addf (if (= side 1)
+                                    (list (if vca ia (- ia)) (if vbc ic (- ic)) (if vab ib (- ib)))
+                                    (list (if vab ia (- ia)) (if vbc ib (- ib)) (if vca ic (- ic))))))))))
+        (push (funcall finish) parts)))
+    ;; parts is (minus plus loose)
+    (values (second parts) (first parts) (third parts))))

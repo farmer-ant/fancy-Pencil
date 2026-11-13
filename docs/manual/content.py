@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.22"
+VERSION = "0.4.23"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -488,8 +488,8 @@ ch(
 ("h2", "Joining and cutting"),
 ("p", "**UNION** joins solids into one. **SUBTRACT** removes some solids from others: pick what to keep, "
       "`Enter`, then what to remove. **INTERSECT** keeps only the shared part. **SLICE** cuts with a plane, "
-      "keeping one side or both. All four are on the right-click menu under **Solid Editing** when solids "
-      "are selected."),
+      "keeping one side or both, and closes the cut with a flat face (left open where an imported mesh has "
+      "gaps). All four are on the right-click menu under **Solid Editing** when solids are selected."),
 ("h2", "Taking a solid apart"),
 ("p", "**EXPLODE** (`X`) splits a solid into its faces, as AutoCAD does: each flat face becomes a **region** "
       "and each curved one a **surface**. A box gives six regions; a cylinder two round regions and one "
