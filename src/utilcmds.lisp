@@ -696,7 +696,7 @@ a DXF next to it instead and leave the DWG untouched."
        (if (null dxf)
            (tell-user msg)
            (handler-case
-               (let ((n (dxf-import dxf)))
+               (let ((n (let ((*attached-base-dir* (directory-namestring (truename f)))) (dxf-import dxf))))
                  (setf (drawing-filename *dwg*) (namestring (truename f)))
                  (after-open f n)
                  ;; an AutoCAD backup (.bak): saving makes "<name> recovered.dwg" beside it

@@ -174,6 +174,10 @@
                  (let ((c (assoc 62 head))) (and c (list c)))
                  (let ((n (assoc 210 (group-coords head)))) (and n (list n)))))))))
 
+(defvar *attached-base-dir* nil
+  "Where to look for the drawing's pictures and underlays, when not beside the file being read (a
+DWG is read from a converted copy in a temporary folder: they are beside the DWG).")
+
 (defvar *acis-data* nil "While reading a DXF: entity handle -> its ACIS bytes (from ACDSDATA).")
 (defvar *acis-converted* 0 "Solids, surfaces and regions read from the last file opened.")
 
@@ -212,6 +216,10 @@
            (let ((m (ignore-errors (funcall 'mleader-from-dxf g))))
              (push (with-src-handle (or m (convert-in g)) g) out)))
           ((equal type "HELIX") (let ((hx (funcall 'helix-from-dxf g))) (when hx (push (with-src-handle hx g) out))))
+          ;; tables: AutoCAD keeps each table's picture (lines and cell text) in an anonymous *T
+          ;; block, placed like a block insert; the table comes in as that insert
+          ((equal type "ACAD_TABLE")
+           (let ((ins (table-as-insert g))) (when ins (push (with-src-handle ins g) out))))
           ;; solids, surfaces and regions: their ACIS shape as a mesh (kept as they were if unreadable)
           ((member type *acis-types* :test #'equal)
            (let ((m (funcall 'acis-entity-from-group g)))
@@ -222,6 +230,25 @@
           (loop for cell on out until (eq cell start)
                 do (setf (car cell) (append (car cell) (list (cons :paper paper))))))))
     (nreverse out)))
+
+(defun table-as-insert (g)
+  "ACAD_TABLE group G as an INSERT of its *T block, or NIL."
+  (let* ((ref (or (member-if (lambda (p) (and (consp p) (eql (car p) 100) (equal (cdr p) "AcDbBlockReference"))) g) g))
+         (name (cdr (assoc 2 ref)))
+         (x (cdr (assoc 10 ref))) (y (cdr (assoc 20 ref))) (z (cdr (assoc 30 ref)))
+         (dx (cdr (assoc 11 g))) (dy (cdr (assoc 21 g))))
+    (when (and (stringp name) (numberp x) (numberp y))
+      (convert-in
+       (append (list (cons 0 "INSERT"))
+               (loop for c in '(5 8 62 6 370 48 420 440 67 410 210 220 230)
+                     for p = (assoc c g) when p collect p)
+               (list (cons 2 name) (cons 10 x) (cons 20 y) (cons 30 (or z 0)))
+               (loop for c in '(41 42 43)
+                     for p = (assoc c ref) when (and p (numberp (cdr p))) collect p)
+               (let ((r (cdr (assoc 50 ref))))
+                 (cond ((numberp r) (list (cons 50 r)))
+                       ((and (numberp dx) (numberp dy) (or (/= dy 0) (< dx 0)))
+                        (list (cons 50 (* (/ 180 pi) (atan dy dx))))))))))))
 
 (defun with-src-handle (data g)
   "Remember the entity's handle in the file (for AutoCAD's draw order table)."
@@ -389,7 +416,7 @@
       (when (equal (dxf 0 data) "3DFACE") (setf data (mesh-from-3dface data)))
       ;; pictures and PDF underlays: linked to their files through IMAGEDEF / PDFDEFINITION objects
       (when (member (dxf 0 data) '("IMAGE" "PDFUNDERLAY") :test #'equal)
-        (let ((im (funcall 'image-from-dxf data image-defs (directory-namestring (pathname path)))))
+        (let ((im (funcall 'image-from-dxf data image-defs (or *attached-base-dir* (directory-namestring (pathname path))))))
           (if im
               (setf data (append im (let ((p (assoc :paper data))) (and p (list p)))))
               (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
@@ -397,7 +424,7 @@
                 (setf data nil)))))
       ;; DWF and DGN underlays: linked through DWFDEFINITION / DGNDEFINITION objects
       (when (member (dxf 0 data) '("DWFUNDERLAY" "DGNUNDERLAY") :test #'equal)
-        (let ((u (funcall 'underlay-from-dxf data underlay-defs (directory-namestring (pathname path)))))
+        (let ((u (funcall 'underlay-from-dxf data underlay-defs (or *attached-base-dir* (directory-namestring (pathname path))))))
           (if u
               (setf data (append u (let ((p (assoc :paper data))) (and p (list p)))))
               (let ((c (assoc (dxf 0 data) *import-skipped* :test #'equal)))
