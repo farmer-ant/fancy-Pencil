@@ -185,3 +185,103 @@
       (wr out 0 "VERTEX") (wr out 8 layer) (wr-pt out 10 (pt 0 0 0)) (wr out 70 128)
       (loop for i in f for c from 71 do (wr out c i)))
     (wr out 0 "SEQEND") (wr out 8 layer)))
+
+;;; ---------------------------------------------------------------- exploding solids
+;;; EXPLODE on a 3D solid gives its faces, as AutoCAD does: each flat face becomes a region and
+;;; each curved one a surface (a cylinder: two round regions and one surface). The mesh's facets
+;;; are gathered into faces across their hidden edges, and across edges where the surface bends
+;;; less than a solid's own facets do (20 degrees). Exploding a region or surface gives its edges
+;;; as lines.
+
+(defparameter *mesh-smooth-angle* (+ (/ pi 9) 1d-6) "Facets meeting at less than this belong to one face.")
+(defparameter *mesh-kept-props* '(8 62 6 370 48 420 440) "Properties the exploded parts keep.")
+
+(defun mesh-kept-props (data)
+  (remove-if-not (lambda (p) (and (consp p) (member (car p) *mesh-kept-props*))) data))
+
+(defun mesh-face-groups (data)
+  "The facets of mesh DATA gathered into faces: a list of lists of facets."
+  (let* ((faces (coerce (mesh-faces data) 'vector)) (nf (length faces))
+         (vs (mesh-verts-vector data))
+         ;; corners at the same place count as one (imported solids repeat them)
+         (weld (make-hash-table :test #'equal))
+         (vid (map 'vector (lambda (p) (let ((k (list (round (px p) 1d-7) (round (py p) 1d-7) (round (pz p) 1d-7))))
+                                         (or (gethash k weld) (setf (gethash k weld) (hash-table-count weld)))))
+                   vs))
+         (normals (map 'vector (lambda (f) (newell-normal (mesh-face-points data f))) faces))
+         (parent (make-array nf :initial-contents (loop for i below nf collect i)))
+         (edges (make-hash-table :test #'equal)))
+    (labels ((root (i) (if (= (aref parent i) i) i (setf (aref parent i) (root (aref parent i)))))
+             (join (a b) (let ((ra (root a)) (rb (root b))) (unless (= ra rb) (setf (aref parent ra) rb))))
+             (bend (a b) (let ((na (aref normals a)) (nb (aref normals b)))
+                           (if (and na nb) (acos (max -1d0 (min 1d0 (vdot3 na nb)))) 0d0))))
+      (dotimes (fi nf)
+        (let* ((f (aref faces fi)) (k (length f)))
+          (dotimes (i k)
+            (let* ((a (nth i f)) (b (nth (mod (1+ i) k) f))
+                   (va (aref vid (1- (abs a)))) (vb (aref vid (1- (abs b)))))
+              (unless (= va vb)
+                (push (cons fi (minusp a)) (gethash (if (< va vb) (cons va vb) (cons vb va)) edges)))))))
+      (maphash (lambda (key users)
+                 (declare (ignore key))
+                 (loop for (u . more) on users
+                       do (dolist (w more)
+                            (when (or (and (cdr u) (cdr w)) (< (bend (car u) (car w)) *mesh-smooth-angle*))
+                              (join (car u) (car w))))))
+               edges)
+      (let ((groups (make-hash-table)))
+        (dotimes (fi nf) (push (aref faces fi) (gethash (root fi) groups)))
+        (sort (loop for g being the hash-values of groups collect (nreverse g)) #'> :key #'length)))))
+
+(defun mesh-from-facets (data facets)
+  "A mesh of FACETS (faces of mesh DATA), with just the corners they use. Its outline (edges
+that only one of the facets has) is made visible."
+  (let* ((vs (mesh-verts-vector data)) (map (make-hash-table)) (verts nil) (n 0)
+         (uses (make-hash-table :test #'equal)))
+    (let ((weld (make-hash-table :test #'equal)) (ids (make-hash-table)))
+     (flet ((key (a b)
+             (flet ((id (i) (or (gethash (abs i) ids)
+                                (setf (gethash (abs i) ids)
+                                      (let* ((p (aref vs (1- (abs i))))
+                                             (k (list (round (px p) 1d-7) (round (py p) 1d-7) (round (pz p) 1d-7))))
+                                        (or (gethash k weld) (setf (gethash k weld) (hash-table-count weld))))))))
+               (let ((ia (id a)) (ib (id b)))
+                 (cond ((= ia ib) nil) ((< ia ib) (cons ia ib)) (t (cons ib ia)))))))
+      (dolist (f facets)
+        (loop for (a b) on (append f (list (first f))) while b
+              do (let ((k (key a b))) (when k (incf (gethash k uses 0))))))
+      (let ((fs (mapcar (lambda (f)
+                          (loop for (i nxt) on (append f (list (first f))) while nxt
+                                collect (let* ((j (or (gethash (abs i) map)
+                                                      (progn (push (aref vs (1- (abs i))) verts)
+                                                             (setf (gethash (abs i) map) (incf n)))))
+                                               (k (key i nxt))
+                                               (outline (and k (= (gethash k uses 0) 1))))
+                                          (if (and (minusp i) (not outline)) (- j) j))))
+                        facets)))
+        (make-mesh-data (nreverse verts) fs))))))
+
+(defun facets-flat-p (data facets)
+  (let ((n0 nil))
+    (every (lambda (f)
+             (let ((n (newell-normal (mesh-face-points data f))))
+               (or (null n) (if n0 (> (abs (vdot3 n n0)) (- 1 1d-6)) (setf n0 n)))))
+           facets)))
+
+(defun mesh-edge-lines (data)
+  "The visible edges of mesh DATA as LINEs."
+  (let ((props (mesh-kept-props data)))
+    (loop for (a . b) in (mesh-edges data)
+          collect (append (list (cons 0 "LINE") (cons 10 a) (cons 11 b)) props))))
+
+(defun explode-mesh (data)
+  "A 3D solid (or body): its faces as regions and surfaces. A region or surface: its edges as lines."
+  (let* ((kind (dxf :kind data))
+         (groups (and (or (null kind) (string-equal kind "Body")) (mesh-face-groups data))))
+    (if groups
+        (let ((props (mesh-kept-props data)))
+          (loop for g in groups
+                collect (append (mesh-from-facets data g)
+                                props
+                                (list (cons :kind (if (facets-flat-p data g) "Region" "Surface"))))))
+        (mesh-edge-lines data))))

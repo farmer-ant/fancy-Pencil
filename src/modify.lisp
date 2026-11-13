@@ -525,6 +525,7 @@ with the same edges: Shift-pick in TRIM extends, Shift-pick in EXTEND trims."
       (let* ((data (ent-data e))
              (parts (cond ((equal (dxf 0 data) "MTEXT") (mtext-to-text-entities data))      ; lines of TEXT
                           ((text-entity-p data) (text-outline-entities data))              ; letter outlines
+                          ((equal (dxf 0 data) "POLYFACE") (explode-mesh data))            ; solid faces, edges
                           (t (explode-data data)))))
         (if parts
             (progn (delete-entity e) (dolist (p parts) (add-entity (rem-dxf 5 p))) (incf n))
