@@ -10,7 +10,8 @@ FANCY PENCIL KIT
 Double-clicking "Install Fancy Pencil.deb" opens your computer's own software installer
 (App Center on Ubuntu, Software Manager / Package Installer on Linux Mint, Software Install on
 Debian). It shows Fancy Pencil with its logo - click Install and enter your password.
-It installs SBCL and Tk (what Fancy Pencil runs on) along with it.
+It installs SBCL and Tk (what Fancy Pencil runs on) along with it. The exact 3D solid engine
+(Open CASCADE, for exact solids, fillets and STEP files) is inside the installer.
 
 Then start Fancy Pencil from the app menu.
 

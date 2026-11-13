@@ -751,7 +751,14 @@ nearest face turned toward the viewer, or NIL."
         (when (and (member ka keys :test #'equal) (member kb keys :test #'equal)
                    (notany (lambda (o) (> (vdot3 (third o) (second f)) 0.9999d0)) out))
           (push (whole-face e (first f) (second f)) out))))
-    (sort out #'> :key (lambda (o) (vdot3 (third o) dir)))))
+    ;; (faces facing the viewer equally: the one whose normal comes first, X before Y before Z)
+    (sort out (lambda (a b)
+                (let ((da (vdot3 (third a) dir)) (db (vdot3 (third b) dir)))
+                  (if (> (abs (- da db)) 1d-9) (> da db)
+                      (let ((na (third a)) (nb (third b)))
+                        (cond ((> (abs (- (px na) (px nb))) 1d-9) (> (px na) (px nb)))
+                              ((> (abs (- (py na) (py nb))) 1d-9) (> (py na) (py nb)))
+                              (t (> (pz na) (pz nb)))))))))))
 
 (defun outline-pieces (pts) (loop for (a b) on (append pts (list (first pts))) while b collect (list :seg (pt3 a) (pt3 b))))
 

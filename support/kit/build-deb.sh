@@ -78,7 +78,8 @@ cat > "$R/usr/share/metainfo/fancypencil.metainfo.xml" <<EOF
   <summary>2D and 3D drafting with AutoCAD-style commands</summary>
   <description>
     <p>Fancy Pencil is a drafting program with AutoCAD-style commands, AutoLISP, layers, blocks,
-    dimensions, solids and plotting. It reads and writes DXF.</p>
+    dimensions, exact 3D solids (Open CASCADE) and plotting. It reads and writes DXF, and STEP
+    for 3D solids.</p>
     <p>To open and save AutoCAD .dwg drawings, install the free ODA File Converter: Help &gt; Get
     ODA File Converter in Fancy Pencil, or "Get ODA File Converter" in the app menu, fetches and
     installs it. Download page: https://www.opendesign.com/guestfiles/oda_file_converter</p>

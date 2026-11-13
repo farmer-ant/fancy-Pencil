@@ -364,7 +364,12 @@
                                          ;; the middle of the face you are on: when no edge snap is nearer
                                          ((member c *face-centers* :test #'eq) (* 0.9d0 tol))
                                          (t (view-dist (car c) p)))
-                                   (* tol 1d-3 (or (position (cdr c) prio) 10)))))
+                                   (* tol 1d-3 (or (position (cdr c) prio) 10))
+                                   ;; (a tie - say a cylinder's top and bottom rims seen from above - goes to the
+                                   ;; one nearer the viewer; in a side view, to the one on the working plane)
+                                   (- (* tol 1d-9 (cond ((projected-view-p) (funcall 'view-depth (car c)))
+                                                        ((ucs) (- (abs (pz (pt3 (car c))))))
+                                                        (t (pz (pt3 (car c))))))))))
              (best (reduce (lambda (a b) (if (<= (funcall score a) (funcall score b)) a b)) pool)))
         (values (pt3 (car best)) (cdr best))))))
 

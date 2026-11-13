@@ -97,8 +97,9 @@
 (al "(command \"saveas\" \"/tmp/brep-test.dxf\")")
 (clear)
 (dxf-import "/tmp/brep-test.dxf")
-(chk "reopened: still exact, still where it was" (list (brep-data-p (ent-data (newest))) (near (vol) (* pi 90))
-                                                       (< (abs (- (reduce #'min (mapcar #'pz (mesh-verts (ent-data (newest)))))) 5)) 1d-6))
+(chk "reopened: still exact, still where it was"
+     (list (brep-data-p (ent-data (newest))) (near (vol) (* pi 90))
+           (< (abs (- (reduce #'min (mapcar #'pz (mesh-verts (ent-data (newest))))) 5)) 1d-6))
      '(t t t))
 (clear)
 

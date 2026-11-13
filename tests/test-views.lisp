@@ -290,7 +290,7 @@
 (chk "face under the cursor: front" (r3 (third (solid-face-at (pt 2 0 1.5)))) '(0 -1 0))
 (chk "face under the cursor: right" (r3 (third (solid-face-at (pt 4 1 1.5)))) '(1 0 0))
 (chk "a whole box side is one outline" (length (second (solid-face-at (pt 2 0 1.5)))) 4)
-(chk "edge under the cursor" (r3 (rest (solid-edge-at (pt 4 0 1.5)))) '((4 0 0) (4 0 3)))
+(chk "edge under the cursor" (sort (r3 (rest (solid-edge-at (pt 4 0 1.5)))) #'< :key #'third) '((4 0 0) (4 0 3)))
 (chk "the faces at that edge, nearest the viewer first"
      (let ((ed (solid-edge-at (pt 4 0 1.5)))) (r3 (mapcar #'third (faces-at-edge (first ed) (second ed) (third ed)))))
      '((1 0 0) (0 -1 0)))

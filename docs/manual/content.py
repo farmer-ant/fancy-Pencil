@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.4.24"
+VERSION = "0.5.0"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -490,6 +490,19 @@ ch(
       "`Enter`, then what to remove. **INTERSECT** keeps only the shared part. **SLICE** cuts with a plane, "
       "keeping one side or both, and closes the cut with a flat face (left open where an imported mesh has "
       "gaps). All four are on the right-click menu under **Solid Editing** when solids are selected."),
+("h2", "Exact solids"),
+("p", "Solids are **exact**: a cylinder is a true circle all the way round, however far you zoom in, and its "
+      "volume is exactly pi r^2 h. The geometry is done by **Open CASCADE** (the engine inside FreeCAD), which "
+      "comes with Fancy Pencil. MOVE, ROTATE, SCALE and MIRROR keep solids exact, and so do UNION, SUBTRACT, "
+      "INTERSECT and SLICE. The exact shape is saved in the DXF with the solid; AutoCAD sees its facets."),
+("table", [2.2, 6.2], [
+ ["**FILLETEDGE**", "Rounds edges: pick them, then `Enter`. `R` sets the radius."],
+ ["**CHAMFEREDGE**", "Bevels edges the same way. `D` sets the distance."],
+ ["**CONVTOSOLID**", "Makes a facet solid (an STL, an older drawing, a mesh from a DWG) exact, keeping its flat faces."],
+ ["**STEPOUT**, **STEPIN**", "Save solids as a STEP file (.step) for other CAD programs and machine shops, or bring one in. STEP is in millimetres: Fancy Pencil converts."],
+ ["**SOLIDENGINE**", "Says whether solids are exact. `SOLIDMODE` 0 makes facet solids instead."],
+]),
+("p", "Sweeps, lofts, Presspull and the Platonic solids are still made of facets: CONVTOSOLID makes them exact."),
 ("h2", "Taking a solid apart"),
 ("p", "**EXPLODE** (`X`) splits a solid into its faces, as AutoCAD does: each flat face becomes a **region** "
       "and each curved one a **surface**. A box gives six regions; a cylinder two round regions and one "

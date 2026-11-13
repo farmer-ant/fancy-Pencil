@@ -35,6 +35,7 @@ BSAVE		Saves the Block Editor's changes into the block.
 BURST		Express: explodes blocks, turning attribute definitions into text.
 CAL		Calculates an expression (numbers, points, geometry picked in the drawing).
 CHAMFER	CHA	Bevels the edges of objects.
+CHAMFEREDGE	CHAMFEREDGES	Bevels the edges of exact solids.
 CHANGELAYER	CL LAYCHANGE	Moves selected objects to a layer you choose from a list.
 CHPROP	CHANGE	Changes the layer or color of objects.
 CIRCLE	C	Creates a circle.
@@ -45,6 +46,7 @@ CLOSE		Closes the current drawing.
 CLOSEALL		Closes all open drawings.
 COLOR	COL DDCOLOR	Sets the color for new objects (the Select Color dialog in the window).
 CONE		Creates a 3D solid cone (or a cut-off cone with a top radius).
+CONVTOSOLID	CONVERTTOSOLID	Turns facet solids (meshes, STL imports, older solids) into exact solids made of their flat faces.
 COPY	CO CP	Copies objects.
 COPYBASE		Copies objects to the clipboard with a base point you pick (Ctrl+Shift+C).
 COPYCLIP		Copies selected objects to the clipboard (Ctrl+C); paste them into any drawing.
@@ -84,6 +86,7 @@ EXTEND	EX	Extends objects to meet the edges of other objects.
 EXTRIM		Express: trims every object crossing a cutting edge on one side.
 EXTRUDE	EXT	Extrudes closed shapes into solids (open ones into surfaces): by a height, along a direction, or along a path.
 FILLET	F	Rounds and fillets the edges of objects.
+FILLETEDGE	FILLETEDGES	Rounds the edges of exact solids.
 FLATTEN		Express: sets the Z coordinate of selected objects to zero.
 GETODA	ODA	Opens a window that downloads and installs the free ODA File Converter (for .dwg files).
 GETSEL		Express: selects objects by layer and type.
@@ -204,10 +207,13 @@ SETVAR	SET	Lists or changes the values of system variables.
 SLICE	SL	Cuts solids with a plane, keeping one side or both.
 SNAP	SN	Sets snap spacing or turns snap on/off.
 SOCCERBALL	TRUNCICOSA	Creates a truncated icosahedron (a soccer ball): 12 pentagons and 20 hexagons.
+SOLIDENGINE		Says which engine makes 3D solids: exact (Open CASCADE) or facets.
 SPELL	SP	Checks the spelling of text in the drawing.
 SPHERE		Creates a 3D solid sphere.
 SPLINE	SPL	Draws a smooth curve through (Fit) or controlled by (CV) the points you pick.
 SSX		Express: selects objects matching a picked object's type, layer and color.
+STEPIN	IMPORTSTEP STEPIMPORT	Brings the solids from a STEP file (.step, .stp) into the drawing.
+STEPOUT	EXPORTSTEP STEPEXPORT	Saves solids as a STEP file (.step), the exchange format of 3D CAD programs and machine shops.
 STLIN	IMPORT3D OBJIN	Brings an STL or OBJ file (from a 3D model or a printing site) in as a solid.
 STLOUT		Saves solids as an STL file for 3D printing.
 STRAYS	FINDSTRAYS	Finds objects lying far from the rest of the drawing, or far too big for it, to move back or erase.
