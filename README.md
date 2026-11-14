@@ -98,9 +98,13 @@ Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT u
 
 Dimensions keep the appearance AutoCAD saved with them (and are only redrawn by Fancy Pencil when you
 edit one); leaders and multileaders (callout arrows) are kept and editable; draw order ("Send to Back") is honoured; hatches
-keep their island style and full-circle boundaries. Not yet supported: raster images, PDF/DWF/DGN
-underlays, regions, 3D solids, tables and paper-space layouts. When a drawing contains
-any of these, opening it says so, and saving over that file asks first.
+keep their island style and full-circle boundaries. Also brought in: **raster images** and **PDF, DWF
+and DGN underlays** (looked for beside the drawing, as AutoCAD saves them), **regions** and **3D
+solids** (AutoCAD 2013 and later, including 2018's newer format), **tables** (as a block showing the
+grid and cell text) and **paper-space layouts** with their viewports. Not yet kept: multilines,
+wipeouts, construction lines and rays, tolerance frames, arc-length dimensions, traces and embedded
+Office (OLE) objects. When a drawing contains any of these, opening it says so, and saving over that
+file asks first.
 
 ### Safety copies (automatic save) and recovery
 
@@ -639,8 +643,10 @@ meshes. AutoCAD keeps their exact shape in its ACIS form; Fancy Pencil reads it 
 face - flat, cylindrical or conical, spherical, toroidal or a spline surface - into triangles
 that follow it closely, showing the object's real edges (and the outline of curved sides). They
 can be viewed in every visual style, moved and copied, plotted, measured (MASSPROP) and saved for
-3D printing. Saving writes them as meshes: AutoCAD shows them but can't edit them as solids. Older
-files that keep ACIS as text (AutoCAD 2010 and before) are not read yet.
+3D printing. **CONVTOSOLID** makes them exact solids (see 3D solids below), ready for UNION,
+SUBTRACT, FILLETEDGE and STEP export. Saving writes them as meshes: AutoCAD shows them but can't edit
+them as solids. AutoCAD 2018 and later files ("ASM" solids) are read too. Older files that keep ACIS
+as text (AutoCAD 2010 and before) are not read yet.
 
 ### Revolved surfaces (Solids → Revolved Surface; REVSURF, REVOLVE MOde)
 
@@ -776,8 +782,29 @@ viewports. Opening a file with layouts brings them back, viewports included.
 ### 3D solids (Solids menu)
 
 Solids are built in the working plane (Top, a side view, or a UCS), so a box drawn in the Front
-view stands upright. They are meshes - flat facets - shown as AutoCAD shows solids in wireframe:
-outlines, sharp edges and a few lines (isolines) along curved sides.
+view stands upright. They are shown as AutoCAD shows solids in wireframe: outlines, sharp edges and
+a few lines (isolines) along curved sides.
+
+**Exact solids.** Solids are exact boundary representations made by
+[Open CASCADE](https://dev.opencascade.org/) (the engine inside FreeCAD), which comes inside the Kit
+installer (and the Snap Store edition): a cylinder is a true circle all the way round and its volume
+is exactly pi r² h. BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS, EXTRUDE and REVOLVE make exact
+solids; UNION, SUBTRACT, INTERSECT and SLICE work on them exactly; MOVE, ROTATE, SCALE, MIRROR and
+side views keep them exact. The exact shape is saved in the DXF with the solid (AutoCAD sees its
+facets). The commands and prompts are the same as before.
+
+* **FILLETEDGE** and **CHAMFEREDGE** round or bevel the edges you pick (`R` / `D` set the size).
+* **CONVTOSOLID** makes facet solids exact (STL imports, older drawings, AutoCAD meshes), keeping
+  their flat faces.
+* **STEPOUT** / **STEPIN** (File or Solids → Export / Import STEP) save and open STEP files (.step),
+  the exchange format of 3D CAD programs and machine shops. STEP is in millimetres: Fancy Pencil
+  converts from and to your drawing's units.
+* **SOLIDENGINE** says whether solids are exact, and why not if they aren't; `SOLIDMODE` 0 makes
+  facet solids instead. Without Open CASCADE (running Fancy Pencil from its source folder alone),
+  solids are made of flat facets as before.
+
+SWEEP, LOFT, PRESSPULL, the Platonic solids and struts still make facet solids; CONVTOSOLID makes
+them exact.
 
 * **BOX** (corners, [Center], [Cube], [Length] then height), **WEDGE**, **CYLINDER**, **CONE**
   (with [Top radius] for a cut-off cone), **SPHERE**, **TORUS**. Heights may be negative.
