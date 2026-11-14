@@ -41,27 +41,43 @@
     (setf *brep-process* nil *brep-state* nil)
     (clrhash *brep-loaded*)))
 
+(defvar *brep-why* nil "Why the solid engine isn't running, for SOLIDENGINE.")
+(defvar *brep-tried-at* 0)
+
 (defun brep-start ()
-  (let ((path (brep-helper-path)))
+  (setf *brep-tried-at* (get-universal-time))
+  (let ((path (brep-helper-path))
+        (errfile (format nil "/tmp/fancypencil-solids-~D.err" (sb-unix:unix-getpid))))
     (if (null path)
-        (setf *brep-state* :missing)
+        (setf *brep-state* :missing
+              *brep-why* "fancypencil-solids wasn't found (looked beside Fancy Pencil and in /opt/fancypencil/support/solids)")
         (handler-case
-            (let ((p (sb-ext:run-program path nil :wait nil :input :stream :output :stream :error nil
+            (let ((p (sb-ext:run-program path nil :wait nil :input :stream :output :stream
+                                                  :error errfile :if-error-exists :supersede
                                                   :external-format :utf-8)))
               (setf *brep-process* p
                     *brep-in* (sb-ext:process-input p)
                     *brep-out* (sb-ext:process-output p))
               (clrhash *brep-loaded*)
               (write-line "ping" *brep-in*) (force-output *brep-in*)
-              (let ((l (read-line *brep-out* nil nil)))
-                (setf *brep-state* (if (and l (search "ok fancypencil-solids" l)) :ok :missing))))
-          (error () (setf *brep-state* :missing))))))
+              (let ((l (ignore-errors (read-line *brep-out* nil nil))))
+                (if (and l (search "ok fancypencil-solids" l))
+                    (setf *brep-state* :ok *brep-why* nil)
+                    (setf *brep-state* :missing
+                          *brep-why* (format nil "~A was found but didn't answer~@[ (it said: ~A)~]~@[~%  ~A~]" path l
+                                             (ignore-errors
+                                              (let ((txt (with-open-file (i errfile) (let ((s (make-string (min 2000 (file-length i))))) (subseq s 0 (read-sequence s i))))))
+                                                (and (plusp (length (string-trim '(#\Space #\Newline) txt))) (string-trim '(#\Space #\Newline) txt)))))))))
+          (error (c) (setf *brep-state* :missing
+                           *brep-why* (format nil "~A couldn't be started: ~A" path c)))))))
 
 (defun brep-available-p ()
   "True when exact solids can be made (Open CASCADE and the helper are installed, and SOLIDMODE
 isn't set to 0)."
   (and (not (eql (sysvar "SOLIDMODE") 0))
        (progn (when (or (null *brep-state*)
+                        ;; (not found before: look again now and then - it may have been installed since)
+                        (and (eq *brep-state* :missing) (> (- (get-universal-time) *brep-tried-at*) 10))
                         (and (eq *brep-state* :ok) *brep-process* (not (sb-ext:process-alive-p *brep-process*))))
                 (setf *brep-process* nil)
                 (brep-start))

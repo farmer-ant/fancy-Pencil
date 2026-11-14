@@ -20,8 +20,8 @@
 
 (defun need-exact (what)
   (cond ((brep-available-p) t)
-        (t (out (format nil "~A needs the exact solid engine (Open CASCADE), which isn't installed here.~%~
-                             Installing Fancy Pencil from its .deb brings it in; see SOLIDENGINE.~%" what))
+        (t (out (format nil "~A needs the exact solid engine (Open CASCADE), which isn't running.~%~@[  ~A~%~]~
+                             Installing Fancy Pencil from its .deb brings it in; see SOLIDENGINE.~%" what *brep-why*))
            nil)))
 
 (defvar *filletedge-radius* 1d0)
@@ -169,5 +169,5 @@ changes the size (ASK-SIZE asks it)."
       (multiple-value-bind (ls ok) (brep-request "ping") (declare (ignore ls))
         (out (format nil "Solids are exact: ~A (Open CASCADE).~%~
                           Set SOLIDMODE to 0 to make facet solids instead.~%" ok)))
-      (out (format nil "Solids are made of facets: the exact solid engine (Open CASCADE) ~:[isn't installed~;is turned off (SOLIDMODE is 0)~].~%"
-                   (eql (sysvar "SOLIDMODE") 0)))))
+      (out (format nil "Solids are made of facets: the exact solid engine (Open CASCADE) ~:[isn't running~;is turned off (SOLIDMODE is 0)~].~%~@[  ~A~%~]"
+                   (eql (sysvar "SOLIDMODE") 0) (and (not (eql (sysvar "SOLIDMODE") 0)) *brep-why*)))))
