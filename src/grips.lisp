@@ -55,7 +55,8 @@
                    (list (g 13 :d13) (g 14 :d14) (cons (pt3 e1) :dl1) (cons (pt3 e2) :dl2) (g 11 :d11))))
                 ((equal type "DIMENSION")
                  (list (g 13 :d13) (g 14 :d14) (g 10 :d10) (g 11 :d11) (g 15 :d15) (g 16 :d16)))
-                ((equal type "SOLID") (list (g 10 :d10) (g 11 :d11) (g 12 :d12) (g 13 :d13)))
+                ((member type '("SOLID" "TRACE") :test #'equal) (list (g 10 :d10) (g 11 :d11) (g 12 :d12) (g 13 :d13)))
+                ((kind-fn type :grips) (funcall (kind-fn type :grips) data))
                 ((equal type "VIEWPORT")
                  (loop for pc in (data-pieces data) for i from 0 collect (cons (second pc) (list :vpcorner i))))
                 ((equal type "HATCH")
@@ -86,6 +87,7 @@
   (let ((type (dxf 0 data)) (dv (v- to from)))
     (cond
       ((eq id :offplane) (xform-data data (xf-move dv)))
+      ((and (kind-fn type :stretch) (not (eq id :move))) (funcall (kind-fn type :stretch) data id from to))
       ((member id '(:hstart :htop :htopr)) (funcall 'helix-grip-stretch data id to))
       ((member id '(:center :insert :move))
        (xform-data data (xf-move dv)))

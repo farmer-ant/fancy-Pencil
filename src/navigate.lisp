@@ -31,6 +31,7 @@
 (defun nav-entity-points (e)
   "World points bounding entity E (its 3D edges, or its plan box at its height and thickness)."
   (let ((data (ent-data e)))
+    (when (infinite-data-p data) (return-from nav-entity-points nil))
     (if (or (offplane-p data) (wcs-type-p (dxf 0 data)))
         (loop for pc in (ignore-errors (entity-pieces e))
               append (case (first pc)

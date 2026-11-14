@@ -12,7 +12,7 @@
 
 (in-package :fancy-pencil)
 
-(defparameter *version* "0.5.2")
+(defparameter *version* "0.5.3")
 (defparameter *program-name* "Fancy Pencil")
 
 ;; view and UI state shared by every module (defined early so all files see them as special)
@@ -51,3 +51,15 @@ UP the world directions that point right and up on the screen and DIR pointing a
 (defvar *face-centers* nil "Centre snaps of flat solid faces under the cursor (count as close, after edges).")
 (defvar *brep-xrecs* nil
   "While writing a DXF: exact solid shapes to save in OBJECTS, ((entity dictionary xrecord text matrix) ...).")
+
+;;; Object types defined in moreobjs.lisp (multilines, wipeouts, construction lines ...): each
+;;; supplies its own functions, which the general code (display, plot, edit, files) calls.
+(defvar *kinds* (make-hash-table :test #'equal)
+  "Type name -> plist of the type's functions (:pieces :picture :render :xform :grips :stretch ...).")
+(defun kind-fn (type key) (and (stringp type) (getf (gethash type *kinds*) key)))
+(defun kind-p (type) (and (stringp type) (nth-value 1 (gethash type *kinds*))))
+(defun infinite-data-p (data)
+  "Construction lines and rays: no end, so they are left out of the drawing's extents."
+  (and (kind-fn (cdr (assoc 0 data)) :infinite) t))
+(defvar *kind-extras* nil "While writing a DXF 2000 file: ((dictionary-name handle writer data) ...) for OBJECTS.")
+(defvar *plot-clip* nil "While plotting: the window (x0 y0 x1 y1) that construction lines are cut to.")

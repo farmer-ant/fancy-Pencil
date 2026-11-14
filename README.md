@@ -101,10 +101,11 @@ edit one); leaders and multileaders (callout arrows) are kept and editable; draw
 keep their island style and full-circle boundaries. Also brought in: **raster images** and **PDF, DWF
 and DGN underlays** (looked for beside the drawing, as AutoCAD saves them), **regions** and **3D
 solids** (AutoCAD 2013 and later, including 2018's newer format), **tables** (as a block showing the
-grid and cell text) and **paper-space layouts** with their viewports. Not yet kept: multilines,
-wipeouts, construction lines and rays, tolerance frames, arc-length dimensions, traces and embedded
-Office (OLE) objects. When a drawing contains any of these, opening it says so, and saving over that
-file asks first.
+grid and cell text) and **paper-space layouts** with their viewports, as well as **multilines** (with
+their styles), **wipeouts**, **construction lines and rays**, **tolerance frames**, **arc length
+dimensions**, **traces** and **embedded Office (OLE) objects** (see below). Anything else a drawing
+contains that Fancy Pencil can't keep (lights, for instance) is named when the file opens, and saving
+over that file asks first.
 
 ### Safety copies (automatic save) and recovery
 
@@ -634,6 +635,35 @@ Afterwards Properties changes its base and top radius, height, turns, turn heigh
 move it (base centre), set the base radius (start point), the height (top centre) and the top
 radius. **SWEEP** a small circle along it to make a spring or a thread. Saved in DXF 2000 files as
 AutoCAD's HELIX object (R12 files get short lines along it).
+
+### Multilines, wipeouts, construction lines, tolerances, arc lengths, traces, OLE objects
+
+Each is read from AutoCAD drawings, shown and plotted, moved, copied, rotated, mirrored and scaled,
+edited with grips and the Properties palette, described by LIST, and saved back as the same AutoCAD
+object (DXF 2000 and so DWG; an R12 file gets their lines and text instead). Each has its
+AutoCAD-style command, with the usual typed options (press the Down arrow at a prompt for them):
+
+* **XLINE** (XL) - construction lines, endless both ways: through two points, or `Hor`, `Ver`,
+  `Ang` (with `Reference`), `Bisect` an angle, `Offset` from a line. **RAY** - endless one way.
+  Zoom Extents leaves them out; they snap (intersection, perpendicular ...) like any line and plot
+  cut to the sheet.
+* **MLINE** (ML) - multilines, several parallel lines drawn as one: `Justification`
+  (Top/Zero/Bottom), `Scale`, `STyle`, then points with `Undo` and `Close`. **MLSTYLE** makes styles
+  at the command line: the lines' offsets, joints at the corners, fill, line or round caps.
+  EXPLODE turns a multiline into its lines.
+* **WIPEOUT** - a blank area that hides what is under it (a note over busy linework): pick points,
+  or `Polyline` to use a closed polyline (arcs included); `Frames` ON / OFF / Display but not plot.
+  Draw order decides what it covers.
+* **TOLERANCE** (TOL) - geometric tolerance frames: the characteristic (POsition, PArallelism ...),
+  tolerances (`%%c0.05 M` for a diameter and maximum material condition) and datums. Frames read
+  from AutoCAD show its symbols.
+* **DIMARC** (DAR) - arc length dimensions of arcs and polyline arc segments, with `Text` and
+  `Partial`; DIMARCSYM puts the arc symbol before (0) or over (1) the number, or leaves it off (2).
+* **TRACE** - wide filled lines of width TRACEWID, mitred at the corners.
+* **OLE objects** (Word or Excel documents, pictures embedded in a drawing): shown with their own
+  picture when they carry one, otherwise as a labelled frame; they keep their contents when saved.
+  **OLEOPEN** (File → Open OLE Object) saves a copy of the embedded document and opens it in its
+  program. (New OLE objects can't be made: that needs Windows.)
 
 ### AutoCAD 3D solids, surfaces and regions
 

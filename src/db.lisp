@@ -46,6 +46,7 @@
   (saved-modcount 0)
   (filename nil)
   (skipped nil)          ; object types the file had that Fancy Pencil couldn't keep: ((type . n) ...)
+  (mlstyles nil)         ; multiline styles (moreobjs.lisp), besides STANDARD
   (undo nil) (redo nil))
 
 (defvar *dwg* (make-drawing))
@@ -86,7 +87,8 @@
               "DIMSTYLE" "Standard" "DIMSCALE" 1d0 "DIMASZ" 0.18d0 "DIMTXT" 0.18d0 "DIMEXO" 0.0625d0
               "DIMEXE" 0.18d0 "DIMGAP" 0.09d0 "DIMDEC" 4 "DIMTAD" 1 "DIMTSZ" 0d0 "DIMCLRD" 0 "DIMCLRE" 0
               "DIMCLRT" 0 "DIMLFAC" 1d0 "DIMPOST" "" "DIMCEN" 0.09d0 "DIMDLI" 0.38d0 "DIMTIH" 0 "DIMADEC" 0
-              "DIMBLK" "" "LOGFILEMODE" 0 "LOGFILEPATH" "" "DYNPICOORDS" 0 "DYNMODE" 3 "DYNPROMPT" 1 "SAVETIME" 10 "AUTOSNAP" 63 "POLARANG" 90d0 "POLARADDANG" "" "POLARMODE" 0 "ORBITAUTOTARGET" 1 "SURFTAB1" 6 "SURFTAB2" 6)
+              "DIMBLK" "" "LOGFILEMODE" 0 "LOGFILEPATH" "" "DYNPICOORDS" 0 "DYNMODE" 3 "DYNPROMPT" 1 "SAVETIME" 10 "AUTOSNAP" 63 "POLARANG" 90d0 "POLARADDANG" "" "POLARMODE" 0 "ORBITAUTOTARGET" 1 "SURFTAB1" 6 "SURFTAB2" 6
+              "CMLJUST" 0 "CMLSCALE" 1d0 "CMLSTYLE" "STANDARD" "TRACEWID" 0.05d0 "WIPEOUTFRAME" 1 "DIMARCSYM" 0)
         by #'cddr do (setf (gethash k *sysvars*) v)))
 (reset-sysvars)
 
@@ -409,12 +411,13 @@ and is only redrawn by Fancy Pencil once it is edited.")
       ((equal type "SPLINE") (spline-pieces data))
       ((equal type "LEADER") (leader-pieces data))
       ((equal type "MULTILEADER") (funcall 'mleader-pieces data))
-      ((equal type "SOLID")
+      ((member type '("SOLID" "TRACE") :test #'equal)
        (let ((c (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
          (loop for (a b) on (append c (list (first c))) while b collect (list :seg (pt3 a) (pt3 b)))))
       ((equal type "IMAGE") (funcall 'image-pieces data))
       ((equal type "UNDERLAY") (funcall 'underlay-pieces data))
       ((equal type "HELIX") (funcall 'helix-pieces data))   ; a picture: its frame
+      ((kind-fn type :pieces) (funcall (kind-fn type :pieces) data))
       ((equal type "VIEWPORT")                ; a layout's window onto model space: its border
        (let* ((c (pt3 (dxf 10 data))) (hw (/ (d (or (dxf 40 data) 1)) 2)) (hh (/ (d (or (dxf 41 data) 1)) 2))
               (q (list (pt (- (px c) hw) (- (py c) hh)) (pt (+ (px c) hw) (- (py c) hh))
@@ -497,7 +500,8 @@ and is only redrawn by Fancy Pencil once it is edited.")
 
 (defun drawing-extents (&optional (ents (live-entities)))
   (let ((boxes (loop for e in ents
-                     when (layer-visible-p (find-layer (ent-layer e)))
+                     ;; (construction lines and rays have no end: they don't count)
+                     when (and (layer-visible-p (find-layer (ent-layer e))) (not (infinite-data-p (ename-data e))))
                        append (let ((b (entity-bbox e))) (and b (list b))))))
     (when boxes
       (list (reduce #'min boxes :key #'first) (reduce #'min boxes :key #'second)
@@ -523,6 +527,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
           data))
 
 (defun xform-data (data xf)
+  (let ((f (kind-fn (dxf 0 data) :xform))) (when f (return-from xform-data (funcall f data xf))))
   (when (offplane-p data) (return-from xform-data (xform-planar data xf)))
   (when (equal (dxf 0 data) "POLYFACE") (return-from xform-data (xform-mesh data xf)))
   (when (equal (dxf 0 data) "IMAGE") (return-from xform-data (funcall 'xform-image data xf)))
@@ -586,7 +591,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
       ((equal type "DIMENSION")
        (let ((d1 (map-points data '(10 11 13 14 15 16) fp)))
          (if (dxf 50 data) (set-dxf 50 (funcall fa (dxf 50 data)) d1) d1)))
-      ((equal type "SOLID") (map-points data '(10 11 12 13) fp))
+      ((member type '("SOLID" "TRACE") :test #'equal) (map-points data '(10 11 12 13) fp))
       ;; a viewport moves and grows on the sheet; it keeps its scale, so it shows more of the model
       ((equal type "VIEWPORT") (map-codes (map-points data '(10) fp) '(40 41 45) (lambda (x) (* (abs x) s))))
       ((equal type "HATCH") (xform-hatch data xf))
@@ -621,6 +626,7 @@ and is only redrawn by Fancy Pencil once it is edited.")
                          (cond ((eql (dxf 62 sub) 0) (if color (append nd (list color)) nd))
                                ((dxf 62 sub) sub)
                                (t nd)))))
+        ((kind-fn type :explode) (funcall (kind-fn type :explode) data))
         ((equal type "LEADER")
          (loop for sub in (leader-display-entities data)
                collect (let ((nd (set-dxf 8 layer (rem-dxf 62 sub)))) (if color (append nd (list color)) nd))))

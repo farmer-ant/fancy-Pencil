@@ -266,6 +266,11 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
          (vars (dimension-vars data))
          (ents
            (ignore-errors
+            (if (dxf :arclen data)
+                ;; an arc length dimension (DIMARC, moreobjs.lisp)
+                (multiple-value-bind (es meas) (funcall 'arcdim-entities data vars)
+                  (when meas (setf data (set-dxf 42 meas data)))
+                  es)
             (case type
               ((0 1)
                (when (and (dxf 13 data) (dxf 14 data) (dxf 10 data))
@@ -296,7 +301,7 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
                  (multiple-value-bind (es meas)
                      (angular-dim-geometry (pt3 (dxf 15 data)) (pt3 (dxf 13 data)) (pt3 (dxf 14 data)) (pt3 (dxf 10 data)) (dxf 1 data) vars)
                    (setf data (set-dxf 42 meas data))
-                   es)))))))
+                   es))))))))
     ;; text the user dragged elsewhere (flag 128) stays where it was put; 11 is its middle point
     (when (and ents (logtest 128 (or (dxf 70 data) 0)) (dxf 11 data))
       (setf ents (mapcar (lambda (e)

@@ -278,6 +278,12 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
         (return-from plot-data (plot-data-3d data aci color lw xf depth parent-lt parent-lw parent-lts)))
       (cond
         ((equal type "IMAGE") (mapc #'emit-prim (funcall 'image-plot-prims (if xf (xform-data data xf) data))))
+        ;; the types of moreobjs.lisp
+        ((kind-fn type :plot) (funcall (kind-fn type :plot) (if xf (xform-data data xf) data) color lw #'identity))
+        ((kind-fn type :picture)
+         (dolist (sub (funcall (kind-fn type :picture) (if xf (xform-data data xf) data)))
+           (plot-data sub (sub-color sub aci) nil (1+ depth) (entity-ltype-name data parent-lt)
+                      (entity-lineweight data parent-lw) parent-lts)))
         ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
          (unless (and (equal type "ATTDEF") (null xf))     ; attribute definitions show only inside blocks
            (plot-text (if xf (xform-data data xf) data) color)))
@@ -295,7 +301,7 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
          (dolist (sub (leader-display-entities (if xf (xform-data data xf) data)))
            (plot-data sub (sub-color sub aci) nil (1+ depth) (entity-ltype-name data parent-lt)
                       (entity-lineweight data parent-lw) parent-lts)))
-        ((equal type "SOLID")
+        ((member type '("SOLID" "TRACE") :test #'equal)
          (let ((pts (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
            (emit-prim (list :fill (list (mapcar (lambda (p) (if xf (xf-point xf (pt3 p)) (pt3 p))) pts)) color))))
         ((equal type "HATCH")
@@ -327,12 +333,12 @@ AutoCAD prints such lines solid, and generating them can take all the memory."
 (defun collect-plot-prims (x0 y0 x1 y1)
   "Primitives for every visible entity touching the window."
   (when (and (fboundp 'visual-style) (not (equal (funcall 'visual-style) "Wireframe")))
-    (let ((*plotting* t))
+    (let ((*plotting* t) (*plot-clip* (list x0 y0 x1 y1)))
       ;; (joining reverses the list once more: the result is far to near, as painted)
       (let ((*plot-prims* (funcall 'styled-plot-prims x0 y0 x1 y1)))
         (join-poly-prims)
         (return-from collect-plot-prims *plot-prims*))))
-  (let ((*plot-prims* nil) (*plotting* t))
+  (let ((*plot-prims* nil) (*plotting* t) (*plot-clip* (list x0 y0 x1 y1)))
     (dolist (e (live-entities))
       (let ((b (ignore-errors (if (projected-view-p) (entity-view-bbox e) (entity-bbox e)))))
         (when (or (null b) (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0))))
@@ -869,6 +875,12 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
          (scale (* (ltype-scale-for data parent-lts) (if xf (xf-scale xf) 1)))
          (xp (lambda (p) (if xf (xf-point xf (pt3 p)) (pt3 p)))))
     (cond
+      ((kind-fn type :plot) (funcall (kind-fn type :plot) (if xf (xform-data data xf) data) color lw
+                                     (lambda (p) (plot-uv (funcall xp p)))))
+      ((kind-fn type :picture)
+       (dolist (sub (funcall (kind-fn type :picture) (if xf (xform-data data xf) data)))
+         (plot-data sub (sub-color sub aci) nil (1+ depth) (entity-ltype-name data parent-lt)
+                    (entity-lineweight data parent-lw) parent-lts)))
       ;; text: its letters, in its plane
       ((member type '("TEXT" "MTEXT" "ATTDEF" "ATTRIB") :test #'equal)
        (unless (and (equal type "ATTDEF") (null xf))
@@ -900,7 +912,7 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
        (dolist (sub (leader-display-entities (if xf (xform-data data xf) data)))
          (plot-data sub (sub-color sub aci) nil (1+ depth) (entity-ltype-name data parent-lt)
                     (entity-lineweight data parent-lw) parent-lts)))
-      ((equal type "SOLID")
+      ((member type '("SOLID" "TRACE") :test #'equal)
        (let ((pts (remove nil (list (dxf 10 data) (dxf 11 data) (dxf 13 data) (dxf 12 data)))))
          (emit-prim (list :fill (list (mapcar (lambda (p) (plot-uv (funcall xp p))) pts)) color))))
       ((equal type "HATCH")

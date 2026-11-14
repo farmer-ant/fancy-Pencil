@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.5.0"
+VERSION = "0.5.3"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -23,7 +23,7 @@ ch(
 ("img", "main.png", 8.4, "Fancy Pencil with a drawing made by an AutoLISP program (the demo plate)."),
 ("h2", "What it can do"),
 ("ul", [
- "**Draw** lines, polylines, rectangles, polygons, circles, arcs, ellipses, splines, helixes, points, revision clouds and hatches.",
+ "**Draw** lines, polylines, rectangles, polygons, circles, arcs, ellipses, splines, helixes, points, revision clouds, hatches, construction lines, multilines, traces and wipeouts.",
  "**Edit** with Move, Copy, Rotate, Scale, Mirror, Offset, Trim, Extend, Fillet, Chamfer, Array, Stretch, Align, Explode and grips.",
  "**Annotate** with single-line and paragraph text, dimensions, leaders and multileaders, in text and dimension styles.",
  "**Organise** with layers, linetypes, lineweights, colors, blocks and draw order.",
@@ -245,6 +245,13 @@ ch(
       "every point; **Method CV** treats them as control vertices that pull the curve. Close, start and end "
       "Tangency, and Knots shape it. **HELIX** makes springs, thread paths and flat spirals: base centre, base "
       "and top radius, then height, with Turns, turn Height and tWist."),
+("h2", "Construction lines, multilines, traces and wipeouts"),
+("ul", [
+ "**XLINE** (`XL`): lines with no end, for laying out: through two points, or `Hor`, `Ver`, `Ang`, `Bisect` an angle, `Offset` from a line. **RAY** runs from a point one way. Zoom Extents ignores both.",
+ "**MLINE** (`ML`): parallel lines drawn together (walls, roads): `Justification` Top/Zero/Bottom, `Scale`, `STyle`; `Close` and `Undo` as you go. **MLSTYLE** makes styles: the offsets, joints, fill and caps.",
+ "**TRACE**: a solid-filled line of width `TRACEWID`, mitred at corners.",
+ "**WIPEOUT**: a blank area that hides what is under it, by points or from a closed polyline; `Frames` turns its outline on, off or screen-only.",
+]),
 ("h2", "Points, revision clouds and text"),
 ("p", "**POINT** (`PO`) places a point in the style set by **DDPTYPE** (Format > Point Style). **REVCLOUD** "
       "(`RC`) draws a cloud around changes. Text has its own chapter."),
@@ -380,6 +387,7 @@ ch(
  ["**DIMRADIUS** (`DRA`)", "A circle's or arc's radius."],
  ["**DIMDIAMETER** (`DDI`)", "A circle's diameter."],
  ["**DIMANGULAR** (`DAN`)", "The angle between two lines, or of an arc."],
+ ["**DIMARC** (`DAR`)", "The length along an arc or polyline arc segment; `Partial` for part of it. The arc symbol follows `DIMARCSYM`."],
  ["**DIMCONTINUE** (`DCO`)", "A chain of dimensions from the last one."],
  ["**DIMBASELINE** (`DBA`)", "Dimensions stacked from the same first point."],
 ]),
@@ -391,6 +399,10 @@ ch(
       "Arrowheads include closed filled, open, dot, architectural tick and oblique. Changing a style "
       "updates every dimension that uses it."),
 ("img", "dlg-dimstyle.png", 6.0, "The Dimension Style Manager."),
+("h2", "Tolerance frames"),
+("p", "**TOLERANCE** (`TOL`) places a feature control frame: the characteristic (`POsition`, `PArallelism`, "
+      "`Flatness` ...), one or two tolerances (`%%c0.05 M` gives the diameter sign and the M-in-a-circle), "
+      "and up to three datums. Its size follows the dimension style."),
 ("h2", "Leaders and multileaders"),
 ("p", "**LEADER** (`LE`): click the arrow tip, then the points of the line, press `Enter` and type the note. "
       "**Spline** or **STraight**, **Arrow** or **None**, and **NOText** are options at every point prompt. "
@@ -568,7 +580,9 @@ ch(
       "DWG (AutoCAD 2018 format). Without it, saving a DWG asks for a DXF name instead and never touches the "
       "DWG."),
 ("p", "A DWG (or DXF) brings in its **raster images**, **PDF, DWF and DGN underlays** (looked for beside the "
-      "drawing), **regions** and **3D solids**, **tables**, and its **paper-space layouts** with their viewports. "
+      "drawing), **regions** and **3D solids**, **tables**, **multilines**, **wipeouts**, **construction lines**, "
+      "**tolerance frames**, **arc length dimensions**, **traces**, **embedded OLE objects** (a Word or Excel document, "
+      "a picture; **OLEOPEN** opens a copy in its own program), and its **paper-space layouts** with their viewports. "
       "A table comes in as a block showing its grid and text: edit it with **EXPLODE** and ordinary text editing. "
       "Anything Fancy Pencil can't keep is listed when the drawing opens."),
 ("h2", "Safety copies and recovery"),

@@ -149,6 +149,7 @@ mcmd .mb.file "Attach PDF Page..." PDFATTACH
 mcmd .mb.file "Attach DWF / DWFx..." DWFATTACH
 mcmd .mb.file "Attach DGN (MicroStation)..." DGNATTACH
 mcmd .mb.file "Image Manager..." IMAGE
+mcmd .mb.file "Open OLE Object (copy)" OLEOPEN
 .mb.file add separator
 mcmd .mb.file "3D Print: Save STL / 3MF / OBJ..." 3DPRINT
 mcmd .mb.file "Import STL / OBJ Model..." STLIN
@@ -303,6 +304,11 @@ mcmd .mb.draw "Line" LINE
 mcmd .mb.draw "Polyline" PLINE
 mcmd .mb.draw "Rectangle" RECTANG
 mcmd .mb.draw "Polygon" POLYGON
+mcmd .mb.draw "Construction Line" XLINE
+mcmd .mb.draw "Ray" RAY
+mcmd .mb.draw "Multiline" MLINE
+mcmd .mb.draw "Multiline Styles" MLSTYLE
+mcmd .mb.draw "Trace (wide line)" TRACE
 .mb.draw add separator
 mcmd .mb.draw "Circle: Center, Radius" CIRCLE
 mcmd .mb.draw "Circle: 2 Points" "CIRCLE 2P"
@@ -316,6 +322,7 @@ mcmd .mb.draw "Helix / Spiral" HELIX
 .mb.draw add separator
 mcmd .mb.draw "Hatch..." HATCH
 mcmd .mb.draw "Revision Cloud" REVCLOUD
+mcmd .mb.draw "Wipeout (blank area)" WIPEOUT
 mcmd .mb.draw "Point" POINT
 mcmd .mb.draw "Single Line Text" TEXT
 mcmd .mb.draw "Block: Make..." BLOCK
@@ -381,8 +388,8 @@ mcmd .mb.tools "ID Point" ID
 mcmd .mb.tools "List" LIST
 mcmd .mb.tools "Area" AREA
 mcmd .mb.tools "Mass Properties" MASSPROP
-foreach {l c} {Linear DIMLINEAR Aligned DIMALIGNED Radius DIMRADIUS Diameter DIMDIAMETER Angular DIMANGULAR \
-               Continue DIMCONTINUE Baseline DIMBASELINE Leader LEADER "Dimension Style..." DIMSTYLE} { mcmd .mb.dim $l $c }
+foreach {l c} {Linear DIMLINEAR Aligned DIMALIGNED Radius DIMRADIUS Diameter DIMDIAMETER Angular DIMANGULAR "Arc Length" DIMARC \
+               Continue DIMCONTINUE Baseline DIMBASELINE Leader LEADER "Tolerance (feature control frame)" TOLERANCE "Dimension Style..." DIMSTYLE} { mcmd .mb.dim $l $c }
 foreach {l c} {"Layer Isolate" LAYISO "Layer Unisolate" LAYUNISO "Layer Off (pick)" LAYOFF "Layer Freeze (pick)" LAYFRZ
                "Layers On" LAYON "Layers Thaw" LAYTHW "Layer Lock (pick)" LAYLCK "Layer Unlock (pick)" LAYULK
                "Change to Current Layer" LAYCUR "Match Object Layer" LAYMCH "Merge Layers" LAYMRG "Delete Layer" LAYDEL

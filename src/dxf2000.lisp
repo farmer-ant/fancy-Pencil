@@ -55,6 +55,7 @@
         ((equal type "IMAGE") (funcall 'write-image-entity-2000 out data0 owner handle))
         ((equal type "UNDERLAY") (funcall 'write-underlay-2000 out data0 owner handle))
         ((equal type "HELIX") (funcall 'write-helix-2000 out data0 handle owner))
+        ((kind-fn type :write2000) (funcall (kind-fn type :write2000) out data0 handle owner))
         ((equal type "LINE")
          (common) (w out 100 "AcDbLine") (thick) (wp out 10 (pt3 (dxf 10 data))) (wp out 11 (pt3 (dxf 11 data))))
         ((equal type "CIRCLE")
@@ -120,11 +121,14 @@
                  (wp out (car pair) (pt3 (cdr pair)))
                  (w out (car pair) (cdr pair)))))
          (n210))
-        ((equal type "SOLID")
+        ((member type '("SOLID" "TRACE") :test #'equal)
          (common) (w out 100 "AcDbTrace")
          (dolist (c '(10 11 12 13)) (wp out c (pt3 (or (dxf c data) (dxf 12 data) (pt 0 0)))))
          (n210))
         ((equal type "HATCH") (common) (write-hatch-body out data))
+        ((and (equal type "DIMENSION") (dxf :arclen data))           ; an arc length dimension
+         (write-common out (cons (cons 0 "ARC_DIMENSION") data) handle owner)
+         (funcall 'write-arcdim-body out data))
         ((equal type "DIMENSION") (common) (write-dimension-body out data))
         ((equal type "LEADER") (common) (write-leader-2000 out data))
         ((and (equal type "MULTILEADER") *mleaders-as-pieces*)
@@ -288,6 +292,9 @@
       (when (funcall 'drawing-has-images-p) (funcall 'write-image-classes-2000 out))
       (when (funcall 'drawing-has-underlays-p) (funcall 'write-underlay-classes-2000 out))
       (when mleaders (funcall 'write-mleader-classes-2000 out))
+      ;; multilines, wipeouts ... (moreobjs.lisp): their classes, and the objects they need
+      (setf *kind-extras* (funcall 'kind-extras-2000))
+      (funcall 'write-kind-classes-2000 out)
       (w out 0 "ENDSEC")
       ;; TABLES
       (w out 0 "SECTION") (w out 2 "TABLES")
@@ -429,6 +436,7 @@
       (when dwf-dict (w out 3 "ACAD_DWFDEFINITIONS") (w out 350 dwf-dict))
       (when dgn-dict (w out 3 "ACAD_DGNDEFINITIONS") (w out 350 dgn-dict))
       (when mleaders (w out 3 "ACAD_MLEADERSTYLE") (w out 350 h-mlsd))
+      (loop for x in *kind-extras* do (w out 3 (first x)) (w out 350 (second x)))
       (w out 0 "DICTIONARY") (w out 5 h-group) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
       (when mleaders
         (w out 0 "DICTIONARY") (w out 5 h-mlsd) (w out 330 h-root) (w out 100 "AcDbDictionary") (w out 281 1)
@@ -465,6 +473,8 @@
                (when m (dolist (x m) (w out 40 (d x))))
                (dolist (l (funcall 'split-lines text)) (w out 1 l)))
       (setf *brep-xrecs* nil)
+      (loop for x in *kind-extras* do (funcall (third x) out (second x) h-root (fourth x)))
+      (setf *kind-extras* nil)
       (w out 0 "ENDSEC")
       (w out 0 "EOF"))
     ;; patch $HANDSEED now that all handles are known

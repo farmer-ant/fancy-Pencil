@@ -8,6 +8,7 @@
 (defun entity-box3 (e)
   "E's 3D box (x0 y0 z0 x1 y1 z1), or NIL."
   (let* ((data (ent-data e)) (pts nil))
+    (when (infinite-data-p data) (return-from entity-box3 nil))
     (if (or (offplane-p data) (wcs-type-p (dxf 0 data)))
         (dolist (pc (ignore-errors (entity-pieces e)))
           (case (first pc)

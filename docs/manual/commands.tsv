@@ -58,6 +58,7 @@ DESELECT		Clears the current selection (grips).
 DGNATTACH		Attaches a MicroStation DGN file as an underlay.
 DIMALIGNED	DAL DIMALI	Creates an aligned linear dimension.
 DIMANGULAR	DAN DIMANG	Creates an angular dimension.
+DIMARC	DAR	Creates an arc length dimension: the length along an arc or a polyline arc segment.
 DIMBASELINE	DBA DIMBASE	Creates a dimension from the baseline of the last one.
 DIMCONTINUE	DCO DIMCONT	Creates a dimension starting at the second extension line of the last one.
 DIMDIAMETER	DDI DIMDIA	Creates a diameter dimension for a circle or arc.
@@ -146,6 +147,8 @@ MASSPROP	MASSPROPERTIES	Mass properties of regions (closed flat objects) and sol
 MATCHPROP	MA PAINTER	Copies properties (layer, color, linetype, text style, dimension style, hatch ...) from one object to others.
 MIRROR	MI	Creates a mirrored copy of objects.
 MLEADER	MLD	Creates a multileader: an arrow, a landing and a note, as one object.
+MLINE	ML	Draws multilines: several parallel lines at once, as set by a multiline style (MLSTYLE).
+MLSTYLE		Makes and chooses multiline styles: the lines a multiline is made of, its caps, joints and fill.
 MOCORO		Express: moves, copies, rotates and scales with one base point.
 MODEL	TILEMODE1	Shows the Model tab.
 MOVE	M	Moves objects.
@@ -158,6 +161,7 @@ MVIEW	MV	Makes layout viewports: windows on the sheet that show model space.
 NEW	QNEW	Creates a new drawing in its own tab.
 OCTAHEDRON	OCTA	Creates an octahedron: 8 triangular faces.
 OFFSET	O	Creates concentric circles, parallel lines, and parallel curves.
+OLEOPEN		Opens an embedded OLE object (an Office document, a picture ...) in the program it came from, as a copy.
 OOPS		Restores the last erased objects.
 OPEN		Opens a drawing (DXF, or DWG through a converter), or a 3D model (STL, OBJ) as a solid.
 OPENRECENT		Opens a drawing from the recent files list (File > Recent Files).
@@ -186,6 +190,7 @@ QSAVE		Saves the current drawing.
 QUICKCALC	QC	Opens QuickCalc: a calculator, unit converter, and geometry from the drawing.
 QUICKPROPERTIES	QP QUICKPROP	Quick Properties: a small panel with the main properties of the selected objects.
 QUIT	EXIT	Exits the program (offering to save each changed drawing).
+RAY		Creates rays: lines that start at a point and go on without end.
 RECTANG	REC RECTANGLE	Creates a rectangular polyline.
 REDO	MREDO	Reverses the effects of the previous UNDO.
 REGEN	R RE REDRAW REDRAWALL REGENALL	Regenerates the display.
@@ -232,9 +237,11 @@ TEXT	DT DTEXT	Creates single-line text, typed in place on the drawing.
 TEXTEDIT	DDEDIT ED MTEDIT	Edits the contents of a text object (in place on the drawing).
 TEXTTOFRONT		Brings text, dimensions and leaders in front of everything else.
 THICKNESS	TH	Sets the thickness (extrusion height) for new lines, arcs, circles and polylines.
+TOLERANCE	TOL	Places a geometric tolerance (feature control frame).
 TOOLBAR	TB TO	Shows the list of toolbars, to turn them on or off (drag a toolbar by its dotted grip to dock it on any edge or float it).
 TOOLBAROPTIONS	TBOPTIONS	Opens the Toolbar Options window: icon size, line weight, spacing and colors.
 TORUS	TOR	Creates a 3D solid torus (a ring), lying in the working plane.
+TRACE		Draws traces: solid-filled lines of a set width (TRACEWID).
 TRIM	TR	Trims objects to meet the edges of other objects.
 TXT2MTXT	T2M	Express: combines single-line text into one MTEXT object.
 TXTEXP	EXPLODETEXT TEXTEXPLODE	Explodes text into closed polylines tracing each letter's outline (Express Tools).
@@ -247,5 +254,7 @@ VPORTS	VIEWPORTS VPORT	Splits the Model tab into several viewports, each with it
 VPSCALE	VPS	Sets the scale of layout viewports (1:2, 1/4"=1'-0", 2:1, Fit ...).
 VSCURRENT	SHADEMODE VISUALSTYLES VS	Sets the visual style: Wireframe, Hidden, Shaded or Shaded with Edges.
 WEDGE	WE	Creates a 3D solid wedge: full height at the first corner, sloping to the opposite side.
+WIPEOUT		Covers part of the drawing with a blank area (a mask), e.g. under a note on busy linework.
+XLINE	XL	Creates construction lines: lines with no end, for laying out a drawing.
 XLIST		Express: lists the properties of an object nested in a block.
 ZOOM	Z	Changes the view magnification.

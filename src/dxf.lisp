@@ -216,6 +216,10 @@ DWG is read from a converted copy in a temporary folder: they are beside the DWG
            (let ((m (ignore-errors (funcall 'mleader-from-dxf g))))
              (push (with-src-handle (or m (convert-in g)) g) out)))
           ((equal type "HELIX") (let ((hx (funcall 'helix-from-dxf g))) (when hx (push (with-src-handle hx g) out))))
+          ;; multilines, wipeouts, construction lines ... (moreobjs.lisp)
+          ((kind-fn type :from-dxf)
+           (let ((x (ignore-errors (funcall (kind-fn type :from-dxf) g))))
+             (push (with-src-handle (or x (convert-in g)) g) out)))
           ;; tables: AutoCAD keeps each table's picture (lines and cell text) in an anonymous *T
           ;; block, placed like a block insert; the table comes in as that insert
           ((equal type "ACAD_TABLE")
@@ -430,7 +434,8 @@ its shape back."
     (when replace (funcall 'import-tiles tables))
     ;; layouts (paper space): their names, sheets and the block records that own their objects
     (let ((space-of (funcall 'import-layouts objects tables replace))
-          (image-defs (funcall 'image-defs-from-objects objects))
+          ;; (multiline styles are kept with the drawing first: multilines look theirs up)
+          (image-defs (progn (funcall 'mlstyles-from-objects objects) (funcall 'image-defs-from-objects objects)))
           (underlay-defs (funcall 'underlay-defs-from-objects objects)))
      (dolist (data (append (mapcar (lambda (x) (rem-dxf :src-handle x))
                                    (apply-draw-order (convert-entity-list ents) (sortents-map objects tables)))
@@ -457,10 +462,12 @@ its shape back."
         (when (and owner (equal (dxf 0 data) "VIEWPORT")) (setf data (funcall 'vp-from-dxf data)))
         (setf data (and data (append data (list (cons :space (and owner (funcall space-of owner))))))))
       (if (and data
-               (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
-                                      "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT"
-                                      "IMAGE" "HELIX" "MULTILEADER" "UNDERLAY")
-                       :test #'equal)
+               (or (member (dxf 0 data) '("LINE" "CIRCLE" "ARC" "POINT" "LWPOLYLINE" "TEXT" "MTEXT" "LEADER"
+                                          "INSERT" "DIMENSION" "ATTDEF" "ELLIPSE" "SPLINE" "SOLID" "HATCH" "POLYFACE" "VIEWPORT"
+                                          "IMAGE" "HELIX" "MULTILEADER" "UNDERLAY" "TRACE")
+                           :test #'equal)
+                   ;; multilines, wipeouts ... (moreobjs.lisp), when they were read whole
+                   (and (kind-fn (dxf 0 data) :valid) (funcall (kind-fn (dxf 0 data) :valid) data)))
                (or (not (equal (dxf 0 data) "MULTILEADER")) (assoc :ml data)))
           (progn
             (when (and (equal (dxf 0 data) "LEADER") (dxf :ldr-blk-handle data))
@@ -508,6 +515,8 @@ its shape back."
   (let ((type (dxf 0 data)))
     (cond
       ((equal type "POLYFACE") (write-mesh-r12 out data))
+      ;; multilines, wipeouts ... (moreobjs.lisp): R12 has none of them, so their picture
+      ((kind-fn type :write12) (dolist (sub (funcall (kind-fn type :write12) data)) (write-entity out sub)))
       ((equal type "IMAGE") nil)              ; R12 has no pictures
       ((equal type "UNDERLAY") nil)           ; nor underlays
       ((equal type "HELIX")                   ; R12 has no helix: short lines along it

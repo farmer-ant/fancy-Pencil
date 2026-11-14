@@ -102,6 +102,7 @@
          (let ((a (ignore-errors (abs (reduce #'+ (mapcar (lambda (lp) (loop-signed-area (loop-polygon-directed lp 32)))
                                                          (hatch-loops data)))))))
            (when a (add "Area  ~A" (fmt-area a)))))
+        ((kind-fn type :hover) (dolist (l (funcall (kind-fn type :hover) data)) (add "~A" l)))
         ((equal type "POINT") (add "Point"))
         ((equal type "POLYFACE")
          (add "3D Solid (mesh)")
