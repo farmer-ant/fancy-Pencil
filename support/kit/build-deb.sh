@@ -24,6 +24,11 @@ if [ -n "$SOLIDS" ]; then
     mkdir -p "$SRC/support/solids" "$SRC/lib"
     cp "$SOLIDS/fancypencil-solids" "$SRC/support/solids/"
     cp -P "$SOLIDS"/lib/*.so* "$SRC/lib/"
+    # every library must find its neighbours in its own folder, not in the folder it was built in
+    for f in "$SRC"/lib/*.so.*.*.*; do
+        rp=$(objdump -p "$f" | awk '/RUNPATH|RPATH/ {print $2}')
+        case "$rp" in ""|'$ORIGIN') ;; *) echo "$f looks for libraries in $rp: set it to \$ORIGIN" >&2; exit 1 ;; esac
+    done
     chmod 755 "$SRC/support/solids/fancypencil-solids"
     ARCH=amd64
 fi
