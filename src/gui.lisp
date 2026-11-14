@@ -865,8 +865,8 @@ Escape, so nothing stays dashed after a command (e.g. an object erased while sel
 (defun tooltip-cmds (x y text &aux (x (round x)) (y (round y)))
   (list (format nil ".c create text ~A ~A -text ~A -anchor nw -fill #1b1f24 -font {Helvetica 9} -tags {tmp tip}"
                 (+ x 14) (+ y 14) (tq text))
-        ".c create rectangle [.c bbox tip] -fill #f1e7a8 -outline #b9a95a -tags {tmp tipbg}"
-        ".c lower tipbg tip"))
+        ;; (no box when the tip shows nothing: an empty bounding box can't be drawn)
+        "if {[llength [set b [.c bbox tip]]] == 4} {.c create rectangle {*}$b -fill #f1e7a8 -outline #b9a95a -tags {tmp tipbg}; .c lower tipbg tip}"))
 
 (defvar *polar-hit* nil "The polar tracking angle the cursor is on, or NIL.")
 
