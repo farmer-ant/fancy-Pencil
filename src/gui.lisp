@@ -1003,12 +1003,26 @@ active box). NIL when the line should be read as usual."
                      (if (< (+ (* u u) (* v v)) 1d-9) (/ pi 2) (atan v u)))))
     (t (list 0d0 (/ pi 2)))))
 
+(defvar *cursor-badge* nil "While MATCHPROP picks the objects to paint: :paint (the brush cursor).")
+
+(defun painter-brush-cmds (x y col)
+  "AutoCAD's Match Properties cursor: a paintbrush up and to the right of the pickbox."
+  (flet ((p (dx dy) (format nil "~,1F ~,1F" (+ x dx) (- y dy))))
+    (list
+     ;; the handle
+     (format nil ".c create line ~A ~A -fill ~A -width 4 -capstyle round -tags tmp" (p 31 31) (p 20 20) col)
+     ;; the metal band
+     (format nil ".c create polygon ~A ~A ~A ~A -fill ~A -outline ~A -tags tmp" (p 17 23) (p 23 17) (p 19 13) (p 13 19) col col)
+     ;; the bristles, coming to a point at the corner of the pickbox
+     (format nil ".c create polygon ~A ~A ~A -fill ~A -outline ~A -tags tmp" (p 19 13) (p 13 19) (p 6 6) col col))))
+
 (defun cursor-cmds ()
   (when *mouse-in*
     (let* ((x *mouse-sx*) (y *mouse-sy*) (kind (and *req* (inreq-kind *req*)))
            (pick (member kind '(:command :entity :select-point)))
            (cross (not (member kind '(:entity :select-point))))
-           (pb (or (sysvar "PICKBOX") 5)) (out nil) (col (cursor-color)))
+           (pb (or (sysvar "PICKBOX") 5)) (out nil) (paint (and (eq *cursor-badge* :paint) pick))
+           (col (if paint (painter-color) (cursor-color))))
       (when cross
         (let ((len (let ((cs (or (sysvar "CURSORSIZE") 100)))
                      (if (>= cs 100) 10000 (round (* (/ cs 200) (max *cw* *ch*)))))))
@@ -1021,7 +1035,9 @@ active box). NIL when the line should be read as usual."
               (push (format nil ".c create line ~,1F ~,1F ~,1F ~,1F -fill ~A -tags tmp"
                             (+ x (* pb cx)) (+ y (* pb cy)) (+ x (* len cx)) (+ y (* len cy)) col) out)))))
       (when (or pick (not cross))
-        (push (format nil ".c create rectangle ~D ~D ~D ~D -outline ~A -tags tmp" (- x pb) (- y pb) (+ x pb) (+ y pb) col) out))
+        (push (format nil ".c create rectangle ~D ~D ~D ~D -outline ~A -width ~D -tags tmp" (- x pb) (- y pb) (+ x pb) (+ y pb) col
+                      (if paint 2 1)) out))
+      (when paint (setf out (append (reverse (painter-brush-cmds (+ x (max 0 (- pb 6))) (- y (max 0 (- pb 6))) col)) out)))
       (nreverse out))))
 
 (defun draw-temp ()

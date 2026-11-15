@@ -115,8 +115,9 @@
            (let ((n 0))
              (out (format nil "Current active settings:  ~A~%" (matchprop-settings-text)))
              (loop
-               (let ((r (get-user-input :select-point :prompt "Select destination object(s) or [Settings]: "
-                                                      :keywords '("Settings" "Window" "Crossing" "ALL" "Previous"))))
+               (let ((r (let ((*cursor-badge* :paint))     ; the paintbrush cursor
+                          (get-user-input :select-point :prompt "Select destination object(s) or [Settings]: "
+                                                        :keywords '("Settings" "Window" "Crossing" "ALL" "Previous")))))
                  (flet ((apply-all (ents)
                           (dolist (e (filter-editable ents))
                             (unless (eq e s) (apply-match s e) (incf n)))

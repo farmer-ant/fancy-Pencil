@@ -2934,7 +2934,7 @@ proc bd_done {act} {
 
 # ---------------------------------------------------------------- Cursor & Selection settings (OPTIONS)
 # colors: list of {name #rrggbb}. Returns "CANCEL" or "OK size color pickbox aperture snapsize gripsize rollover".
-proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {bg "#212830"} {bgs {}}} {
+proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {bg "#212830"} {bgs {}} {paint "#ffa53a"} {paints {}}} {
     set w .cud
     catch {destroy $w}
     toplevel $w -background $::panel
@@ -2947,6 +2947,7 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     set ::cud(snap) $snapsize; set ::cud(grip) $gripsize; set ::cud(roll) $rollover
     set ::cud(color) $color; set ::cud(colors) $colors
     set ::cud(bg) $bg; set ::cud(bgs) $bgs
+    set ::cud(paint) $paint; set ::cud(paints) $paints
     ttk::labelframe $f.ch -text " Crosshairs " -padding 8
     ttk::label $f.ch.sl -text "Size (% of the screen):"
     ttk::scale $f.ch.s -from 1 -to 100 -orient horizontal -length 200 -variable ::cud(size) \
@@ -2962,6 +2963,15 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     grid $f.ch.s -row 1 -column 0 -sticky ew -padx {0 8}; grid $f.ch.e -row 1 -column 1 -sticky w
     grid $f.ch.cl -row 2 -column 0 -columnspan 2 -sticky w -pady {8 0}
     grid $f.ch.c -row 3 -column 0 -sticky w
+    # the Match Properties cursor: its own color, so it can't be mistaken for an ordinary pick
+    ttk::label $f.ch.pl -text "Match Properties cursor:"
+    set pnames {}; set pcur ""
+    foreach c $paints { lappend pnames [lindex $c 0]; if {[string equal -nocase [lindex $c 1] $paint]} { set pcur [lindex $c 0] } }
+    ttk::combobox $f.ch.p -state readonly -width 14 -values $pnames
+    $f.ch.p set [expr {$pcur ne "" ? $pcur : [lindex $pnames 0]}]
+    bind $f.ch.p <<ComboboxSelected>> cud_preview
+    grid $f.ch.pl -row 4 -column 0 -columnspan 2 -sticky w -pady {8 0}
+    grid $f.ch.p -row 5 -column 0 -sticky w
     ttk::labelframe $f.sz -text " Box sizes (pixels) " -padding 8
     set r 0
     foreach {key label lo hi} {pick "Pickbox (selecting objects)" 0 50 ap "Snap target (aperture)" 1 50 \
@@ -3005,7 +3015,9 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
         set ::cud(size) 100; set ::cud(pick) 5; set ::cud(ap) 10; set ::cud(snap) 6; set ::cud(grip) 5; set ::cud(roll) 1
         set ::cud(bg) "#212830"; .cud.f.bgf.c set [lindex [lindex $::cud(bgs) 0] 0]
         .cud.f.bgf.sw configure -background $::cud(bg); .cud.f.pv configure -background $::cud(bg)
-        .cud.f.ch.c set [lindex [lindex $::cud(colors) 0] 0]; cud_preview }
+        .cud.f.ch.c set [lindex [lindex $::cud(colors) 0] 0]
+        if {[llength $::cud(paints)]} { .cud.f.ch.p set [lindex [lindex $::cud(paints) 0] 0] }
+        cud_preview }
     ttk::button $b.ok -text OK -command {cud_done 1}
     ttk::button $b.no -text Cancel -command {cud_done 0}
     pack $b.def -side left
@@ -3049,6 +3061,12 @@ proc cud_color {} {
     foreach c $::cud(colors) { if {[lindex $c 0] eq $n} { return [lindex $c 1] } }
     return "#c9ced6"
 }
+proc cud_paint {} {
+    if {![winfo exists .cud.f.ch.p]} { return $::cud(paint) }
+    set n [.cud.f.ch.p get]
+    foreach c $::cud(paints) { if {[lindex $c 0] eq $n} { return [lindex $c 1] } }
+    return $::cud(paint)
+}
 proc cud_int {key lo hi} {
     if {![string is integer -strict $::cud($key)]} { return $lo }
     return [expr {max($lo, min($hi, $::cud($key)))}]
@@ -3077,11 +3095,18 @@ proc cud_preview {} {
     $c create rectangle [expr {128 - $gp}] [expr {128 - $gp}] [expr {128 + $gp}] [expr {128 + $gp}] -fill "#3b7dd8" -outline "#3b7dd8"
     $c create text 22 [expr {110 - $sn}] -text "snap" -fill "#8a929c" -font {Helvetica 8}
     $c create text 128 [expr {110 - $gp}] -text "grip" -fill "#8a929c" -font {Helvetica 8}
+    # the Match Properties cursor, top right
+    set pc [cud_paint]; set px 118; set py 34
+    $c create rectangle [expr {$px - 4}] [expr {$py - 4}] [expr {$px + 4}] [expr {$py + 4}] -outline $pc -width 2
+    $c create line [expr {$px + 20}] [expr {$py - 20}] [expr {$px + 12}] [expr {$py - 12}] -fill $pc -width 3 -capstyle round
+    $c create polygon [expr {$px + 10}] [expr {$py - 14}] [expr {$px + 14}] [expr {$py - 10}] [expr {$px + 11}] [expr {$py - 7}] [expr {$px + 7}] [expr {$py - 11}] -fill $pc -outline $pc
+    $c create polygon [expr {$px + 11}] [expr {$py - 7}] [expr {$px + 7}] [expr {$py - 11}] [expr {$px + 4}] [expr {$py - 4}] -fill $pc -outline $pc
+    $c create text $px [expr {$py + 14}] -text "match" -fill "#8a929c" -font {Helvetica 8}
 }
 proc cud_done {ok} {
     if {$ok} {
         set ::cud(result) [join [list OK [cud_int size 1 100] [cud_color] [cud_int pick 0 50] [cud_int ap 1 50] \
-                                     [cud_int snap 1 20] [cud_int grip 1 20] [expr {$::cud(roll) ? 1 : 0}] $::cud(bg)] " "]
+                                     [cud_int snap 1 20] [cud_int grip 1 20] [expr {$::cud(roll) ? 1 : 0}] $::cud(bg) [cud_paint]] " "]
     }
     destroy .cud
 }

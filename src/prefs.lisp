@@ -5,7 +5,7 @@
 (in-package :fancy-pencil)
 
 (defparameter *pref-sysvars*
-  '("BKGCOLOR" "CURSORSIZE" "CURSORCOLOR" "PICKBOX" "APERTURE" "AUTOSNAPSIZE" "GRIPSIZE" "ROLLOVERTIPS"
+  '("BKGCOLOR" "CURSORSIZE" "CURSORCOLOR" "PAINTERCOLOR" "PICKBOX" "APERTURE" "AUTOSNAPSIZE" "GRIPSIZE" "ROLLOVERTIPS"
     "OSMODE" "GRIDMODE" "DELOBJ" "LOGFILEMODE" "LOGFILEPATH" "DYNPICOORDS" "DYNMODE" "DYNPROMPT" "SAVETIME" "AUTOSNAP" "POLARANG" "POLARADDANG" "POLARMODE")
   "Settings kept in the preferences file.")
 
@@ -40,6 +40,14 @@
                       (or (integerp (cdr pair)) (stringp (cdr pair))))
              (setf (sysvar (string-upcase (car pair))) (cdr pair)))))))))
 
+(defparameter *painter-colors*
+  '(("Orange" "#ffa53a") ("Yellow" "#ffe14d") ("Green" "#3fd25f") ("Cyan" "#5fd3e0") ("Magenta" "#ff6fd8") ("Red" "#ff5f5f")))
+
+(defun painter-color ()
+  "The color of the Match Properties cursor (the brush and its pickbox)."
+  (let ((c (sysvar "PAINTERCOLOR")))
+    (if (and (stringp c) (= (length c) 7) (char= (char c 0) #\#)) c "#ffa53a")))
+
 (defun cursor-color ()
   (let ((c (sysvar "CURSORCOLOR")))
     (cond ((not (and (stringp c) (= (length c) 7) (char= (char c 0) #\#))) (setf c "#c9ced6")))
@@ -66,7 +74,7 @@
     (gui-regen)))
 
 (defun cursor-dialog ()
-  (let ((r (tk-ask (format nil "cursordlg ~D ~A ~D ~D ~D ~D ~D ~A ~A ~A"
+  (let ((r (tk-ask (format nil "cursordlg ~D ~A ~D ~D ~D ~D ~D ~A ~A ~A ~A ~A"
                            (or (sysvar "CURSORSIZE") 100)
                            (tq (let ((c (sysvar "CURSORCOLOR"))) (if (stringp c) c "#c9ced6")))
                            (or (sysvar "PICKBOX") 5) (or (sysvar "APERTURE") 10)
@@ -75,10 +83,13 @@
                            (format nil "{~{{~A ~A}~^ ~}}" (loop for (n c) in *cursor-colors* append (list (tq n) c)))
                            (background-color)
                            (format nil "{~{{~A ~A}~^ ~}}" (loop for (n c) in (remove "AutoCAD dark" *background-colors* :key #'first :test #'string=)
-                                                                append (list (tq n) c)))))))
+                                                                append (list (tq n) c)))
+                           (painter-color)
+                           (format nil "{~{{~A ~A}~^ ~}}" (loop for (n c) in *painter-colors* append (list (tq n) c)))))))
     (when (and (> (length r) 3) (string= (subseq r 0 3) "OK "))
-      (destructuring-bind (cs col pb ap sn gs rt &optional bg) (split-string (subseq r 3) #\Space)
+      (destructuring-bind (cs col pb ap sn gs rt &optional bg paint) (split-string (subseq r 3) #\Space)
         (when (and bg (= (length bg) 7) (char= (char bg 0) #\#)) (setf (sysvar "BKGCOLOR") (string-downcase bg)))
+        (when (and paint (= (length paint) 7) (char= (char paint 0) #\#)) (setf (sysvar "PAINTERCOLOR") (string-downcase paint)))
         (flet ((int (s lo hi) (let ((v (ignore-errors (parse-integer s)))) (and v (max lo (min hi v))))))
           (setf (sysvar "CURSORSIZE") (or (int cs 1 100) 100)
                 (sysvar "CURSORCOLOR") (if (and (= (length col) 7) (char= (char col 0) #\#)) col "#c9ced6")
