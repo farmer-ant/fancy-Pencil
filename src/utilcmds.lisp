@@ -767,6 +767,16 @@ a DXF next to it instead and leave the DWG untouched."
   (when (fboundp 'tiles-after-open) (funcall 'tiles-after-open))
   ;; the view it had when last closed, else the whole drawing
   (when (gui-p) (unless (restore-drawing-view f) (zoom-extents)) (gui-sync))
+  ;; nothing in model space, the drawing is on a layout: show that layout, as AutoCAD would
+  (when (and (null (drawing-ctab *dwg*)) (null (live-entities)))
+    (let ((l (find-if (lambda (l) (some (lambda (e) (not (equal (ent-type e) "VIEWPORT")))
+                                        (layout-entities (layout-name l))))
+                      (drawing-layouts *dwg*))))
+      (when l
+        (set-ctab (layout-name l))
+        (when (gui-p) (gui-sync))
+        (out (format nil "Model space is empty: the drawing is on layout \"~A\" (its tab is below the drawing).~%"
+                     (layout-name l))))))
   (when *import-skipped*
     (tell-user (format nil "~A also contains ~A, which Fancy Pencil can't show or keep yet.~%~%~
                             The file itself is unchanged. Saving over it would leave these out, so use ~
