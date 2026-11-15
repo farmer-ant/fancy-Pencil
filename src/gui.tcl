@@ -1067,6 +1067,44 @@ proc ask {id script} {
 proc toolwin {w} {
     wm group $w .
     if {[wm state $w] eq "iconic"} { wm deiconify $w }
+    # minimizing it parks it at the side of the drawing; click its tab there to bring it back
+    bind $w <Unmap> [list toolwin_unmapped $w %W]
+    bind $w <Map> [list toolwin_mapped $w %W]
+    bind $w <Destroy> [list toolwin_destroyed $w %W]
+}
+proc toolwin_unmapped {w W} { if {$W eq $w} { after 50 [list toolwin_check $w] } }
+proc toolwin_check {w} {
+    if {[winfo exists $w] && [wm state $w] eq "iconic"} { wm withdraw $w; park_add $w }
+}
+proc toolwin_mapped {w W} { if {$W eq $w} { park_remove $w } }
+proc toolwin_destroyed {w W} { if {$W eq $w} { park_remove $w } }
+proc park_tab {w} { return .c.park.[string map {. _} $w] }
+proc park_add {w} {
+    if {![winfo exists .c.park]} {
+        frame .c.park -background "#1b1f24" -highlightthickness 1 -highlightbackground "#3a4049"
+    }
+    set t [park_tab $w]
+    if {![winfo exists $t]} {
+        label $t -text "\u25b8 [wm title $w]" -anchor w -padx 6 -pady 2 -cursor hand2 \
+            -background "#1b1f24" -foreground "#c9ced6" -activebackground "#2b3340" -font {Helvetica 9}
+        bind $t <Button-1> [list park_restore $w]
+        bind $t <Enter> [list $t configure -background "#2b3340"]
+        bind $t <Leave> [list $t configure -background "#1b1f24"]
+        pack $t -side top -fill x
+    }
+    place .c.park -x 8 -y 8 -anchor nw
+    raise .c.park
+}
+proc park_remove {w} {
+    set t [park_tab $w]
+    if {[winfo exists $t]} { destroy $t }
+    if {[winfo exists .c.park] && [llength [winfo children .c.park]] == 0} { place forget .c.park }
+}
+# put window W away at the side of the drawing (what minimizing it does too)
+proc park {w} { if {[winfo exists $w]} { wm withdraw $w; park_add $w } }
+proc park_restore {w} {
+    park_remove $w
+    if {[winfo exists $w]} { wm deiconify $w; raise $w; focus $w }
 }
 proc dlg_owner {w} {
     set f [focus]
@@ -4386,6 +4424,8 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         }
         ttk::button $w.tb.cs -text "Color..." -command {layeract pickcolor}
         pack $w.tb.cs -side left -padx 2
+        ttk::button $w.tb.park -text "Park \u25c2" -command {park .ld}
+        pack $w.tb.park -side right -padx 2
         pack $w.tb -side top -fill x
         ttk::frame $w.tb2 -padding {6 0 6 6}
         ttk::label $w.tb2.ll -text "Linetype:"
