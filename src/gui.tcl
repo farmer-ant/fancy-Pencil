@@ -560,7 +560,7 @@ proc textwin {title text} {
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w $title
-    wm transient $w [dlg_owner $w]
+    toolwin $w
     text $w.t -width 72 -height 32 -background "#1a1f26" -foreground "#d6dce4" -font {{DejaVu Sans Mono} 9} \
         -borderwidth 0 -highlightthickness 0 -padx 8 -pady 6 -yscrollcommand [list $w.sb set]
     ttk::scrollbar $w.sb -command [list $w.t yview]
@@ -1061,6 +1061,13 @@ proc ask {id script} {
 # The window a new dialog belongs to: the dialog it was opened from (the Layer Properties
 # Manager for its Color... button, say), else the main window. Tied to that one, the desktop
 # keeps the new dialog in front of it instead of behind.
+# A window you keep open while you work (Layer Properties Manager, QuickCalc, Command History, report
+# windows): an ordinary window, so the title bar has minimize and maximize as well as close.
+# (Dialogs that wait for an answer stay tied to their owner: those have only close.)
+proc toolwin {w} {
+    wm group $w .
+    if {[wm state $w] eq "iconic"} { wm deiconify $w }
+}
 proc dlg_owner {w} {
     set f [focus]
     if {$f eq ""} { set f [grab current] }
@@ -4119,7 +4126,7 @@ proc qc_open {apply} {
     }
     toplevel $w -background $::panel
     wm title $w "QuickCalc"
-    wm transient $w .
+    toolwin $w
     wm geometry $w 360x560+[expr {max(0, [winfo rootx .] + [winfo width .] - 420)}]+[expr {[winfo rooty .] + 90}]
     wm minsize $w 330 460
     wm protocol $w WM_DELETE_WINDOW {wm withdraw .qc; focus .cmd.e}
@@ -4368,7 +4375,8 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         toplevel $w -background $::panel
         wm title $w "Layer Properties Manager"
         wm geometry $w 790x420+[expr {[winfo rootx .] + 120}]+[expr {[winfo rooty .] + 140}]
-        wm transient $w [dlg_owner $w]
+        wm minsize $w 560 260
+        toolwin $w
         ttk::frame $w.tb -padding 6
         foreach {lbl act} {"New Layer" new "Rename" rename "Delete" delete "Set Current" current} {
             ttk::button $w.tb.[string map {" " ""} [string tolower $lbl]] -text $lbl -command [list layeract $act]
@@ -4417,6 +4425,8 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
                     [expr {$plt ? "Plot" : "No Plot"}] $color $ltype $lweight]]
         if {$name eq $selname} { $w.t selection set $id }
     }
+    # (brought back if it was minimized)
+    if {[wm state $w] ne "normal"} { wm deiconify $w }
     raise $w
 }
 proc layersel {} {
@@ -4914,7 +4924,7 @@ proc histdlg {text logon logdir started} {
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Command History"
-        wm transient $w [dlg_owner $w]
+        toolwin $w
         set top [ttk::frame $w.top -padding {8 6}]
         ttk::label $top.l -text "Find:"
         ttk::entry $top.e -width 24
@@ -4951,6 +4961,7 @@ proc histdlg {text logon logdir started} {
     set ::hd2_logdir $logdir
     $w.info configure -text "This session began $started.   Log files (when kept): $logdir"
     histdlg_set $text $logon
+    if {[wm state $w] ne "normal"} { wm deiconify $w }
     raise $w
     focus $w.top.e
 }
