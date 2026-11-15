@@ -653,3 +653,10 @@ and is only redrawn by Fancy Pencil once it is edited.")
 (defun new-drawing ()
   (setf *dwg* (make-drawing))
   (reset-sysvars))
+
+(defun block-subs-shown (b type)
+  "What a block reference or dimension of TYPE shows of block B: a dimension's definition points
+(the POINT objects AutoCAD puts at them) never show, whatever the point style."
+  (if (equal type "DIMENSION")
+      (remove "POINT" (block-def-entities b) :key (lambda (s) (cdr (assoc 0 s))) :test #'equal)
+      (block-def-entities b)))

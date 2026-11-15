@@ -549,7 +549,7 @@ AutoCAD does for the justification."
                   (lt (entity-ltype-name data parent-lt))
                   (lw (entity-lineweight data parent-lw))
                   (lts (* parent-lts (d (or (dxf 48 data) 1)))))
-             (loop for sub in (block-def-entities b)
+             (loop for sub in (block-subs-shown b type)
                    append (render-data sub (sub-color sub aci) tags hl cxf (1+ depth) lt lw lts))))))
       ((equal type "UNDERLAY")
        (loop for sub in (underlay-display-entities (if xf (xform-data data xf) data))
