@@ -4371,6 +4371,8 @@ proc qc_applyit {} {
 # ---------------------------------------------------------------- layer dialog
 proc layerdlg {rows {ltypes {}} {lweights {}}} {
     set w .ld
+    # minimized or lost off the screen: start it afresh, where it can be seen
+    if {[winfo exists $w] && ![winfo viewable $w]} { destroy $w }
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Layer Properties Manager"
@@ -4921,6 +4923,7 @@ proc imagemgr_done {action} {
 # below the drawing shows only its last lines; this window shows all of it, and can keep a log file.
 proc histdlg {text logon logdir started} {
     set w .hd2
+    if {[winfo exists $w] && ![winfo viewable $w]} { destroy $w }
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Command History"
