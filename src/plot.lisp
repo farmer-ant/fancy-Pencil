@@ -734,6 +734,13 @@ drawing unit with its lower-left corner at OFFSET (points). Page is PAPER-W x PA
               ((string= action "PICK")
                (let ((w (pick-plot-window)))
                  (when w (setf (plot-settings-window s) w (plot-settings-area s) "Window"))))
+              ((string= action "KEEP")
+               ;; close without plotting: the next PLOT starts with these settings
+               (setf *plot-settings* s)
+               (save-plot-store :last s)
+               (out (format nil "Plot settings kept for next time: ~A, ~A, ~A, ~A.~%" (plot-settings-device s) (plot-settings-paper s)
+                            (if (plot-settings-landscape s) "landscape" "portrait") (plot-settings-scale s)))
+               (return))
               ((string= action "PREVIEW")
                (when (and (string-equal (plot-settings-area s) "Window") (null (plot-settings-window s)))
                  (let ((w (pick-plot-window))) (when w (setf (plot-settings-window s) w))))

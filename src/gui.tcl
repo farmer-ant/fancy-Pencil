@@ -3546,9 +3546,11 @@ proc plotdlg {devices device papers paper landscape area scales scale units cent
     grid $f.pv -row 2 -column 3 -rowspan 8 -padx {16 0} -sticky n
     set bb [ttk::frame $f.bb]
     ttk::button $bb.pre -text "Preview" -command {set ::pl(result) PREVIEW; destroy .plot}
+    # keep these settings for the next PLOT, without plotting now
+    ttk::button $bb.keep -text "Keep Current Settings" -command {set ::pl(result) KEEP; destroy .plot}
     ttk::button $bb.ok -text "Plot" -command {set ::pl(result) OK; destroy .plot}
     ttk::button $bb.no -text "Cancel" -command {set ::pl(result) CANCEL; destroy .plot}
-    pack $bb.pre -side left
+    pack $bb.pre $bb.keep -side left -padx {0 6}
     pack $bb.no $bb.ok -side right -padx 3
     grid $bb -row $r -column 0 -columnspan 4 -sticky ew -pady {12 0}
     bind $w <Escape> {set ::pl(result) CANCEL; destroy .plot}
