@@ -4728,7 +4728,38 @@ proc hatchdlg_swatch {} {
     $w.f.desc configure -text $desc
     set ang 0
     catch {set ang [expr {double([$w.f.ang get])}]}
-    swatch_draw $w.f.sw $sw 120 $ang
+    swatch_draw $w.f.sw $sw 120 $ang [hatchdlg_hex]
+}
+# the swatch's color: the chosen one (else the usual light gray)
+proc hatchdlg_hex {} {
+    if {![winfo exists .hd.f.col]} { return "#d6dce4" }
+    set c [.hd.f.col get]
+    set names {Red 1 Yellow 2 Green 3 Cyan 4 Blue 5 Magenta 6 White 7}
+    if {[dict exists $names $c]} { set c [dict get $names $c] }
+    if {[string is integer -strict $c] && $c >= 1 && $c <= 255 && [llength $::hd_hexes] > $c} { return [lindex $::hd_hexes $c] }
+    return "#d6dce4"
+}
+# Color: "Select Color..." opens the full color chart
+proc hatchdlg_color {} {
+    set f .hd.f
+    if {[$f.col get] eq "Select Color..."} {
+        set r [colordlg [hatchdlg_hex_index $::hd_color] 1 $::hd_hexes]
+        if {[string match "OK *" $r]} {
+            set v [string range $r 3 end]
+            set ::hd_color [expr {$v eq "BYLAYER" ? "ByLayer" : ($v eq "BYBLOCK" ? "ByBlock" : $v)}]
+        }
+        $f.col set $::hd_color
+        safegrab .hd
+    } else {
+        set ::hd_color [$f.col get]
+    }
+    hatchdlg_swatch
+}
+proc hatchdlg_hex_index {c} {
+    set names {Red 1 Yellow 2 Green 3 Cyan 4 Blue 5 Magenta 6 White 7 ByLayer 256 ByBlock 0}
+    if {[dict exists $names $c]} { return [dict get $names $c] }
+    if {[string is integer -strict $c]} { return $c }
+    return 7
 }
 proc hatch_palette {} {
     set p .hpal
@@ -4761,7 +4792,8 @@ proc hatch_palette {} {
     wm geometry $p +[expr {[winfo rootx .hd] + 40}]+[expr {[winfo rooty .hd] + 40}]
     safegrab $p
 }
-proc hatchdlg {patterns current scale angle order orders nbound mode} {
+proc hatchdlg {patterns current scale angle order orders nbound mode {color "Use Current"} {hexes {}}} {
+    set ::hd_hexes $hexes
     set w .hd
     catch {destroy $w}
     toplevel $w -background $::panel
@@ -4798,6 +4830,13 @@ proc hatchdlg {patterns current scale angle order orders nbound mode} {
     grid $f.sc -row 4 -column 1 -sticky w -pady 2
     grid $f.lo -row 5 -column 0 -sticky w -pady 2
     grid $f.ord -row 5 -column 1 -columnspan 2 -sticky w -pady 2
+    ttk::label $f.lc -text "Color:"
+    ttk::combobox $f.col -values {"Use Current" ByLayer ByBlock Red Yellow Green Cyan Blue Magenta White "Select Color..."} -width 14 -state readonly
+    $f.col set $color
+    set ::hd_color $color
+    bind $f.col <<ComboboxSelected>> hatchdlg_color
+    grid $f.lc -row 6 -column 0 -sticky w -pady 2
+    grid $f.col -row 6 -column 1 -columnspan 2 -sticky w -pady 2
     # right: the boundaries
     set b [ttk::labelframe $f.b -text "Boundaries" -padding 8]
     ttk::button $b.pick -text "Add: Pick points" -command {hatchdlg_done PICK}
@@ -4808,14 +4847,14 @@ proc hatchdlg {patterns current scale angle order orders nbound mode} {
     pack $b.n -side top -anchor w -pady {8 0}
     if {$mode eq "edit"} { $b.pick state disabled; $b.sel state disabled; $b.rem state disabled; $b.n configure -text "Editing a hatch" }
     if {$nbound == 0} { $b.rem state disabled }
-    grid $b -row 0 -column 3 -rowspan 6 -sticky nsew -padx {16 0}
+    grid $b -row 0 -column 3 -rowspan 7 -sticky nsew -padx {16 0}
     ttk::label $f.note -text "The hatch shows in the drawing as you add boundaries." -foreground "#8a94a3"
-    grid $f.note -row 6 -column 0 -columnspan 4 -sticky w -pady {10 0}
+    grid $f.note -row 7 -column 0 -columnspan 4 -sticky w -pady {10 0}
     set bb [ttk::frame $f.bb]
     ttk::button $bb.ok -text OK -command {hatchdlg_done OK}
     ttk::button $bb.cancel -text Cancel -command {hatchdlg_done CANCEL}
     pack $bb.cancel $bb.ok -side right -padx 3
-    grid $bb -row 7 -column 0 -columnspan 4 -sticky e -pady {10 0}
+    grid $bb -row 8 -column 0 -columnspan 4 -sticky e -pady {10 0}
     bind $f.pat <<ComboboxSelected>> hatchdlg_swatch
     foreach e [list $f.ang] { bind $e <<ComboboxSelected>> hatchdlg_swatch; bind $e <KeyRelease> hatchdlg_swatch }
     bind $w <Return> {hatchdlg_done OK}
@@ -4829,7 +4868,7 @@ proc hatchdlg {patterns current scale angle order orders nbound mode} {
 }
 proc hatchdlg_done {action} {
     set f .hd.f
-    set ::hd_result [join [list $action [$f.pat get] [$f.sc get] [$f.ang get] [$f.ord get]] "\x1f"]
+    set ::hd_result [join [list $action [$f.pat get] [$f.sc get] [$f.ang get] [$f.ord get] [$f.col get]] "\x1f"]
     catch {destroy .hpal}
     destroy .hd
 }

@@ -92,12 +92,37 @@
 
 ;;; ---------- hatch ----------
 
+(defun hpcolor ()
+  "The color new hatches get (HPCOLOR): an ACI number, 256 ByLayer, 0 ByBlock; NIL (\".\") for the current color."
+  (let ((c (sysvar "HPCOLOR")))
+    (cond ((integerp c) c)
+          ((and (stringp c) (not (string= c "."))) (parse-color c))
+          (t nil))))
+
+(defun hatch-color-label (c) (if (null c) "Use Current" (color-label c)))
+
+(defun parse-hatch-color (s)
+  "A color label from the dialog or the command line: an ACI number, 256, 0, or NIL for \"use current\"."
+  (let ((s (string-trim " " s)))
+    (if (or (string= s ".") (string-equal s "Use Current") (string= s "")) nil (parse-color s))))
+
+(defun set-hpcolor (c) (setf (sysvar "HPCOLOR") (or c ".")))
+
+(defun with-hatch-color (data c)
+  "DATA in color C (NIL: left as it is)."
+  (if c (set-entity-color data c) data))
+
+(defun current-color-number ()
+  (let ((c (sysvar "CECOLOR"))) (or (if (integerp c) c (parse-color (princ-to-string c))) 256)))
+
 (defun hatch-settings-prompt ()
   (if (and (gui-p) (not (from-lisp-p)))
       (let ((r (gui-form "Hatch Pattern"
                          (list (list "P" "Pattern" (sysvar "HPNAME") :combo (mapcar #'first *hatch-patterns*))
                                (list "S" "Scale" (fmt-plain (sysvar "HPSCALE")) :entry)
-                               (list "A" "Angle" (fmt-ang (sysvar "HPANG")) :entry))
+                               (list "A" "Angle" (fmt-ang (sysvar "HPANG")) :entry)
+                               (list "C" "Color" (hatch-color-label (hpcolor)) :combo
+                                     '("Use Current" "ByLayer" "ByBlock" "Red" "Yellow" "Green" "Cyan" "Blue" "Magenta" "White")))
                          "OK")))
         (when r
           (let ((p (cdr (assoc "P" r :test #'string=)))
@@ -105,8 +130,13 @@
                 (a (angtof (cdr (assoc "A" r :test #'string=)))))
             (when (hatch-pattern-def p) (setf (sysvar "HPNAME") (string-upcase p)))
             (when (and s (> s 0)) (setf (sysvar "HPSCALE") (d s)))
-            (when a (setf (sysvar "HPANG") a)))))
-      (let ((p (gstring (format nil "Enter a pattern name or [?/Solid] <~A>: " (sysvar "HPNAME")))))
+            (when a (setf (sysvar "HPANG") a))
+            (let ((c (cdr (assoc "C" r :test #'string=)))) (when c (set-hpcolor (parse-hatch-color c)))))))
+      (let ((p (loop (let ((p (gstring (format nil "Enter a pattern name or [?/Solid/Color] <~A>: " (sysvar "HPNAME")))))
+                       ;; Color: the hatch's color, then the pattern again
+                       (if (member (string-trim " " p) '("C" "COLOR") :test #'string-equal)
+                           (hatch-color-prompt)
+                           (return p))))))
         (cond ((string= p "?") (dolist (h *hatch-patterns*) (out (format nil "  ~10A ~A~%" (first h) (second h)))))
               ((string-equal p "S") (setf (sysvar "HPNAME") "SOLID"))
               ((plusp (length p))
@@ -116,6 +146,15 @@
                 (a (gangle (format nil "Specify an angle for the pattern <~A>: " (fmt-ang (sysvar "HPANG"))))))
             (when s (setf (sysvar "HPSCALE") (d s)))
             (when a (setf (sysvar "HPANG") a)))))))
+
+(defun hatch-color-prompt ()
+  (let ((c (gstring (format nil "Enter a color for the hatch: name, number (1-255), ByLayer, ByBlock or . for the current color <~A>: "
+                            (hatch-color-label (hpcolor))))))
+    (when (plusp (length (string-trim " " c)))
+      (let ((v (parse-hatch-color c)))
+        (if (or v (string= (string-trim " " c) ".") (string-equal (string-trim " " c) "Use Current"))
+            (set-hpcolor v)
+            (out (format nil "Not a color: ~A~%" c)))))))
 
 (defcmd "HPSET" () "Sets the hatch pattern, scale and angle used by HATCH." (hatch-settings-prompt))
 
@@ -162,14 +201,16 @@
 
 (defun hatch-dialog (nbound &optional (mode "new"))
   "The Hatch dialog. Applies its settings; returns the button: OK PICK SELECT REMOVE or CANCEL."
-  (let* ((r (tk-ask (format nil "hatchdlg ~A ~A ~A ~A ~A ~A ~D ~A"
+  (let* ((r (tk-ask (format nil "hatchdlg ~A ~A ~A ~A ~A ~A ~D ~A ~A {~{~A~^ ~}}"
                             (hatch-patterns-tcl) (tq (sysvar "HPNAME")) (tq (fmt-plain (sysvar "HPSCALE")))
                             (tq (string-right-trim "." (string-right-trim "0" (format nil "~,4F" (deg (or (sysvar "HPANG") 0d0)))))) (tq (hatch-order-label))
-                            (tcl-list (mapcar #'cdr *hatch-orders*)) nbound mode)))
+                            (tcl-list (mapcar #'cdr *hatch-orders*)) nbound mode
+                            (tq (hatch-color-label (hpcolor))) (loop for i from 0 to 255 collect (aci->hex i)))))
          (f (split-string r (code-char 31))))
     (if (< (length f) 5)
         "CANCEL"
-        (destructuring-bind (action pat sc an ord) f
+        (destructuring-bind (action pat sc an ord &optional col) f
+          (when (and col (not (string= action "CANCEL"))) (set-hpcolor (parse-hatch-color col)))
           (unless (string= action "CANCEL")
             (when (hatch-pattern-def pat) (setf (sysvar "HPNAME") (string-upcase pat)))
             (let ((s (parse-number-text sc))) (when (and s (> s 0)) (setf (sysvar "HPSCALE") (d s))))
@@ -195,9 +236,12 @@
         (dialog (and (use-inplace-editor-p) (not (dash-command-p)))))
     (labels ((update ()
                (cond ((and e (null loops)) (delete-entity e) (setf e nil))
-                     (e (set-entity-data e (append (list (cons 0 "HATCH") (cons 5 (ename-handle e)))
-                                                   (rest (make-hatch-data loops)) (common-props (ent-data e)))))
-                     (loops (setf e (add (make-hatch-data loops)))))
+                     (e (set-entity-data e (with-hatch-color
+                                            (append (list (cons 0 "HATCH") (cons 5 (ename-handle e)))
+                                                    (rest (make-hatch-data loops)) (common-props (ent-data e)))
+                                            (or (hpcolor) (current-color-number)))))
+                     (loops (setf e (add (make-hatch-data loops)))
+                            (when (hpcolor) (set-entity-data e (with-hatch-color (ent-data e) (hpcolor))))))
                (when (gui-p) (gui-regen)))
              (pick-points ()
                (loop
@@ -258,9 +302,11 @@
                             (progn (out (format nil "Object selected is not a hatch.~%")) nil))))))
     (when hatches
       (let* ((data (ent-data (first hatches)))
-             (saved (list (sysvar "HPNAME") (sysvar "HPSCALE") (sysvar "HPANG"))))
+             (saved (list (sysvar "HPNAME") (sysvar "HPSCALE") (sysvar "HPANG") (sysvar "HPCOLOR"))))
         (when (> (length hatches) 1) (out (format nil "~D hatches: the changes go to all of them.~%" (length hatches))))
         (setf (sysvar "HPNAME") (or (dxf 2 data) "ANSI31") (sysvar "HPSCALE") (d (or (dxf 41 data) 1)) (sysvar "HPANG") (d (or (dxf 52 data) 0)))
+        ;; (the dialog starts at this hatch's own color)
+        (set-hpcolor (or (dxf 62 data) 256))
         (unwind-protect
              (let ((ok (if (and (use-inplace-editor-p) (not (dash-command-p)))
                            (string= (hatch-dialog 0 "edit") "OK")
@@ -268,10 +314,12 @@
                (when ok
                  (dolist (e hatches)
                    (let ((dd (ent-data e)))
-                     (set-entity-data e (append (rem-dxf :pattern (rem-dxf 2 (rem-dxf 70 (rem-dxf 41 (rem-dxf 52 dd)))))
-                                                (list (cons 2 (sysvar "HPNAME")) (cons 70 (if (solid-pattern-p (sysvar "HPNAME")) 1 0))
-                                                      (cons 41 (d (sysvar "HPSCALE"))) (cons 52 (d (sysvar "HPANG"))))))))))
-          (destructuring-bind (n s a) saved (setf (sysvar "HPNAME") n (sysvar "HPSCALE") s (sysvar "HPANG") a)))))))
+                     (set-entity-data e (with-hatch-color
+                                         (append (rem-dxf :pattern (rem-dxf 2 (rem-dxf 70 (rem-dxf 41 (rem-dxf 52 dd)))))
+                                                 (list (cons 2 (sysvar "HPNAME")) (cons 70 (if (solid-pattern-p (sysvar "HPNAME")) 1 0))
+                                                       (cons 41 (d (sysvar "HPSCALE"))) (cons 52 (d (sysvar "HPANG")))))
+                                         (or (hpcolor) (current-color-number))))))))
+          (destructuring-bind (n s a c) saved (setf (sysvar "HPNAME") n (sysvar "HPSCALE") s (sysvar "HPANG") a (sysvar "HPCOLOR") c)))))))
 
 ;;; ---------- REVCLOUD ----------
 
