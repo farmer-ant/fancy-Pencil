@@ -502,3 +502,110 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
   (let ((h (hatch-from-dxf (explode-coords (remove-if (lambda (p) (and (consp p) (member (car p) '(-1 5 330 100)))) lst))
                            :degrees nil)))
     h))
+
+;;; ---------- gaps in boundaries: where a hatch can escape ----------
+
+(defvar *gap-marks* nil
+  "Gaps last found: (modcount (point width) ...). Circled in red until the drawing next changes.")
+
+(defun boundary-gaps (segs)
+  "Places where boundary lines stop short of meeting: ((point width) ...). A line end that points
+at another line (or at another loose end) close by is a gap; an end that overshoots a crossing
+is not."
+  (let ((deg (make-hash-table :test #'equal)) (ends nil) (gaps nil))
+    (dolist (s segs)
+      (incf (gethash (node-key (first s)) deg 0))
+      (incf (gethash (node-key (second s)) deg 0)))
+    (dolist (s segs)
+      (when (= (gethash (node-key (first s)) deg) 1) (push (list (first s) (second s) s) ends))
+      (when (= (gethash (node-key (second s)) deg) 1) (push (list (second s) (first s) s) ends)))
+    (when (and ends segs)
+      (let* ((xs (loop for s in segs append (list (px (first s)) (px (second s)))))
+             (ys (loop for s in segs append (list (py (first s)) (py (second s)))))
+             (size (max 1d-9 (- (reduce #'max xs) (reduce #'min xs)) (- (reduce #'max ys) (reduce #'min ys))))
+             ;; the widest gap worth showing: a twentieth of the boundary's size
+             (tol (* 0.05 size)))
+        (dolist (e ends)
+          (destructuring-bind (p q own) e
+            (let* ((dir (let ((v (v- p q))) (if (< (dist2d p q) 1d-12) nil (v* v (/ 1d0 (dist2d p q))))))
+                   ;; straight on from the loose end: does it reach another line?
+                   (hit (and dir
+                             (let ((far (v+ p (v* dir tol))) (best nil))
+                               (dolist (s segs best)
+                                 (unless (eq s own)
+                                   (let ((x (line-line-int p far (first s) (second s) t)))
+                                     (when (and x (> (dist2d x p) 1d-9) (or (null best) (< (dist2d x p) (dist2d best p))))
+                                       (setf best x))))))))
+                   ;; or another loose end close by
+                   (mate (unless hit
+                           (let ((best nil))
+                             (dolist (o ends best)
+                               (let ((op (first o)))
+                                 (when (and (not (eq (third o) own)) (< 1d-9 (dist2d op p) tol)
+                                            (or (null best) (< (dist2d op p) (dist2d best p))))
+                                   (setf best op))))))))
+              (cond (hit (push (list (midpt p hit) (dist2d p hit)) gaps))
+                    (mate (push (list (midpt p mate) (dist2d p mate)) gaps))))))))
+    ;; one mark per gap (both its ends find it)
+    (let ((out nil))
+      (dolist (g (sort gaps #'< :key #'second) (nreverse out))
+        (unless (find-if (lambda (o) (< (dist2d (first o) (first g)) (max 1d-9 (second g)))) out)
+          (push g out))))))
+
+(defun hatch-boundary-ents ()
+  (remove-if (lambda (e) (member (ent-type e) '("TEXT" "MTEXT" "HATCH" "DIMENSION" "POINT") :test #'equal))
+             (remove-if-not #'entity-visible-p (live-entities))))
+
+(defun show-gaps (gaps)
+  "Circle GAPS in red (until the drawing changes) and list them."
+  (setf *gap-marks* (and gaps (cons (drawing-modcount *dwg*) gaps)))
+  (loop for (p w) in gaps for i from 1 below 11
+        do (out (format nil "  gap ~D at ~A,~A: ~A wide~%" i (fmt-len (px p)) (fmt-len (py p)) (fmt-len w))))
+  (when (> (length gaps) 10) (out (format nil "  ... and ~D more.~%" (- (length gaps) 10))))
+  (when (gui-p) (gui-regen)))
+
+(defun gap-mark-cmds ()
+  "Red circles round the gaps last found, while the drawing is unchanged."
+  (when (and *gap-marks* (= (car *gap-marks*) (drawing-modcount *dwg*)) (null (drawing-ctab *dwg*)))
+    (loop for (p) in (cdr *gap-marks*)
+          append (multiple-value-bind (x y) (w->s p)
+                   (list (format nil ".c create oval ~,1F ~,1F ~,1F ~,1F -outline #ff3b30 -width 2 -tags gapmark"
+                                 (- x 11) (- y 11) (+ x 11) (+ y 11))
+                         (format nil ".c create oval ~,1F ~,1F ~,1F ~,1F -outline #ff3b30 -width 1 -tags gapmark"
+                                 (- x 16) (- y 16) (+ x 16) (+ y 16)))))))
+
+(defun gaps-near-pick (pick)
+  "Gaps in the lines round PICK (in view)."
+  (declare (ignore pick))
+  (boundary-gaps (boundary-segments (entities-near-region (hatch-boundary-ents) nil))))
+
+(defun report-no-boundary (pick)
+  (let ((gaps (gaps-near-pick pick)))
+    (if gaps
+        (progn (out (format nil "Valid hatch boundary not found: the lines don't meet. ~D gap~:P, circled in red:~%" (length gaps)))
+               (show-gaps gaps))
+        (out (format nil "Valid hatch boundary not found.~%")))))
+
+(defun report-escapes (loops)
+  "Gaps inside a hatch just made from a picked point: it may have escaped through them."
+  (let* ((outer (and loops (loop-polygon-directed (first loops) 16)))
+         (inside (and outer (remove-if-not (lambda (g) (point-in-polygon-p (first g) outer))
+                                           (boundary-segments-gaps-in outer)))))
+    (when inside
+      (out (format nil "The hatch may have escaped: ~D gap~:P in the lines inside it, circled in red. ~
+                        Undo, close ~:*~[~;it~:;them~] and pick again.~%" (length inside)))
+      (show-gaps inside))))
+
+(defun boundary-segments-gaps-in (poly)
+  (let* ((xs (mapcar #'px poly)) (ys (mapcar #'py poly))
+         (x0 (reduce #'min xs)) (x1 (reduce #'max xs)) (y0 (reduce #'min ys)) (y1 (reduce #'max ys)))
+    (boundary-gaps
+     (boundary-segments
+      (remove-if-not (lambda (e) (let ((b (entity-bbox e)))
+                                   (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0))))))
+                     (hatch-boundary-ents))))))
+
+
+(defun keep-gap-marks ()
+  "The hatch just finished changed the drawing: the gaps it found stay circled all the same."
+  (when *gap-marks* (setf (car *gap-marks*) (drawing-modcount *dwg*))))

@@ -807,6 +807,8 @@ skipped, and an object smaller than about a pixel and a half is drawn as one tin
       (setf cmds (nconc cmds (if (and (drawing-ctab *dwg*) (fboundp 'layout-body-cmds))
                                  (funcall 'layout-body-cmds)
                                  (model-body-cmds))))
+      ;; gaps found in hatch boundaries (hatch.lisp), circled in red
+      (setf cmds (nconc cmds (gap-mark-cmds)))
       ;; the Model tab split into viewports: the others over the active one's drawing
       (when (and (fboundp 'tiled-p) (funcall 'tiled-p))
         (setf cmds (nconc cmds (funcall 'tiles-overlay-cmds))))

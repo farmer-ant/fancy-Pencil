@@ -254,8 +254,8 @@
                       (out (format nil "Analyzing the selected data...~%"))
                       (let ((found (detect-boundary r)))
                         (if found
-                            (progn (push loops history) (setf loops (append loops found)) (update))
-                            (out (format nil "Valid hatch boundary not found.~%")))))))))
+                            (progn (push loops history) (setf loops (append loops found)) (update) (report-escapes found))
+                            (report-no-boundary r))))))))
              (select-bounds ()
                (let* ((ents (select-objects :editable nil))
                       (new (remove nil (mapcar #'closed-entity-loop ents))))
@@ -271,7 +271,7 @@
                 ((string= action "PICK") (pick-points))
                 ((string= action "SELECT") (select-bounds))
                 ((string= action "REMOVE") (push loops history) (setf loops nil) (update))
-                (t (when e (apply-hatch-draw-order e) (when (gui-p) (gui-regen))
+                (t (when e (apply-hatch-draw-order e) (keep-gap-marks) (when (gui-p) (gui-regen))
                          (out (format nil "Hatch: ~A, scale ~A, angle ~A, ~D boundary loop~:P.~%" (sysvar "HPNAME")
                                       (fmt-plain (sysvar "HPSCALE")) (fmt-ang (sysvar "HPANG")) (length loops))))
                    (return)))))
@@ -280,7 +280,7 @@
             (let ((r (gpoint "Pick internal point or [Select objects/Properties/Undo]: "
                              :keywords '("Select" "Properties" "Undo"))))
               (cond
-                ((null r) (when e (apply-hatch-draw-order e) (when (gui-p) (gui-regen))) (return))
+                ((null r) (when e (apply-hatch-draw-order e) (keep-gap-marks) (when (gui-p) (gui-regen))) (return))
                 ((equal r "Properties") (hatch-settings-prompt) (when e (update)))
                 ((equal r "Undo") (when history (setf loops (pop history)) (update)))
                 ((equal r "Select") (select-bounds))
@@ -288,8 +288,8 @@
                  (out (format nil "Analyzing the selected data...~%"))
                  (let ((found (detect-boundary r)))
                    (if found
-                       (progn (push loops history) (setf loops (append loops found)) (update))
-                       (out (format nil "Valid hatch boundary not found.~%"))))))))))))
+                       (progn (push loops history) (setf loops (append loops found)) (update) (report-escapes found))
+                       (report-no-boundary r)))))))))))
 
 (defcmd "HATCHEDIT" ("HE" "-HATCHEDIT") "Changes the pattern, scale or angle of existing hatches."
   ;; the hatches already selected (or the one double-clicked), else pick one
@@ -366,3 +366,13 @@
                  while (pointp p) do (push p pts))
            (when (> (length pts) 2)
              (add (make-lwpoly-data (cloud-verts (nreverse pts) arc t) t)))))))))
+
+(defcmd "HATCHGAPS" ("GAPS") "Finds the gaps in boundaries, where lines don't quite meet and a hatch would escape: circles them in red."
+  (let* ((ents (let ((sel (select-objects :prompt "Select boundary objects or <everything in view>: " :editable nil)))
+                 (or sel (entities-near-region (hatch-boundary-ents) nil))))
+         (gaps (boundary-gaps (boundary-segments ents))))
+    (if gaps
+        (progn (out (format nil "~D gap~:P found, circled in red (they stay until the drawing changes):~%" (length gaps)))
+               (show-gaps gaps))
+        (progn (setf *gap-marks* nil)
+               (out (format nil "No gaps found.~%"))))))
