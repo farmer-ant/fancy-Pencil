@@ -60,11 +60,32 @@
 (al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.3) \"\")")
 (setf *gap-marks* nil *said* "")
 (al "(command \"hatchgaps\" \"\")")
-(chk "HATCHGAPS: everything in view" (list (length (cdr *gap-marks*)) (and (search "1 gap found" *said*) t)) '(1 t))
+(chk "HATCHGAPS: everything in view" (list (length (cdr *gap-marks*)) (and (search "1 gap in view" *said*) t)) '(1 t))
 (al "(command \"line\" '(0 0.3) '(0 0) \"\")")
 (chk "the drawing changed (gap closed): the circles go" (gap-mark-cmds) nil)
 (al "(command \"hatchgaps\" \"\")")
 (chk "and HATCHGAPS finds none now" (and (search "No gaps found" *said*) t) t)
+
+;; HATCHGAPS at a point: just the gaps round it
+(clear)
+(al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.3) \"\")")
+(al "(command \"line\" '(20 0) '(30 0) '(30 10) '(20 10) '(20 0.5) \"\")")
+(setf *said* "")
+(al "(command \"hatchgaps\" '(5 5))")
+(chk "HATCHGAPS at a point: only that room's gap" (list (length (cdr *gap-marks*)) (r3 (second (second *gap-marks*)))) '(1 3/10))
+(clear)
+
+;; ends that miss by a hair (rounding) meet; HPGAPTOL bridges real gaps
+(al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.0000001) \"\")")
+(al "(command \"-hatch\" '(5 5) \"\")")
+(chk "a gap of a ten-millionth: hatched" (hatches) 1)
+(clear)
+(al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.3) \"\")")
+(al "(setvar \"hpgaptol\" 0.5)")
+(al "(command \"-hatch\" '(5 5) \"\")")
+(chk "HPGAPTOL 0.5 bridges the 0.3 gap" (hatches) 1)
+(al "(setvar \"hpgaptol\" 0)")
+(clear)
 
 (format t "~%~D passed, ~D failed~%" *pass* *fail*)
 (sb-ext:exit :code (if (zerop *fail*) 0 1))

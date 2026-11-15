@@ -368,11 +368,20 @@
              (add (make-lwpoly-data (cloud-verts (nreverse pts) arc t) t)))))))))
 
 (defcmd "HATCHGAPS" ("GAPS") "Finds the gaps in boundaries, where lines don't quite meet and a hatch would escape: circles them in red."
-  (let* ((ents (let ((sel (select-objects :prompt "Select boundary objects or <everything in view>: " :editable nil)))
-                 (or sel (entities-near-region (hatch-boundary-ents) nil))))
-         (gaps (boundary-gaps (boundary-segments ents))))
-    (if gaps
-        (progn (out (format nil "~D gap~:P found, circled in red (they stay until the drawing changes):~%" (length gaps)))
-               (show-gaps gaps))
-        (progn (setf *gap-marks* nil)
-               (out (format nil "No gaps found.~%"))))))
+  (let ((r (gpoint (format nil "Pick a point inside an area or [Select objects] <everything in view>: ") :keywords '("Select"))))
+    (multiple-value-bind (gaps where)
+        (cond ((pointp r)
+               ;; just as HATCH would: trace round the point, and look at the loose ends met
+               (detect-boundary r)
+               (values (gaps-met) "round that point"))
+              ((equal r "Select")
+               (values (boundary-gaps (boundary-segments (select-objects :prompt "Select boundary objects: " :editable nil)))
+                       "in those objects"))
+              (t (values (boundary-gaps (boundary-segments (entities-near-region (hatch-boundary-ents) nil))) "in view")))
+      (if gaps
+          (progn (out (format nil "~D gap~:P ~A, circled in red (until the drawing changes); narrowest first:~%" (length gaps) where))
+                 (show-gaps gaps)
+                 (out (format nil "Ends closer than ~,6F already count as meeting; HPGAPTOL (now ~A) bridges wider gaps.~%"
+                              *boundary-fuzz* (let ((g (sysvar "HPGAPTOL"))) (if (and (realp g) (plusp g)) (small-len g) "0")))))
+          (progn (setf *gap-marks* nil)
+                 (out (format nil "No gaps found ~A.~%" where)))))))

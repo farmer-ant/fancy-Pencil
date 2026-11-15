@@ -321,10 +321,22 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
 
 ;;; ---------- boundary detection for "pick internal point" ----------
 
-(defun boundary-segments (ents)
-  "All boundary objects as straight segments (curves tessellated), split at intersections."
+(defvar *boundary-fuzz* 1d-7 "While finding boundaries: ends closer than this meet (see BOUNDARY-SEGMENTS).")
+
+(defun hpgaptol () (let ((g (sysvar "HPGAPTOL"))) (if (and (realp g) (plusp g)) (d g) 0d0)))
+
+(defun boundary-fuzz (segs)
+  "How close two ends must be to count as meeting: a millionth of the boundary's size, so that
+ends which only miss by rounding still meet. (Wider gaps, up to HPGAPTOL, are bridged.)"
+  (let ((x0 most-positive-double-float) (y0 most-positive-double-float)
+        (x1 most-negative-double-float) (y1 most-negative-double-float))
+    (dolist (sg segs)
+      (dolist (p sg) (setf x0 (min x0 (px p)) x1 (max x1 (px p)) y0 (min y0 (py p)) y1 (max y1 (py p)))))
+    (max 1d-7 (* 1d-6 (max (- x1 x0) (- y1 y0) 0d0)))))
+
+(defun raw-boundary-segments (ents)
   (let ((segs nil))
-    (dolist (e ents)
+    (dolist (e ents segs)
       (dolist (pc (snap-pieces e))
         (case (first pc)
           (:seg (push (list (second pc) (third pc)) segs))
@@ -333,31 +345,76 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
                           (arc-points (second pc) (third pc) 0d0 +2pi+ 64)
                           (arc-points (second pc) (third pc) (fourth pc) (fifth pc)
                                       (max 6 (ceiling (* 32 (/ (arc-sweep (fourth pc) (fifth pc)) +pi+))))))))
-             (loop for (a b) on pts while b do (push (list a b) segs)))))))
-    (let* ((v (coerce segs 'vector)) (cuts (make-array (length v) :initial-element nil)))
-      ;; record intersection parameters on every segment
-      (loop for i from 0 below (length v)
-            do (loop for j from (1+ i) below (length v)
-                     do (destructuring-bind (a b) (aref v i)
-                          (destructuring-bind (c dd) (aref v j)
-                            (when (and (<= (min (px a) (px b)) (max (px c) (px dd)))
-                                       (<= (min (px c) (px dd)) (max (px a) (px b)))
-                                       (<= (min (py a) (py b)) (max (py c) (py dd)))
-                                       (<= (min (py c) (py dd)) (max (py a) (py b))))
-                              (let ((q (line-line-int a b c dd t)))
-                                (when q
-                                  (push (seg-param q a b) (aref cuts i))
-                                  (push (seg-param q c dd) (aref cuts j)))))))))
-      (loop for i from 0 below (length v)
-            append (destructuring-bind (a b) (aref v i)
-                     (let ((ts (sort (remove-duplicates (cons 0d0 (cons 1d0 (remove-if-not (lambda (x) (<= 0 x 1)) (aref cuts i))))
-                                                        :test (lambda (x y) (< (abs (- x y)) 1d-9)))
-                                     #'<)))
-                       (loop for (t1 t2) on ts while t2
-                             for p = (at-param a b t1) for q = (at-param a b t2)
-                             when (> (dist2d p q) 1d-9) collect (list p q))))))))
+             (loop for (a b) on pts while b do (push (list a b) segs)))))))))
+
+(defun boundary-segments (ents)
+  "All boundary objects as straight segments (curves tessellated), split where they cross or
+where one ends on another, with ends that (nearly) meet joined. Sets *BOUNDARY-FUZZ*."
+  (let* ((raw (raw-boundary-segments ents))
+         (fuzz (boundary-fuzz raw))
+         (reach (max fuzz (hpgaptol)))
+         (v (coerce raw 'vector)) (n (length v))
+         (cuts (make-array n :initial-element nil)))
+    (setf *boundary-fuzz* fuzz)
+    (when (zerop n) (return-from boundary-segments nil))
+    ;; only segments whose boxes overlap are compared: sorted by left edge, each against those
+    ;; starting before it ends
+    (flet ((stretched (sg)
+             ;; a little longer at both ends, so an end that stops just short still reaches
+             (let* ((a (first sg)) (b (second sg)) (l (dist2d a b)))
+               (if (< l 1d-12) sg
+                   (let ((u (v* (v- b a) (/ reach l)))) (list (v- a u) (v+ b u)))))))
+      (let* ((st (map 'vector #'stretched v))
+             (x0s (map 'vector (lambda (sg) (min (px (first sg)) (px (second sg)))) st))
+             (x1s (map 'vector (lambda (sg) (max (px (first sg)) (px (second sg)))) st))
+             (y0s (map 'vector (lambda (sg) (min (py (first sg)) (py (second sg)))) st))
+             (y1s (map 'vector (lambda (sg) (max (py (first sg)) (py (second sg)))) st))
+             (order (sort (let ((o (make-array n))) (dotimes (i n o) (setf (aref o i) i))) #'< :key (lambda (i) (aref x0s i)))))
+        (dotimes (oi n)
+          (let* ((i (aref order oi)) (xi1 (aref x1s i)) (yi0 (aref y0s i)) (yi1 (aref y1s i)))
+            (loop for oj from (1+ oi) below n
+                  for j = (aref order oj)
+                  while (<= (aref x0s j) xi1)
+                  do (when (and (<= (aref y0s j) yi1) (<= yi0 (aref y1s j)))
+                       (destructuring-bind (a b) (aref st i)
+                         (destructuring-bind (c dd) (aref st j)
+                           (let ((q (line-line-int a b c dd t)))
+                             (when q
+                               (push (seg-param q (first (aref v i)) (second (aref v i))) (aref cuts i))
+                               (push (seg-param q (first (aref v j)) (second (aref v j))) (aref cuts j))))))))))))
+    ;; split, then join ends that are within the gap tolerance of each other
+    (let* ((pieces (loop for i from 0 below n
+                         append (destructuring-bind (a b) (aref v i)
+                                  (let ((ts (sort (remove-duplicates (cons 0d0 (cons 1d0 (mapcar (lambda (x) (max 0d0 (min 1d0 x))) (aref cuts i))))
+                                                                     :test (lambda (x y) (< (abs (- x y)) 1d-9)))
+                                                  #'<)))
+                                    (loop for (t1 t2) on ts while t2
+                                          collect (list (at-param a b t1) (at-param a b t2)))))))
+           (reps (make-hash-table :test #'equal)))
+      (flet ((canon (p)
+               ;; the first point registered within FUZZ of P stands for it
+               (let ((ix (floor (px p) fuzz)) (iy (floor (py p) fuzz)))
+                 (or (loop for dx from -1 to 1
+                           thereis (loop for dy from -1 to 1
+                                         thereis (find-if (lambda (q) (<= (dist2d p q) fuzz))
+                                                          (gethash (cons (+ ix dx) (+ iy dy)) reps))))
+                     (progn (push p (gethash (cons ix iy) reps)) p)))))
+        (let ((segs (loop for (a b) in pieces
+                          for ca = (canon a) for cb = (canon b)
+                          unless (< (dist2d ca cb) 1d-12) collect (list ca cb))))
+          ;; HPGAPTOL: a short bridge across each gap no wider than it
+          (if (> (hpgaptol) fuzz)
+              (let* ((ends (loose-ends segs)) (pts (mapcar #'first ends)))
+                (append segs
+                        (loop for (p q own) in ends
+                              for g = (gap-at-end p q own segs pts (hpgaptol))
+                              when g collect (list p (canon (third g))))))
+              segs))))))
 
 (defun node-key (p) (cons (round (px p) 1d-7) (round (py p) 1d-7)))
+
+(defvar *trace-dead-ends* nil "Loose ends met while tracing round the last picked point.")
+(defvar *trace-segs* nil "The segments that tracing used.")
 
 (defun trace-face (segs pick)
   "Closed polygon of the smallest face of the segment graph that contains PICK, or NIL."
@@ -387,7 +444,7 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
                      (let* ((cp (gethash cur coords))
                             (back (ang cp (gethash prev coords)))
                             (cands (remove prev (gethash cur adj) :test #'equal))
-                            (cands (or cands (list prev)))
+                            (cands (or cands (progn (pushnew cp *trace-dead-ends* :test #'equalp) (list prev))))
                             ;; next edge: first one clockwise from the way we came in
                             (nxt (first (sort (copy-list cands) #'<
                                               :key (lambda (k) (let ((dlt (norm-ang (- back (ang cp (gethash k coords))))))
@@ -426,7 +483,9 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
                        for lp = (closed-entity-loop e)
                        when (and lp (point-in-polygon-p pick (loop-polygon-directed lp 24)))
                          collect lp))
-         (outer-poly (trace-face (boundary-segments (entities-near-region ents pick)) pick))
+         (outer-poly (let ((segs (boundary-segments (entities-near-region ents pick))))
+                       (setf *trace-dead-ends* nil *trace-segs* segs)
+                       (trace-face segs pick)))
          (outer (cond (outer-poly (mapcar (lambda (p) (list p 0d0)) outer-poly))
                       (closed (first (sort closed #'< :key (lambda (lp) (abs (loop-signed-area (loop-polygon-directed lp 16)))))))))
          (outer (if (and outer-poly closed)
@@ -508,59 +567,81 @@ DEGREES is true for DXF files and NIL for AutoLISP lists (angles already in radi
 (defvar *gap-marks* nil
   "Gaps last found: (modcount (point width) ...). Circled in red until the drawing next changes.")
 
-(defun boundary-gaps (segs)
-  "Places where boundary lines stop short of meeting: ((point width) ...). A line end that points
-at another line (or at another loose end) close by is a gap; an end that overshoots a crossing
-is not."
-  (let ((deg (make-hash-table :test #'equal)) (ends nil) (gaps nil))
+(defun gap-at-end (p q own segs ends tol)
+  "The gap at loose end P (its line comes from Q): (point width), or NIL when it isn't one. A
+line end that points at another line (or another loose end) close by is a gap; an end that
+overshoots a crossing is not."
+  (let* ((l (dist2d p q))
+         (dir (and (> l 1d-12) (v* (v- p q) (/ 1d0 l))))
+         (hit (and dir
+                   (let ((far (v+ p (v* dir tol))) (best nil))
+                     (dolist (s segs best)
+                       (unless (or (eq s own) (and (equalp (first s) p)) (equalp (second s) p))
+                         (let ((x (line-line-int p far (first s) (second s) t)))
+                           (when (and x (> (dist2d x p) 1d-12) (or (null best) (< (dist2d x p) (dist2d best p))))
+                             (setf best x))))))))
+         (mate (unless hit
+                 (let ((best nil))
+                   (dolist (op ends best)
+                     (when (and (< 1d-12 (dist2d op p) tol) (not (equalp op q))
+                                (or (null best) (< (dist2d op p) (dist2d best p))))
+                       (setf best op)))))))
+    (cond (hit (list (midpt p hit) (dist2d p hit) hit))
+          (mate (list (midpt p mate) (dist2d p mate) mate)))))
+
+(defun loose-ends (segs)
+  "((end other-end segment) ...) for every end no other segment meets."
+  (let ((deg (make-hash-table :test #'equal)) (ends nil))
     (dolist (s segs)
       (incf (gethash (node-key (first s)) deg 0))
       (incf (gethash (node-key (second s)) deg 0)))
-    (dolist (s segs)
+    (dolist (s segs ends)
       (when (= (gethash (node-key (first s)) deg) 1) (push (list (first s) (second s) s) ends))
-      (when (= (gethash (node-key (second s)) deg) 1) (push (list (second s) (first s) s) ends)))
-    (when (and ends segs)
-      (let* ((xs (loop for s in segs append (list (px (first s)) (px (second s)))))
-             (ys (loop for s in segs append (list (py (first s)) (py (second s)))))
-             (size (max 1d-9 (- (reduce #'max xs) (reduce #'min xs)) (- (reduce #'max ys) (reduce #'min ys))))
-             ;; the widest gap worth showing: a twentieth of the boundary's size
-             (tol (* 0.05 size)))
-        (dolist (e ends)
-          (destructuring-bind (p q own) e
-            (let* ((dir (let ((v (v- p q))) (if (< (dist2d p q) 1d-12) nil (v* v (/ 1d0 (dist2d p q))))))
-                   ;; straight on from the loose end: does it reach another line?
-                   (hit (and dir
-                             (let ((far (v+ p (v* dir tol))) (best nil))
-                               (dolist (s segs best)
-                                 (unless (eq s own)
-                                   (let ((x (line-line-int p far (first s) (second s) t)))
-                                     (when (and x (> (dist2d x p) 1d-9) (or (null best) (< (dist2d x p) (dist2d best p))))
-                                       (setf best x))))))))
-                   ;; or another loose end close by
-                   (mate (unless hit
-                           (let ((best nil))
-                             (dolist (o ends best)
-                               (let ((op (first o)))
-                                 (when (and (not (eq (third o) own)) (< 1d-9 (dist2d op p) tol)
-                                            (or (null best) (< (dist2d op p) (dist2d best p))))
-                                   (setf best op))))))))
-              (cond (hit (push (list (midpt p hit) (dist2d p hit)) gaps))
-                    (mate (push (list (midpt p mate) (dist2d p mate)) gaps))))))))
-    ;; one mark per gap (both its ends find it)
-    (let ((out nil))
-      (dolist (g (sort gaps #'< :key #'second) (nreverse out))
-        (unless (find-if (lambda (o) (< (dist2d (first o) (first g)) (max 1d-9 (second g)))) out)
-          (push g out))))))
+      (when (= (gethash (node-key (second s)) deg) 1) (push (list (second s) (first s) s) ends)))))
+
+(defun gap-tolerance (segs)
+  "The widest gap worth showing: a twentieth of the boundary's size."
+  (if (null segs) 0d0
+      (let ((xs (loop for s in segs append (list (px (first s)) (px (second s)))))
+            (ys (loop for s in segs append (list (py (first s)) (py (second s))))))
+        (* 0.05 (max 1d-9 (- (reduce #'max xs) (reduce #'min xs)) (- (reduce #'max ys) (reduce #'min ys)))))))
+
+(defun merge-gaps (gaps)
+  "One mark per gap (both its ends find it), narrowest first."
+  (let ((out nil))
+    (dolist (g (sort gaps #'< :key #'second) (nreverse out))
+      (unless (find-if (lambda (o) (< (dist2d (first o) (first g)) (max 1d-9 (second g)))) out)
+        (push g out)))))
+
+(defun boundary-gaps (segs &optional only-at)
+  "Places where boundary lines stop short of meeting: ((point width) ...), narrowest first.
+ONLY-AT: just the loose ends at these points (those met tracing round a picked point)."
+  (let* ((ends (loose-ends segs))
+         (tol (gap-tolerance segs))
+         (pts (mapcar #'first ends))
+         (check (if only-at
+                    (remove-if-not (lambda (e) (find (first e) only-at :test (lambda (a b) (< (dist2d a b) 1d-9)))) ends)
+                    ends)))
+    (merge-gaps (loop for (p q own) in check
+                      for g = (gap-at-end p q own segs pts tol)
+                      when g collect g))))
 
 (defun hatch-boundary-ents ()
   (remove-if (lambda (e) (member (ent-type e) '("TEXT" "MTEXT" "HATCH" "DIMENSION" "POINT") :test #'equal))
              (remove-if-not #'entity-visible-p (live-entities))))
 
+(defun small-len (w)
+  "A length, still readable when too small for the drawing's units to show (a 0.0009 gap)."
+  (let ((s (fmt-len w)))
+    (if (or (< w 0.01d0) (notany (lambda (c) (find c "123456789")) s))
+        (format nil "~A (~,5F)" s w)
+        s)))
+
 (defun show-gaps (gaps)
   "Circle GAPS in red (until the drawing changes) and list them."
   (setf *gap-marks* (and gaps (cons (drawing-modcount *dwg*) gaps)))
   (loop for (p w) in gaps for i from 1 below 11
-        do (out (format nil "  gap ~D at ~A,~A: ~A wide~%" i (fmt-len (px p)) (fmt-len (py p)) (fmt-len w))))
+        do (out (format nil "  gap ~D at ~A,~A: ~A wide~%" i (fmt-len (px p)) (fmt-len (py p)) (small-len w))))
   (when (> (length gaps) 10) (out (format nil "  ... and ~D more.~%" (- (length gaps) 10))))
   (when (gui-p) (gui-regen)))
 
@@ -574,37 +655,32 @@ is not."
                          (format nil ".c create oval ~,1F ~,1F ~,1F ~,1F -outline #ff3b30 -width 1 -tags gapmark"
                                  (- x 16) (- y 16) (+ x 16) (+ y 16)))))))
 
-(defun gaps-near-pick (pick)
-  "Gaps in the lines round PICK (in view)."
-  (declare (ignore pick))
-  (boundary-gaps (boundary-segments (entities-near-region (hatch-boundary-ents) nil))))
+(defun gaps-met ()
+  "The gaps among the loose ends met tracing round the last picked point."
+  (and *trace-dead-ends* (boundary-gaps *trace-segs* *trace-dead-ends*)))
+
+(defun gap-advice (gaps)
+  (let ((w (reduce #'max gaps :key #'second)))
+    (format nil "Close ~:[them~;it~] (EXTEND, FILLET, or move the end with a grip), or set HPGAPTOL to ~A to let the hatch bridge ~:[them~;it~]."
+            (= (length gaps) 1) (fmt-len (* 1.01 w)) (= (length gaps) 1))))
 
 (defun report-no-boundary (pick)
-  (let ((gaps (gaps-near-pick pick)))
+  (declare (ignore pick))
+  (let ((gaps (gaps-met)))
     (if gaps
-        (progn (out (format nil "Valid hatch boundary not found: the lines don't meet. ~D gap~:P, circled in red:~%" (length gaps)))
-               (show-gaps gaps))
+        (progn (out (format nil "Valid hatch boundary not found: the lines round that point don't meet. ~D gap~:P, circled in red:~%" (length gaps)))
+               (show-gaps gaps)
+               (out (format nil "~A~%" (gap-advice gaps))))
         (out (format nil "Valid hatch boundary not found.~%")))))
 
 (defun report-escapes (loops)
-  "Gaps inside a hatch just made from a picked point: it may have escaped through them."
-  (let* ((outer (and loops (loop-polygon-directed (first loops) 16)))
-         (inside (and outer (remove-if-not (lambda (g) (point-in-polygon-p (first g) outer))
-                                           (boundary-segments-gaps-in outer)))))
-    (when inside
-      (out (format nil "The hatch may have escaped: ~D gap~:P in the lines inside it, circled in red. ~
-                        Undo, close ~:*~[~;it~:;them~] and pick again.~%" (length inside)))
-      (show-gaps inside))))
-
-(defun boundary-segments-gaps-in (poly)
-  (let* ((xs (mapcar #'px poly)) (ys (mapcar #'py poly))
-         (x0 (reduce #'min xs)) (x1 (reduce #'max xs)) (y0 (reduce #'min ys)) (y1 (reduce #'max ys)))
-    (boundary-gaps
-     (boundary-segments
-      (remove-if-not (lambda (e) (let ((b (entity-bbox e)))
-                                   (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0))))))
-                     (hatch-boundary-ents))))))
-
+  "Gaps met while finding a hatch's boundary: it may have escaped through them into the area around."
+  (declare (ignore loops))
+  (let ((gaps (gaps-met)))
+    (when gaps
+      (out (format nil "The hatch may have escaped: ~D gap~:P in the lines round that point, circled in red.~%" (length gaps)))
+      (show-gaps gaps)
+      (out (format nil "Undo it, then ~A~%" (string-downcase (gap-advice gaps) :end 1))))))
 
 (defun keep-gap-marks ()
   "The hatch just finished changed the drawing: the gaps it found stay circled all the same."
