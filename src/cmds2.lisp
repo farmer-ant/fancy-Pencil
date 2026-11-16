@@ -253,9 +253,12 @@
                      ((pointp r)
                       (out (format nil "Analyzing the selected data...~%"))
                       (let ((found (detect-boundary r)))
-                        (if found
-                            (progn (push loops history) (setf loops (append loops found)) (update) (report-escapes found))
-                            (report-no-boundary r))))))))
+                        (cond ((and found (gaps-met) (not (held-pick-again-p r)))
+                              ;; it would spread through gaps: not hatched, the gaps marked
+                              (report-held r))
+                             (found (setf *held-pick* nil)
+                                    (push loops history) (setf loops (append loops found)) (update))
+                             (t (report-no-boundary r)))))))))
              (select-bounds ()
                (let* ((ents (select-objects :editable nil))
                       (new (remove nil (mapcar #'closed-entity-loop ents))))
@@ -287,9 +290,12 @@
                 ((pointp r)
                  (out (format nil "Analyzing the selected data...~%"))
                  (let ((found (detect-boundary r)))
-                   (if found
-                       (progn (push loops history) (setf loops (append loops found)) (update) (report-escapes found))
-                       (report-no-boundary r)))))))))))
+                   (cond ((and found (gaps-met) (not (held-pick-again-p r)))
+                              ;; it would spread through gaps: not hatched, the gaps marked
+                              (report-held r))
+                             (found (setf *held-pick* nil)
+                                    (push loops history) (setf loops (append loops found)) (update))
+                             (t (report-no-boundary r))))))))))))
 
 (defcmd "HATCHEDIT" ("HE" "-HATCHEDIT") "Changes the pattern, scale or angle of existing hatches."
   ;; the hatches already selected (or the one double-clicked), else pick one
@@ -368,7 +374,12 @@
              (add (make-lwpoly-data (cloud-verts (nreverse pts) arc t) t)))))))))
 
 (defcmd "HATCHGAPS" ("GAPS") "Finds the gaps in boundaries, where lines don't quite meet and a hatch would escape: circles them in red."
-  (let ((r (gpoint (format nil "Pick a point inside an area or [Select objects] <everything in view>: ") :keywords '("Select"))))
+  (let ((r (gpoint (format nil "Pick a point inside an area or [Select objects/Clear marks] <everything in view>: ") :keywords '("Select" "Clear"))))
+    (when (equal r "Clear")
+      (setf *gap-marks* nil)
+      (out (format nil "Gap marks cleared.~%"))
+      (when (gui-p) (gui-regen))
+      (return-from-cmd))
     (multiple-value-bind (gaps where)
         (cond ((pointp r)
                ;; just as HATCH would: trace round the point, and look at the loose ends met

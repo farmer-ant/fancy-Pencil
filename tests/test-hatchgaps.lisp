@@ -29,7 +29,7 @@
 (al "(command \"-hatch\" '(5 5) \"\")")
 (chk "HATCH there: no hatch, and it says where the gap is"
      (list (hatches) (and (search "1 gap" *said*) t) (and (search "0.3000 wide" *said*) t)) '(0 t t))
-(chk "the gap is circled (until the drawing changes)" (length (cdr *gap-marks*)) 1)
+(chk "the gap is circled" (length (open-gap-marks)) 1)
 (clear)
 
 ;; lines that cross and run past each other (overshoots) are closed, not gaps
@@ -47,24 +47,42 @@
      (let ((g (find-if (lambda (g) (< (second g) 0.5)) (gaps)))) (and g (r3 (second g)))) (r3 (sqrt (+ (* 0.4 0.4) (* 0.2 0.2)))))
 (clear)
 
-;; a room inside a bigger frame, with a gap in its wall: the hatch escapes into the frame
+;; a room inside a bigger frame, with a gap in its wall: not hatched (it would flood the frame)
 (al "(command \"rectang\" '(-20 -20) '(30 30))")
 (al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.3) \"\")")
 (setf *said* "")
 (al "(command \"-hatch\" '(5 5) \"\")")
-(chk "the hatch escaped, and it says so, with the gap circled"
-     (list (hatches) (and (search "may have escaped" *said*) t) (length (cdr *gap-marks*))) '(1 t 1))
+(chk "it would escape: not hatched, the gap circled, and it says so"
+     (list (hatches) (length (open-gap-marks)) (and (search "Not hatched" *said*) t)) '(0 1 t))
+(al "(command \"circle\" '(25 25) 1)")
+(chk "the mark stays while other things are drawn" (length (open-gap-marks)) 1)
+(al "(command \"-hatch\" '(5 5) '(5 5) \"\")")
+(chk "picking the same place twice hatches it anyway" (hatches) 1)
 (clear)
 
-;; HATCHGAPS on its own
+;; marks stay until the gap is closed
+(al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.3) \"\")")
+(al "(command \"line\" '(20 0) '(30 0) '(30 10) '(20 10) '(20 0.5) \"\")")
+(al "(command \"hatchgaps\" \"\")")
+(chk "two gaps marked" (length (open-gap-marks)) 2)
+(al "(command \"line\" '(0 0.3) '(0 0) \"\")")
+(chk "one closed: its mark goes, the other stays" (mapcar (lambda (g) (round (px (first g)))) (open-gap-marks)) '(20))
+(al "(command \"line\" '(20 0.5) '(20 0) \"\")")
+(chk "both closed: no marks" (open-gap-marks) nil)
+(al "(command \"-hatch\" '(5 5) \"\")")
+(chk "now it hatches" (hatches) 1)
+(clear)
+
+;; HATCHGAPS on its own, and Clear
 (al "(command \"line\" '(0 0) '(10 0) '(10 10) '(0 10) '(0 0.3) \"\")")
 (setf *gap-marks* nil *said* "")
 (al "(command \"hatchgaps\" \"\")")
-(chk "HATCHGAPS: everything in view" (list (length (cdr *gap-marks*)) (and (search "1 gap in view" *said*) t)) '(1 t))
+(chk "HATCHGAPS: everything in view" (list (length (open-gap-marks)) (and (search "1 gap in view" *said*) t)) '(1 t))
+(al "(command \"hatchgaps\" \"c\")")
+(chk "HATCHGAPS Clear: no marks" (open-gap-marks) nil)
 (al "(command \"line\" '(0 0.3) '(0 0) \"\")")
-(chk "the drawing changed (gap closed): the circles go" (gap-mark-cmds) nil)
 (al "(command \"hatchgaps\" \"\")")
-(chk "and HATCHGAPS finds none now" (and (search "No gaps found" *said*) t) t)
+(chk "and HATCHGAPS finds none once it is closed" (and (search "No gaps found" *said*) t) t)
 
 ;; HATCHGAPS at a point: just the gaps round it
 (clear)

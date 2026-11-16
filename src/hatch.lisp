@@ -645,15 +645,52 @@ ONLY-AT: just the loose ends at these points (those met tracing round a picked p
   (when (> (length gaps) 10) (out (format nil "  ... and ~D more.~%" (- (length gaps) 10))))
   (when (gui-p) (gui-regen)))
 
+(defun gap-still-open-p (g)
+  "Is gap G (point width) still there? Looks only at the objects close round it."
+  (destructuring-bind (p w &rest r) g
+    (declare (ignore r))
+    (let* ((rad (max (* 1.5 w) 1d-6))
+           (x0 (- (px p) rad)) (x1 (+ (px p) rad)) (y0 (- (py p) rad)) (y1 (+ (py p) rad))
+           (ents (remove-if-not (lambda (e) (let ((b (ignore-errors (entity-bbox e))))
+                                              (and b (not (or (> (first b) x1) (< (third b) x0) (> (second b) y1) (< (fourth b) y0))))))
+                                (hatch-boundary-ents)))
+           (segs (boundary-segments ents)))
+      (some (lambda (e) (<= (dist2d (first e) p) (+ rad *boundary-fuzz*))) (loose-ends segs)))))
+
 (defun gap-mark-cmds ()
-  "Red circles round the gaps last found, while the drawing is unchanged."
-  (when (and *gap-marks* (= (car *gap-marks*) (drawing-modcount *dwg*)) (null (drawing-ctab *dwg*)))
+  "Red circles round the gaps found, until each is closed: they stay while you EXTEND, FILLET,
+move a grip ... and each goes once its gap is gone."
+  (when (and *gap-marks* (null (drawing-ctab *dwg*)))
+    (unless (= (car *gap-marks*) (drawing-modcount *dwg*))
+      ;; the drawing changed: keep the marks whose gaps are still open
+      (setf *gap-marks* (let ((open (remove-if-not #'gap-still-open-p (cdr *gap-marks*))))
+                          (and open (cons (drawing-modcount *dwg*) open)))))
     (loop for (p) in (cdr *gap-marks*)
           append (multiple-value-bind (x y) (w->s p)
                    (list (format nil ".c create oval ~,1F ~,1F ~,1F ~,1F -outline #ff3b30 -width 2 -tags gapmark"
                                  (- x 11) (- y 11) (+ x 11) (+ y 11))
                          (format nil ".c create oval ~,1F ~,1F ~,1F ~,1F -outline #ff3b30 -width 1 -tags gapmark"
                                  (- x 16) (- y 16) (+ x 16) (+ y 16)))))))
+
+(defun open-gap-marks ()
+  "The gaps still marked (checked against the drawing as it is now)."
+  (gap-mark-cmds)
+  (cdr *gap-marks*))
+
+(defvar *held-pick* nil "(point modcount): a pick not hatched because of gaps; picking there again hatches it anyway.")
+
+(defun held-pick-again-p (r)
+  (and *held-pick* (= (second *held-pick*) (drawing-modcount *dwg*))
+       (< (dist2d r (first *held-pick*)) (if (gui-p) (/ 10d0 *vscale*) 1d-6))))
+
+(defun report-held (r)
+  (let ((gaps (gaps-met)))
+    (setf *held-pick* (list r (drawing-modcount *dwg*)))
+    (out (format nil "Not hatched: the lines round that point don't close, and the hatch would spread past them. ~
+                      ~D gap~:P, circled in red:~%" (length gaps)))
+    (show-gaps gaps)
+    (out (format nil "~A The red circles stay while you work and go as each gap closes; then pick again. ~
+                      (Pick the same place again now to hatch it anyway.)~%" (gap-advice gaps)))))
 
 (defun gaps-met ()
   "The gaps among the loose ends met tracing round the last picked point."
