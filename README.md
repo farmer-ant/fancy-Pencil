@@ -665,6 +665,23 @@ AutoCAD-style command, with the usual typed options (press the Down arrow at a p
   **OLEOPEN** (File → Open OLE Object) saves a copy of the embedded document and opens it in its
   program. (New OLE objects can't be made: that needs Windows.)
 
+### Terrain from survey heights
+
+The two commands of the AutoCAD add-in
+[Autocad_Topomaker](https://github.com/Vovenzza/Autocad_Topomaker), written afresh for Fancy Pencil:
+
+* **TOPOMODEL** - pick one height mark (a TEXT or MTEXT such as `102.35` or `EL 102,35`). Every
+  text on the same layer in the same color becomes a survey point: X,Y where the text is, Z the
+  first number it says (a comma works as the decimal point; texts on top of each other keep the
+  highest). The points are joined by a Delaunay triangulation into a surface mesh on layer
+  `Topo_Surface_Visualization`, and then `Specify base elevation for the solid or [Surface only]`
+  makes a closed 3D solid of the ground down to that elevation (MASSPROP gives its volume,
+  CONVTOSOLID makes it exact for UNION and SUBTRACT).
+* **ALTXT** - pick a sample survey mark (circle, arc or block) and a sample height text: each text
+  like the sample moves onto the centre of the nearest mark like the sample, if it is near enough
+  (three radii for a circle, one and a half times a block's size, plus the text's own size), so
+  TOPOMODEL puts the points where they were surveyed.
+
 ### AutoCAD 3D solids, surfaces and regions
 
 Drawings from AutoCAD 2013 and later (DWG opened through ODA File Converter, or DXF) bring their
