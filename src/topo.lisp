@@ -61,37 +61,80 @@
 
 (defun delaunay (pts)
   "Triangles ((i j k) ...) joining points PTS (a vector, in plan) so that no point lies inside any
-triangle's circumcircle (Bowyer-Watson). Each triangle runs counterclockwise."
-  (let* ((n (length pts))
-         (xs (map 'list #'px pts)) (ys (map 'list #'py pts))
-         (x0 (reduce #'min xs)) (x1 (reduce #'max xs)) (y0 (reduce #'min ys)) (y1 (reduce #'max ys))
-         (span (max (- x1 x0) (- y1 y0) 1d-9)) (cx (/ (+ x0 x1) 2)) (cy (/ (+ y0 y1) 2))
-         ;; a triangle round everything, its corners numbered n, n+1, n+2
-         (all (concatenate 'vector pts
-                           (list (pt (- cx (* 20 span)) (- cy (* 10 span)))
-                                 (pt (+ cx (* 20 span)) (- cy (* 10 span)))
-                                 (pt cx (+ cy (* 20 span))))))
-         (tris (list (make-tri all n (1+ n) (+ n 2)))))
-    ;; points in order along a sweep keep each step's search short
-    (dolist (i (sort (loop for i below n collect i) #'< :key (lambda (i) (px (aref pts i)))))
-      (let* ((p (aref all i))
-             (bad (remove-if-not (lambda (tr) (in-circumcircle-p tr p)) tris))
-             (edges nil))
-        ;; the hole's edges: those only one of the bad triangles has
-        (dolist (tr bad)
-          (destructuring-bind (a b c) (first tr)
-            (dolist (e (list (cons a b) (cons b c) (cons c a)))
-              (let ((twin (find-if (lambda (x) (and (= (car x) (cdr e)) (= (cdr x) (car e)))) edges)))
-                (if twin (setf edges (delete twin edges)) (push e edges))))))
-        (setf tris (nconc (set-difference tris bad) (mapcar (lambda (e) (make-tri all (car e) (cdr e) i)) edges)))))
-    (loop for tr in tris
-          for (a b c) = (first tr)
-          unless (or (>= a n) (>= b n) (>= c n)
-                     ;; (points all in a row make no triangle)
-                     (< (abs (- (* (- (px (aref pts b)) (px (aref pts a))) (- (py (aref pts c)) (py (aref pts a))))
-                                (* (- (py (aref pts b)) (py (aref pts a))) (- (px (aref pts c)) (px (aref pts a))))))
-                        (* 1d-12 span span)))
-            collect (list a b c))))
+triangle's circumcircle (Bowyer-Watson). Each triangle runs counterclockwise. Each point is found
+by walking across the triangles from the last one made, and only the triangles round it are
+looked at, so tens of thousands of points take seconds."
+  (let* ((n (length pts)))
+    (when (< n 3) (return-from delaunay nil))
+    (let* ((xs (map 'list #'px pts)) (ys (map 'list #'py pts))
+           (x0 (reduce #'min xs)) (x1 (reduce #'max xs)) (y0 (reduce #'min ys)) (y1 (reduce #'max ys))
+           (span (max (- x1 x0) (- y1 y0) 1d-9)) (cx (/ (+ x0 x1) 2)) (cy (/ (+ y0 y1) 2))
+           (m (+ n 3))
+           ;; a triangle round everything, its corners numbered n, n+1, n+2
+           (all (concatenate 'vector pts
+                             (list (pt (- cx (* 40 span)) (- cy (* 20 span)))
+                                   (pt (+ cx (* 40 span)) (- cy (* 20 span)))
+                                   (pt cx (+ cy (* 40 span))))))
+           (tris (make-hash-table))            ; id -> triangle
+           (edges (make-hash-table))           ; a*m+b -> id of the triangle with edge a->b
+           (next-id 0) (last nil))
+      (labels ((key (a b) (+ (* a m) b))
+               (orient (a b p)              ; > 0 when P is left of a->b
+                 (let ((pa (aref all a)) (pb (aref all b)))
+                   (- (* (- (px pb) (px pa)) (- (py p) (py pa))) (* (- (py pb) (py pa)) (- (px p) (px pa))))))
+               (put (a b c)
+                 (let ((tr (make-tri all a b c)) (id (incf next-id)))
+                   (setf (gethash id tris) tr last id)
+                   (destructuring-bind (a b c) (first tr)
+                     (setf (gethash (key a b) edges) id (gethash (key b c) edges) id (gethash (key c a) edges) id))))
+               (drop (id)
+                 (destructuring-bind (a b c) (first (gethash id tris))
+                   (remhash (key a b) edges) (remhash (key b c) edges) (remhash (key c a) edges))
+                 (remhash id tris))
+               (locate (p)
+                 ;; walk towards P; give up after many steps and look everywhere
+                 (let ((id last))
+                   (loop repeat (+ 100 (* 4 (isqrt (hash-table-count tris))) (hash-table-count tris))
+                         do (let ((tr (gethash id tris)))
+                              (unless tr (return))
+                              (destructuring-bind (a b c) (first tr)
+                                (let ((across (loop for (u v) in (list (list a b) (list b c) (list c a))
+                                                    when (minusp (orient u v p)) return (gethash (key v u) edges))))
+                                  (if across (setf id across) (return-from locate id))))))
+                   (loop for id being the hash-keys of tris using (hash-value tr)
+                         when (in-circumcircle-p tr p) return id))))
+        (put n (1+ n) (+ n 2))
+        ;; points in rows, back and forth, so each is near the one before
+        (let* ((rows (max 1 (isqrt (max 1 (floor n 8)))))
+               (order (sort (loop for i below n collect i) #'<
+                            :key (lambda (i)
+                                   (let* ((p (aref pts i)) (r (min (1- rows) (floor (* rows (- (py p) y0)) (+ span 1d-300)))))
+                                     (+ (* r 4 span) (if (evenp r) (- (px p) x0) (- x1 (px p)))))))))
+          (dolist (i order)
+            (let* ((p (aref all i)) (start (locate p)))
+              (when (and start (in-circumcircle-p (gethash start tris) p))
+                ;; the triangles whose circumcircle holds P, found by spreading from the one it is in
+                (let ((bad (make-hash-table)) (todo (list start)) (rim nil))
+                  (setf (gethash start bad) t)
+                  (loop while todo
+                        do (let ((id (pop todo)))
+                             (destructuring-bind (a b c) (first (gethash id tris))
+                               (loop for (u v) in (list (list a b) (list b c) (list c a))
+                                     do (let ((nb (gethash (key v u) edges)))
+                                          (cond ((and nb (gethash nb bad)))
+                                                ((and nb (in-circumcircle-p (gethash nb tris) p))
+                                                 (setf (gethash nb bad) t) (push nb todo))
+                                                (t (push (cons u v) rim))))))))
+                  ;; (an edge between two bad triangles may have been put on the rim before its neighbour turned bad)
+                  (setf rim (remove-if (lambda (e) (let ((nb (gethash (key (cdr e) (car e)) edges))) (and nb (gethash nb bad)))) rim))
+                  (loop for id being the hash-keys of bad do (drop id))
+                  (dolist (e rim) (put (car e) (cdr e) i)))))))
+        (loop for tr being the hash-values of tris
+              for (a b c) = (first tr)
+              unless (or (>= a n) (>= b n) (>= c n)
+                         ;; (points all in a row make no triangle)
+                         (< (abs (orient a b (aref all c))) (* 1d-12 span span)))
+                collect (list a b c))))))
 
 (defun make-tri (all a b c)
   "A triangle (corners circumcentre-x circumcentre-y radius-squared), counterclockwise."
@@ -131,9 +174,10 @@ triangle's circumcircle (Bowyer-Watson). Each triangle runs counterclockwise."
   "The terrain surface: a mesh of the triangles, every edge showing."
   (make-mesh-data (coerce pts 'list) (mapcar (lambda (tr) (mapcar #'1+ tr)) tris)))
 
-(defun topo-solid (pts tris base)
+(defun topo-solid (pts tris base &optional top-faces)
   "The ground under the surface down to elevation BASE, as a closed solid: the surface on top, the
-same triangles at BASE underneath, and walls round the outline."
+same triangles at BASE underneath, and walls round the outline. TOP-FACES, when given, are the top's
+faces as the surface mesh has them (with edges hidden)."
   (let* ((n (length pts))
          (verts (append (coerce pts 'list) (map 'list (lambda (p) (pt (px p) (py p) base)) pts)))
          (outline (outline-edges tris))
@@ -144,7 +188,7 @@ same triangles at BASE underneath, and walls round the outline."
       (dolist (tr tris)
         (destructuring-bind (a b c) tr
           ;; top: counterclockwise from above, every edge showing
-          (push (list (1+ a) (1+ b) (1+ c)) faces)
+          (unless top-faces (push (list (1+ a) (1+ b) (1+ c)) faces))
           ;; bottom: the other way round; only the outline shows
           (flet ((vis (i j) (gethash (cons (min i j) (max i j)) on-outline)))
             (push (list (corner (+ n c) (vis c b)) (corner (+ n b) (vis b a)) (corner (+ n a) (vis a c))) faces))))
@@ -153,23 +197,74 @@ same triangles at BASE underneath, and walls round the outline."
         (let ((a (car e)) (b (cdr e)))
           ;; b, a along the top, down a, along the bottom, up b: every edge showing
           (push (list (1+ b) (1+ a) (1+ (+ n a)) (1+ (+ n b))) faces))))
-    (make-mesh-data verts (nreverse faces))))
+    (make-mesh-data verts (append top-faces (nreverse faces)))))
 
-(defun mesh-signed-volume (data)
-  (let ((vs (coerce (mesh-verts data) 'vector)) (v 0d0))
-    (dolist (f (mesh-faces data) (/ v 6))
-      (let ((ps (mapcar (lambda (i) (aref vs (1- (abs i)))) f)))
-        (loop for k from 1 below (1- (length ps))
-              do (let ((a (first ps)) (b (nth k ps)) (c (nth (1+ k) ps)))
-                   (incf v (vdot3 a (cross3 b c)))))))))
+(defun default-base (lo hi)
+  "A base a little under the lowest point (a fifth of the rise, at least 1), in round numbers."
+  (let* ((drop (max 1d0 (* 0.2d0 (- hi lo))))
+         (step (expt 10d0 (floor (log drop 10)))))
+    (d (* step (floor (- lo drop) step)))))
 
-(defcmd "TOPOMODEL" () "Builds a terrain from survey elevation text: a surface mesh and a 3D solid, the points taken from texts like a sample."
-  (let* ((sel (get-user-input :entity :prompt "Select sample height mark (TEXT or MTEXT): "))
+(defun contour-points (sample)
+  "Points along the polylines on SAMPLE's layer, each at its polyline's elevation, no closer together
+than about a three-hundredth of their extent: (values points lines)."
+  (let* ((layer (dxf 8 sample))
+         (lines (remove-if-not (lambda (e) (and (equal (ent-type e) "LWPOLYLINE")
+                                                (string-equal (or (dxf 8 (ent-data e)) "0") layer)))
+                               (live-entities)))
+         (raw (loop for e in lines
+                    for d = (ent-data e) for z = (d (or (dxf 38 d) 0))
+                    append (mapcar (lambda (v) (pt (px (first v)) (py (first v)) z)) (lwpoly-vertices d)))))
+    (if (null raw)
+        (values nil 0)
+        (let* ((bb (points-bbox raw))
+               (cell (/ (max (- (third bb) (first bb)) (- (fourth bb) (second bb)) 1d-9) 300))
+               (best (make-hash-table :test #'equal)))
+          (dolist (p raw)
+            (let ((k (cons (floor (px p) cell) (floor (py p) cell))))
+              (unless (gethash k best) (setf (gethash k best) p))))
+          (values (loop for p being the hash-values of best collect p) (length lines))))))
+
+(defun build-terrain (pts &key (layer "Topo_Surface_Visualization"))
+  "Asks for the base, then adds the surface mesh of PTS (and the solid down to the base)."
+  (let* ((zs (mapcar #'pz pts)) (lo (reduce #'min zs))
+         (dflt (default-base lo (reduce #'max zs)))
+         (b (get-user-input :real :keywords '("Surface")
+                                  :prompt (format nil "Specify base elevation for the solid or [Surface only] <~A>: "
+                                                  (fmt-plain dflt))))
+         (base (cond ((equal b "Surface") nil) ((realp b) (d b)) (t dflt)))
+         (v (coerce pts 'vector))
+         (tris (delaunay v)))
+    (out (format nil "Delaunay triangulation: ~D triangle~:P.~%" (length tris)))
+    (when tris
+      (let ((surf (topo-surface v tris)))
+        (ensure-layer layer)
+        (add (append surf (list (cons 8 layer) (cons 62 256)))))
+      (cond ((null base) (out (format nil "Surface made (layer ~A).~%" layer)))
+            ((> base lo)
+             (out (format nil "Surface made; no solid: the base (~A) must be below the lowest point (~A).~%"
+                          (fmt-plain base) (fmt-plain lo))))
+            (t (let ((solid (topo-solid v tris base)))
+                 (add solid)
+                 (out (format nil "Surface made (layer ~A), and a 3D solid down to ~A, volume ~A.~%"
+                              layer (fmt-plain base) (fmt-plain (abs (mesh-signed-volume solid))))))))
+      (when (gui-p) (gui-regen)))))
+
+(defcmd "TOPOMODEL" () "Builds a terrain from survey elevation text or contour lines: a surface mesh and a 3D solid."
+  (let* ((sel (get-user-input :entity :prompt "Select sample height mark (TEXT or MTEXT) or contour line: "))
          (e (and sel (sel-entity sel))))
     (cond
       ((null e) nil)
+      ((equal (ent-type e) "LWPOLYLINE")
+       (let ((sample (ent-data e)))
+         (multiple-value-bind (pts lines) (contour-points sample)
+           (out (format nil "~D contour line~:P on layer \"~A\": ~D point~:P.~%" lines (dxf 8 sample) (length pts)))
+           (cond ((< (length pts) 3) (out (format nil "At least three points are needed for a surface.~%")))
+                 ((< (- (reduce #'max pts :key #'pz) (reduce #'min pts :key #'pz)) 1d-9)
+                  (out (format nil "The lines are all at one height (give them their elevations).~%")))
+                 (t (build-terrain pts))))))
       ((not (member (ent-type e) '("TEXT" "MTEXT") :test #'equal))
-       (out (format nil "Invalid selection: select a TEXT or MTEXT.~%")))
+       (out (format nil "Invalid selection: select a TEXT, MTEXT or contour polyline.~%")))
       (t
        (let ((sample (ent-data e)))
          (out (format nil "Points from texts on layer \"~A\", color ~A.~%" (dxf 8 sample) (color-label (entity-aci sample))))
@@ -179,27 +274,7 @@ same triangles at BASE underneath, and walls round the outline."
                         scanned matched bad (length pts) stacked))
            (if (< (length pts) 3)
                (out (format nil "At least three points are needed for a surface.~%"))
-               (let* ((zs (mapcar #'pz pts)) (lo (reduce #'min zs))
-                      (b (get-user-input :real :keywords '("Surface")
-                                               :prompt (format nil "Specify base elevation for the solid or [Surface only] <~A>: "
-                                                               (fmt-plain (min 0d0 lo)))))
-                      (base (cond ((equal b "Surface") nil) ((realp b) (d b)) (t (min 0d0 lo))))
-                      (v (coerce pts 'vector))
-                      (tris (delaunay v)))
-                 (out (format nil "Delaunay triangulation: ~D triangle~:P.~%" (length tris)))
-                 (when tris
-                   (let ((surf (topo-surface v tris)))
-                     (ensure-layer "Topo_Surface_Visualization")
-                     (add (append surf (list (cons 8 "Topo_Surface_Visualization") (cons 62 256)))))
-                   (cond ((null base) (out (format nil "Surface made (layer Topo_Surface_Visualization).~%")))
-                         ((> base lo)
-                          (out (format nil "Surface made; no solid: the base (~A) must be below the lowest point (~A).~%"
-                                       (fmt-plain base) (fmt-plain lo))))
-                         (t (let ((solid (topo-solid v tris base)))
-                              (add solid)
-                              (out (format nil "Surface made (layer Topo_Surface_Visualization), and a 3D solid down to ~A, ~
-                                                volume ~A.~%" (fmt-plain base) (fmt-plain (abs (mesh-signed-volume solid))))))))
-                   (when (gui-p) (gui-regen)))))))))))
+               (build-terrain pts))))))))
 
 ;;; ---------------------------------------------------------------- ALTXT
 

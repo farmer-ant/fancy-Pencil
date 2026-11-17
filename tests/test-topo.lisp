@@ -44,7 +44,7 @@
 (text 8 8 "BM" "ELEV")                            ; no number
 (text 3 0.5 "{\\fArial|b0;14.0}" "ELEV" "MTEXT")  ; an MTEXT point, formatting codes and all (z 10+3+1 = 14)
 (setf *said* nil)
-(al "(command \"topomodel\" s \"\")")
+(al "(command \"topomodel\" s 0)")
 (chk "points reported" (said "26 points, 1 stacked") t)
 (chk "one without a number" (said "1 without a number") t)
 (chk "triangles" (said "Delaunay triangulation:") t)
@@ -98,5 +98,6 @@
   (chk "too far away: stays" (at "100.4") '(33 13))
   (chk "far away: stays" (at "99.0") '(60 60))
   (chk "near only a circle of another size: stays" (at "77") '(41 10)))
+(chk "default base: under the lowest point, in round numbers" (list (default-base 100 106) (default-base 120.3d0 287.9d0)) (list 98d0 80d0))
 (format t "~%~D passed, ~D failed~%" *pass* *fail*)
 (sb-ext:exit :code (if (zerop *fail*) 0 1))

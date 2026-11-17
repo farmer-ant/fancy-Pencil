@@ -680,7 +680,30 @@ The two commands of the AutoCAD add-in
 * **ALTXT** - pick a sample survey mark (circle, arc or block) and a sample height text: each text
   like the sample moves onto the centre of the nearest mark like the sample, if it is near enough
   (three radii for a circle, one and a half times a block's size, plus the text's own size), so
-  TOPOMODEL puts the points where they were surveyed.
+  TOPOMODEL puts the points where they were surveyed. TOPOMODEL also takes contour lines: pick
+  one, and every polyline on its layer gives points at its elevation.
+
+Maps from the US Geological Survey (free from The National Map Downloader,
+apps.nationalmap.gov/downloader: choose an area, tick Elevation Products (3DEP) for height maps or
+Elevation Source Data / Contours for contour lines, and download):
+
+* **DEMIMPORT** (DEM) - a height map (GeoTIFF: 1 arc-second, 1/3 arc-second, 1 meter ...)
+  becomes a ground model. `Specify area [Whole/Center/Corners]`: a centre typed as latitude and
+  longitude (`37.75, -122.45`, `37.75N 122.45W` or `37 45 0 N, 122 27 0 W`) and a width
+  (`2 km`, `1 mi`, `3000 ft`), or two corners. Then the spacing between heights (`Finest` for every
+  one, up to 500 across), a vertical exaggeration, and the base for the solid (or `Surface only`).
+  The surface goes on layer `Topo_Surface_Visualization`, the solid on the current layer.
+* **CONTOURIMPORT** (CONTOURS) - contour lines from a shapefile (the `.shp` with its `.dbf` and
+  `.prj` beside it, or the `.zip` just as downloaded) become polylines at their heights on layer
+  `Contours`, every fifth one (the index contours) orange and heavier. USGS heights in feet are
+  converted to the drawing's units.
+
+The first map in a drawing puts the south-west corner of its area at 0,0 (x east, y north) and
+writes a note on layer `GEO_ORIGIN` saying where that is (`0,0 is 37.000000N 122.100000W`); the
+next map of the same place reads the note, so height maps and contours line up. A drawing without
+units asks for metres or feet. TIFFs compressed with LZW or Deflate (with or without predictors),
+tiled or in strips, in latitude/longitude or UTM, are read; the 1/9 arc-second `.img` maps are
+not (their GeoTIFF versions are).
 
 ### AutoCAD 3D solids, surfaces and regions
 
