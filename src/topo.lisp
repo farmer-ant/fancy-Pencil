@@ -3,6 +3,10 @@
 ;;;;   TOPOMODEL  every TEXT/MTEXT like a sample (same layer and color) gives a point: X,Y where
 ;;;;              the text is, Z the number it says. The points are triangulated (Delaunay) into a
 ;;;;              surface mesh (layer Topo_Surface_Visualization) and a 3D solid down to a base.
+;;;;              A contour line as the sample brings in every polyline on its layer at its elevation;
+;;;;              Add samples (at the base prompt) brings in more contour layers and height texts.
+;;;;              With contours in, a height text is used only when its number fits the ground the
+;;;;              contours make (lot numbers, distances and 0.00 placeholders don't).
 ;;;;   ALTXT      moves elevation text onto the centre of the survey mark it belongs to (circles,
 ;;;;              arcs or blocks like a sample), so the points land where they were surveyed.
 
@@ -36,6 +40,12 @@
                      (return (and (realp v) (d (if (eql sign #\-) (- v) v)))))
                    (setf start (position-if (lambda (c) (or (digit-char-p c) (member c '(#\- #\+)))) s :start (1+ start))))))))
 
+(defun height-in-text (s)
+  "The height a text gives (its first number), or NIL. A bearing or an angle (a text with a degree
+sign, such as N85°34'52\"W or 45%%d) isn't a height."
+  (unless (or (find #\° s) (search "%%d" s :test #'char-equal) (search "\\U+00B0" s :test #'char-equal))
+    (first-number s)))
+
 (defun topo-points (sample)
   "Survey points from the texts like SAMPLE: (values points scanned matched unreadable stacked)."
   (let* ((layer (dxf 8 sample)) (aci (entity-aci sample))
@@ -47,7 +57,7 @@
           (incf scanned)
           (when (and (string-equal (or (dxf 8 d) "0") layer) (= (entity-aci d) aci))
             (incf matched)
-            (let ((z (first-number (text-plain d))) (p (dxf 10 d)))
+            (let ((z (height-in-text (text-plain d))) (p (dxf 10 d)))
               (if (null z)
                   (incf bad)
                   (let* ((key (cons (round (px p) tol) (round (py p) tol))) (old (gethash key best)))
@@ -205,76 +215,196 @@ faces as the surface mesh has them (with edges hidden)."
          (step (expt 10d0 (floor (log drop 10)))))
     (d (* step (floor (- lo drop) step)))))
 
-(defun contour-points (sample)
-  "Points along the polylines on SAMPLE's layer, each at its polyline's elevation, no closer together
-than about a three-hundredth of their extent: (values points lines)."
-  (let* ((layer (dxf 8 sample))
+(defun thin-cell (pts)
+  "The cell size points are thinned to: about a three-hundredth of their extent."
+  (let ((bb (points-bbox pts)))
+    (/ (max (- (third bb) (first bb)) (- (fourth bb) (second bb)) 1d-9) 300)))
+
+(defun elevated-polyline-p (e)
+  (and (equal (ent-type e) "LWPOLYLINE") (/= 0 (or (dxf 38 (ent-data e)) 0))))
+
+(defun contour-points (layers)
+  "Points along the polylines on LAYERS (a layer name or a list of them), each at its polyline's
+elevation, no closer together than about a three-hundredth of their extent: (values points lines)."
+  (let* ((layers (if (listp layers) layers (list layers)))
          (lines (remove-if-not (lambda (e) (and (equal (ent-type e) "LWPOLYLINE")
-                                                (string-equal (or (dxf 8 (ent-data e)) "0") layer)))
+                                                (member (or (dxf 8 (ent-data e)) "0") layers :test #'string-equal)))
                                (live-entities)))
          (raw (loop for e in lines
                     for d = (ent-data e) for z = (d (or (dxf 38 d) 0))
                     append (mapcar (lambda (v) (pt (px (first v)) (py (first v)) z)) (lwpoly-vertices d)))))
     (if (null raw)
         (values nil 0)
-        (let* ((bb (points-bbox raw))
-               (cell (/ (max (- (third bb) (first bb)) (- (fourth bb) (second bb)) 1d-9) 300))
-               (best (make-hash-table :test #'equal)))
+        (let ((cell (thin-cell raw)) (best (make-hash-table :test #'equal)))
           (dolist (p raw)
             (let ((k (cons (floor (px p) cell) (floor (py p) cell))))
               (unless (gethash k best) (setf (gethash k best) p))))
           (values (loop for p being the hash-values of best collect p) (length lines))))))
 
-(defun build-terrain (pts &key (layer "Topo_Surface_Visualization"))
-  "Asks for the base, then adds the surface mesh of PTS (and the solid down to the base)."
+(defun contour-layers ()
+  "The layers that have polylines with an elevation, and how many: ((layer . count) ...), most first."
+  (let ((h (make-hash-table :test #'equalp)))
+    (dolist (e (live-entities))
+      (when (elevated-polyline-p e) (incf (gethash (or (dxf 8 (ent-data e)) "0") h 0))))
+    (sort (loop for k being the hash-keys of h using (hash-value n) collect (cons k n)) #'> :key #'cdr)))
+
+(defun contour-step (pts)
+  "The smallest step between the different heights of contour points PTS, or NIL if there is one height."
+  (let ((zs (sort (remove-duplicates (mapcar (lambda (p) (/ (fround (* (pz p) 1000)) 1000)) pts)) #'<)))
+    (and (cdr zs) (loop for (a b) on zs while b minimize (- b a)))))
+
+(defun tin-height (v tris p)
+  "The height at P's plan position of the surface of points V (a vector) and triangles TRIS, or NIL
+when P is outside them."
+  (loop for (a b c) in tris
+        do (let* ((pa (aref v a)) (pb (aref v b)) (pc (aref v c))
+                  (det (- (* (- (px pb) (px pa)) (- (py pc) (py pa))) (* (- (px pc) (px pa)) (- (py pb) (py pa))))))
+             (unless (< (abs det) 1d-18)
+               (let* ((l1 (/ (- (* (- (px pb) (px p)) (- (py pc) (py p))) (* (- (px pc) (px p)) (- (py pb) (py p)))) det))
+                      (l2 (/ (- (* (- (px pc) (px p)) (- (py pa) (py p))) (* (- (px pa) (px p)) (- (py pc) (py p)))) det))
+                      (l3 (- 1 l1 l2)))
+                 (when (and (>= l1 -1d-9) (>= l2 -1d-9) (>= l3 -1d-9))
+                   (return (+ (* l1 (pz pa)) (* l2 (pz pb)) (* l3 (pz pc))))))))))
+
+(defun nearest-height (p pts)
+  "The height of the point of PTS nearest P in plan."
+  (pz (loop with best = nil and bd = 0
+            for q in pts for dd = (+ (expt (- (px q) (px p)) 2) (expt (- (py q) (py p)) 2))
+            when (or (null best) (< dd bd)) do (setf best q bd dd)
+            finally (return best))))
+
+(defun fit-to-contours (tpts cpts)
+  "Height-text points TPTS that agree with the contours (points CPTS): within one and a half contour
+intervals of the ground the contours make, or outside them, of the nearest contour. A text whose
+number is something else (a lot number, a distance, a bearing, a 0.00 placeholder) won't agree.
+(values kept left-out)."
+  (let ((iv (contour-step cpts)))
+    (if (null iv)
+        (values tpts nil)
+        (let* ((tol (* 1.5d0 iv)) (v (coerce cpts 'vector)) (tris (delaunay v)) kept out)
+          (dolist (p tpts)
+            (let ((ref (or (tin-height v tris p) (nearest-height p cpts))))
+              (if (<= (abs (- (pz p) ref)) (+ tol 1d-9)) (push p kept) (push p out))))
+          (values (nreverse kept) (nreverse out))))))
+
+(defun drop-zero-placeholders (pts)
+  "Height-text points without the ones at 0 when the ground is nowhere near 0 (texts reading 0.00 left
+where a height was never filled in): (values points dropped)."
+  (let ((nz (remove-if #'zerop pts :key #'pz)))
+    (if (and nz (< (length nz) (length pts))
+             (> (let ((a (sort (mapcar (lambda (p) (abs (pz p))) nz) #'<))) (nth (floor (length a) 2) a)) 5))
+        (values nz (- (length pts) (length nz)))
+        (values pts 0))))
+
+(defun merge-topo-points (cpts tpts)
+  "Contour points and height-text points together. A contour point in the same small cell as a text
+point gives way to it (the text is a measured height)."
+  (if (or (null cpts) (null tpts))
+      (append cpts tpts)
+      (let ((cell (thin-cell (append cpts tpts))) (taken (make-hash-table :test #'equal)))
+        (flet ((key (p) (cons (floor (px p) cell) (floor (py p) cell))))
+          (dolist (p tpts) (setf (gethash (key p) taken) t))
+          (append (remove-if (lambda (p) (gethash (key p) taken)) cpts) tpts)))))
+
+(defun quoted-list (names) (format nil "~{\"~A\"~^, ~}" names))
+
+(defun topo-gather (layers samples &key (tell-contours t))
+  "The survey points from the contour lines on LAYERS and the height texts like SAMPLES (TEXT/MTEXT
+data), saying what was found (the contour lines only when TELL-CONTOURS)."
+  (let ((cpts nil) (tpts nil))
+    (when layers
+      (multiple-value-bind (pts lines) (contour-points layers)
+        (setf cpts pts)
+        (when tell-contours (out (format nil "~D contour line~:P on layer~P ~A: ~D point~:P~@[ (contour interval ~A)~].~%"
+                     lines (length layers) (quoted-list layers) (length pts)
+                     (let ((iv (and pts (contour-step pts)))) (and iv (fmt-plain iv))))))))
+    (dolist (sample samples)
+      (out (format nil "Points from texts on layer \"~A\", color ~A.~%" (dxf 8 sample) (color-label (entity-aci sample))))
+      (multiple-value-bind (pts scanned matched bad stacked) (topo-points sample)
+        (out (format nil "~D TEXT/MTEXT scanned, ~D on that layer in that color~[~:;, ~:*~D without a number~]. ~
+                          ~D point~:P~[~:;, ~:*~D stacked (the highest kept)~].~%"
+                     scanned matched bad (length pts) stacked))
+        (setf tpts (append tpts pts))))
+    (when tpts
+      (if (and cpts (contour-step cpts))
+          (multiple-value-bind (kept out) (fit-to-contours tpts cpts)
+            (when out
+              (let* ((vals (remove-duplicates (mapcar #'pz out) :from-end t))
+                     (shown (subseq vals 0 (min 8 (length vals)))))
+                (out (format nil "~D height text~:P left out (~:[their numbers don't~;its number doesn't~] fit the contours): ~{~A~^, ~}~:[~;, ...~].~%"
+                             (length out) (= 1 (length out)) (mapcar #'fmt-plain shown) (> (length vals) 8)))))
+            (out (format nil "~D height text~:P used with the contours.~%" (length kept)))
+            (setf tpts kept))
+          (multiple-value-bind (pts dropped) (drop-zero-placeholders tpts)
+            (when (plusp dropped)
+              (out (format nil "~D text~:P reading 0 left out (placeholders: the ground is nowhere near 0).~%" dropped)))
+            (setf tpts pts))))
+    (merge-topo-points cpts tpts)))
+
+(defun build-terrain (pts &key (layer "Topo_Surface_Visualization") can-add)
+  "Asks for the base, then adds the surface mesh of PTS (and the solid down to the base). With CAN-ADD,
+the prompt also offers Add samples, and :ADD is returned when it is chosen."
   (let* ((zs (mapcar #'pz pts)) (lo (reduce #'min zs))
          (dflt (default-base lo (reduce #'max zs)))
-         (b (get-user-input :real :keywords '("Surface")
-                                  :prompt (format nil "Specify base elevation for the solid or [Surface only] <~A>: "
-                                                  (fmt-plain dflt))))
-         (base (cond ((equal b "Surface") nil) ((realp b) (d b)) (t dflt)))
-         (v (coerce pts 'vector))
-         (tris (delaunay v)))
-    (out (format nil "Delaunay triangulation: ~D triangle~:P.~%" (length tris)))
-    (when tris
-      (let ((surf (topo-surface v tris)))
-        (ensure-layer layer)
-        (add (append surf (list (cons 8 layer) (cons 62 256)))))
-      (cond ((null base) (out (format nil "Surface made (layer ~A).~%" layer)))
-            ((> base lo)
-             (out (format nil "Surface made; no solid: the base (~A) must be below the lowest point (~A).~%"
-                          (fmt-plain base) (fmt-plain lo))))
-            (t (let ((solid (topo-solid v tris base)))
-                 (add solid)
-                 (out (format nil "Surface made (layer ~A), and a 3D solid down to ~A, volume ~A.~%"
-                              layer (fmt-plain base) (fmt-plain (abs (mesh-signed-volume solid))))))))
-      (when (gui-p) (gui-regen)))))
+         (b (get-user-input :real :keywords (if can-add '("Surface" "Add") '("Surface"))
+                                  :prompt (format nil "Specify base elevation for the solid or [Surface only~:[~;/Add samples~]] <~A>: "
+                                                  can-add (fmt-plain dflt)))))
+    (when (equal b "Add") (return-from build-terrain :add))
+    (let* ((base (cond ((equal b "Surface") nil) ((realp b) (d b)) (t dflt)))
+           (v (coerce pts 'vector))
+           (tris (delaunay v)))
+      (out (format nil "Delaunay triangulation: ~D triangle~:P.~%" (length tris)))
+      (when tris
+        (let ((surf (topo-surface v tris)))
+          (ensure-layer layer)
+          (add (append surf (list (cons 8 layer) (cons 62 256)))))
+        (cond ((null base) (out (format nil "Surface made (layer ~A).~%" layer)))
+              ((> base lo)
+               (out (format nil "Surface made; no solid: the base (~A) must be below the lowest point (~A).~%"
+                            (fmt-plain base) (fmt-plain lo))))
+              (t (let ((solid (topo-solid v tris base)))
+                   (add solid)
+                   (out (format nil "Surface made (layer ~A), and a 3D solid down to ~A, volume ~A.~%"
+                                layer (fmt-plain base) (fmt-plain (abs (mesh-signed-volume solid))))))))
+        (when (gui-p) (gui-regen)))
+      t)))
 
-(defcmd "TOPOMODEL" () "Builds a terrain from survey elevation text or contour lines: a surface mesh and a 3D solid."
-  (let* ((sel (get-user-input :entity :prompt "Select sample height mark (TEXT or MTEXT) or contour line: "))
-         (e (and sel (sel-entity sel))))
-    (cond
-      ((null e) nil)
-      ((equal (ent-type e) "LWPOLYLINE")
-       (let ((sample (ent-data e)))
-         (multiple-value-bind (pts lines) (contour-points sample)
-           (out (format nil "~D contour line~:P on layer \"~A\": ~D point~:P.~%" lines (dxf 8 sample) (length pts)))
-           (cond ((< (length pts) 3) (out (format nil "At least three points are needed for a surface.~%")))
-                 ((< (- (reduce #'max pts :key #'pz) (reduce #'min pts :key #'pz)) 1d-9)
-                  (out (format nil "The lines are all at one height (give them their elevations).~%")))
-                 (t (build-terrain pts))))))
-      ((not (member (ent-type e) '("TEXT" "MTEXT") :test #'equal))
-       (out (format nil "Invalid selection: select a TEXT, MTEXT or contour polyline.~%")))
-      (t
-       (let ((sample (ent-data e)))
-         (out (format nil "Points from texts on layer \"~A\", color ~A.~%" (dxf 8 sample) (color-label (entity-aci sample))))
-         (multiple-value-bind (pts scanned matched bad stacked) (topo-points sample)
-           (out (format nil "~D TEXT/MTEXT scanned, ~D on that layer in that color~[~:;, ~:*~D without a number~]. ~
-                             ~D point~:P~[~:;, ~:*~D stacked (the highest kept)~].~%"
-                        scanned matched bad (length pts) stacked))
-           (if (< (length pts) 3)
-               (out (format nil "At least three points are needed for a surface.~%"))
-               (build-terrain pts))))))))
+(defcmd "TOPOMODEL" () "Builds a terrain from survey elevation text and contour lines: a surface mesh and a 3D solid."
+  ;; Samples: a contour line brings in every polyline on its layer; a height text, every text on its
+  ;; layer in its color. Add samples (at the base prompt) brings in more layers.
+  (let ((layers nil) (samples nil) (first t) (told nil))
+    (loop
+      (let* ((sel (get-user-input :entity :prompt (if first
+                                                       "Select sample height mark (TEXT or MTEXT) or contour line: "
+                                                       "Select another contour line or height mark to add: ")))
+             (e (and sel (sel-entity sel))))
+        (cond
+          ((null e) (when first (return)))
+          ((equal (ent-type e) "LWPOLYLINE")
+           (let ((l (or (dxf 8 (ent-data e)) "0")))
+             (if (member l layers :test #'string-equal)
+                 (out (format nil "Layer \"~A\" is in already.~%" l))
+                 (setf layers (append layers (list l))))))
+          ((member (ent-type e) '("TEXT" "MTEXT") :test #'equal)
+           (let ((d (ent-data e)))
+             (if (find-if (lambda (s) (and (string-equal (or (dxf 8 s) "0") (or (dxf 8 d) "0")) (= (entity-aci s) (entity-aci d)))) samples)
+                 (out (format nil "Texts on layer \"~A\" in that color are in already.~%" (dxf 8 d)))
+                 (setf samples (append samples (list d))))))
+          (t (out (format nil "Invalid selection: select a TEXT, MTEXT or contour polyline.~%"))
+             (when first (return))))
+        (setf first nil)
+        (let ((pts (prog1 (topo-gather layers samples :tell-contours (not (equalp layers told))) (setf told layers)))
+              (others (remove-if (lambda (lc) (member (car lc) layers :test #'string-equal)) (contour-layers))))
+          (cond
+            ((< (length pts) 3)
+             (out (format nil "At least three points are needed for a surface.~%")) (return))
+            ((< (- (reduce #'max pts :key #'pz) (reduce #'min pts :key #'pz)) 1d-9)
+             (out (format nil "The points are all at one height (give the lines their elevations).~%")) (return))
+            (t
+             (when others
+               (out (format nil "Contour lines are also on ~{layer \"~A\" (~D)~^, ~}: Add samples to include them.~%"
+                            (loop for (l . n) in others collect l collect n))))
+             (unless (eq :add (build-terrain pts :can-add t)) (return)))))))))
 
 ;;; ---------------------------------------------------------------- ALTXT
 

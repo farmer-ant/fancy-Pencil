@@ -81,6 +81,43 @@
 (chk "two points: too few" (said "At least three points") t)
 (chk "  ...nothing made" (length (meshes)) 0)
 
+;; contours on two layers, and height texts with them (0.5.17)
+;; ground z = 10 + x over 0..10: index contours at 10 and 20 on MJR, the others (12..18) on MNR
+(defun contour (x z layer)
+  (al (format nil "(entmake '((0 . \"LWPOLYLINE\") (100 . \"AcDbEntity\") (8 . ~S) (100 . \"AcDbPolyline\") (90 . 2) (70 . 0) (38 . ~F) (10 ~F 0.0) (10 ~F 10.0)))"
+              layer (float z) (float x) (float x))))
+(al "(command \"erase\" \"all\" \"\")")
+(ensure-layer "MJR") (ensure-layer "MNR") (ensure-layer "SPOT")
+(contour 0 10 "MJR") (contour 10 20 "MJR")
+(loop for x from 2 to 8 by 2 do (contour x (+ 10 x) "MNR"))
+(al "(setq mn (ssname (ssget \"x\" '((8 . \"MNR\"))) 0) mj (ssname (ssget \"x\" '((8 . \"MJR\"))) 0))")
+(setf *said* nil) (al "(command \"topomodel\" mn \"s\")")
+(chk "one layer: the other contour layer is named" (said "Contour lines are also on layer \"MJR\" (2): Add samples") t)
+(chk "  ...only its own heights" (sort (remove-duplicates (mapcar #'pz (mesh-verts (ent-data (first (meshes)))))) #'<) '(12d0 14d0 16d0 18d0))
+(al "(command \"erase\" (ssget \"x\" '((0 . \"POLYFACE\"))) \"\")")
+(setf *said* nil) (al "(command \"topomodel\" mn \"a\" mj \"s\")")
+(chk "Add: both layers" (said "contour lines on layers \"MNR\", \"MJR\"") t)
+(chk "  ...the contour interval" (said "(contour interval 2") t)
+(chk "  ...all the heights" (sort (remove-duplicates (mapcar #'pz (mesh-verts (ent-data (first (meshes)))))) #'<)
+     '(10d0 12d0 14d0 16d0 18d0 20d0))
+(al "(command \"erase\" (ssget \"x\" '((0 . \"POLYFACE\"))) \"\")")
+;; spot heights: 15.2 at x=5 (ground 15) fits; a lot number, a 0.00 and a bearing don't
+(text 5 5 "15.20" "SPOT") (al "(setq sp (entlast))")
+(text 3 3 "42" "SPOT") (text 7 2 "0.00" "SPOT") (text 1 8 "N14°30'00\"E" "SPOT") (text 9 1 "LOT" "SPOT")
+(setf *said* nil) (al "(command \"topomodel\" mn \"a\" mj \"a\" sp \"s\")")
+(chk "texts: the bearing and the word aren't heights" (said "2 without a number") t)
+(chk "texts that don't fit the contours left out" (said "2 height texts left out (their numbers don't fit the contours): 42") t)
+(chk "  ...the spot height used" (said "1 height text used with the contours") t)
+(chk "  ...and in the surface" (and (find 15.2d0 (mesh-verts (ent-data (first (meshes)))) :key #'pz :test (lambda (a b) (< (abs (- a b)) 1d-9))) t) t)
+;; texts alone: 0.00 placeholders are dropped when the ground is nowhere near 0
+(al "(command \"erase\" \"all\" \"\")")
+(text 0 0 "100.5" "SPOT") (al "(setq sp (entlast))") (text 4 0 "101.0" "SPOT") (text 0 4 "102.2" "SPOT") (text 4 4 "103.1" "SPOT")
+(text 2 2 "0.00" "SPOT")
+(setf *said* nil) (al "(command \"topomodel\" sp \"s\")")
+(chk "0.00 placeholder left out" (said "1 text reading 0 left out") t)
+(chk "  ...the ground stays high" (reduce #'min (mesh-verts (ent-data (first (meshes)))) :key #'pz) 100.5d0)
+(chk "degree sign: not a height" (list (height-in-text "N85°34'52\"W") (height-in-text "45%%d") (height-in-text "EL 102,35")) (list nil nil 102.35d0))
+
 ;; ALTXT: texts beside their circles move onto the centres; one too far away stays
 (al "(command \"erase\" \"all\" \"\")")
 (al "(command \"circle\" '(10 10) 0.5)") (al "(setq c (entlast))")

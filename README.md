@@ -674,14 +674,22 @@ The two commands of the AutoCAD add-in
   text on the same layer in the same color becomes a survey point: X,Y where the text is, Z the
   first number it says (a comma works as the decimal point; texts on top of each other keep the
   highest). The points are joined by a Delaunay triangulation into a surface mesh on layer
-  `Topo_Surface_Visualization`, and then `Specify base elevation for the solid or [Surface only]`
+  `Topo_Surface_Visualization`, and then `Specify base elevation for the solid or [Surface only/Add samples]`
   makes a closed 3D solid of the ground down to that elevation (MASSPROP gives its volume,
-  CONVTOSOLID makes it exact for UNION and SUBTRACT).
+  CONVTOSOLID makes it exact for UNION and SUBTRACT). A text with a degree sign (a bearing such as
+  `N85°34'52"W`) is not a height.
+
+  TOPOMODEL also takes contour lines: pick one, and every polyline on its layer gives points at its
+  elevation. **Add samples** brings in more: contours on other layers (major and minor contours
+  are often on two layers - TOPOMODEL names the other layers that have contour lines) and height
+  texts. With contours in, a height text is used only when its number fits the ground the contours
+  make (within one and a half contour intervals, or of the nearest contour outside them), so lot
+  numbers, distances and `0.00` placeholders on the same layer are left out, and listed. Without
+  contours, texts reading 0 are left out when the rest of the ground is nowhere near 0.
 * **ALTXT** - pick a sample survey mark (circle, arc or block) and a sample height text: each text
   like the sample moves onto the centre of the nearest mark like the sample, if it is near enough
   (three radii for a circle, one and a half times a block's size, plus the text's own size), so
-  TOPOMODEL puts the points where they were surveyed. TOPOMODEL also takes contour lines: pick
-  one, and every polyline on its layer gives points at its elevation.
+  TOPOMODEL puts the points where they were surveyed.
 
 Maps from the US Geological Survey (free from The National Map Downloader,
 apps.nationalmap.gov/downloader: choose an area, tick Elevation Products (3DEP) for height maps or
