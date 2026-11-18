@@ -237,6 +237,14 @@ Fonts are not part of the Fancy Pencil download: commercial fonts stay under the
   off, freeze, lock, merge, delete ...). They work with their boxes switched off.
 - The **command history** above the command line (5 lines to start) gets taller or shorter by
   dragging the bar along its top edge; double-click the bar for 5 lines again.
+- The **Layers** box is one row of buttons: **Layer Properties**, then the current layer (its
+  color and a list to pick from), then **Make Current**, **Match** and **Change**. With all six
+  boxes showing the ribbon needs a window about 1620 pixels wide; switch a box off on a smaller one.
+- The **Layer Properties Manager** opens inside the Fancy Pencil window, over the drawing, with its
+  own title bar: drag the title to move it and the corner to size it, **-** (or **Minimize**, or a
+  double-click on the title) puts it away as a tab at the top left of the drawing - click the tab
+  to bring it back - and **x** closes it. **Pop Out** makes it a window of its own (for a second
+  screen, say); **Put Inside** brings it back in. That choice is remembered too.
 - These settings are remembered (in ~/.config/fancypencil/screen.tcl; delete it for the standard
   screen).
 

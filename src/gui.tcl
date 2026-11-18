@@ -66,6 +66,10 @@ catch {
     ttk::style map TButton -background [list active "#46505e" pressed $accent]
     ttk::style configure Tool.TButton -padding {5 1} -background $panel -relief flat -font {Helvetica 9}
     ttk::style map Tool.TButton -background [list active "#46505e" pressed $accent]
+    # a button with a visible edge, for the ribbon (the Layers box)
+    ttk::style configure Box.TButton -padding {5 2} -background $panel2 -relief raised -borderwidth 1 \
+        -bordercolor "#566170" -lightcolor "#4a5462" -darkcolor "#1b2027" -font {Helvetica 9}
+    ttk::style map Box.TButton -background [list active "#46505e" pressed $accent] -relief [list pressed sunken]
     ttk::style configure Toggle.TButton -padding {6 1} -background $panel -foreground $dim -relief flat
     ttk::style configure On.Toggle.TButton -background "#24496e" -foreground "#ffffff"
     ttk::style configure TCombobox -arrowcolor $fg -foreground $fg
@@ -427,23 +431,24 @@ proc tbgroup {name title items {rows 2}} {
 tbgroup draw Draw {Line LINE Polyline PLINE Circle CIRCLE Arc ARC Rectangle RECTANG Text TEXT}
 tbgroup modify Modify {Move MOVE Copy COPY Rotate ROTATE Mirror MIRROR Scale SCALE Offset OFFSET Trim TRIM Extend EXTEND Fillet FILLET Erase ERASE Explode EXPLODE Array ARRAY}
 tbgroup annot Annotation {Linear DIMLINEAR Aligned DIMALIGNED Leader LEADER "Edit Text" TEXTEDIT Block BLOCK Insert INSERT List LIST}
+# Layers: [Layer Properties] [current layer, with its color] [Make Current] [Match] [Change]
 set lf [ttk::frame .tb.layers -padding {2 0 6 0}]
 set lr [ttk::frame $lf.r]
+ttk::button $lr.lp -text "Layer Properties" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYER}
 canvas $lr.sw -width 14 -height 14 -highlightthickness 0 -background $panel
 $lr.sw create rectangle 1 1 13 13 -fill white -outline "#000000" -tags sw
-ttk::combobox $lr.cb -width 16 -state readonly -takefocus 0
+ttk::combobox $lr.cb -width 14 -state readonly -takefocus 0
 bind $lr.cb <<ComboboxSelected>> { emit LAYERSET [.tb.layers.r.cb get]; focus .cmd.e }
-pack $lr.sw $lr.cb -side left -padx 2
-ttk::button $lf.lp -text "Layer Properties" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYER}
-set lb [ttk::frame $lf.b]
-ttk::button $lb.mc -text "Make Current" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCUR}
-ttk::button $lb.mh -text "Match" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
-ttk::button $lb.ch -text "Change" -style Tool.TButton -width 0 -takefocus 0 -command {menucmd CHANGELAYER}
-pack $lb.mc $lb.mh $lb.ch -side left -expand 1 -fill x
+ttk::button $lr.mc -text "Make Current" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYMCUR}
+ttk::button $lr.mh -text "Match" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
+ttk::button $lr.ch -text "Change" -style Box.TButton -width 0 -takefocus 0 -command {menucmd CHANGELAYER}
+pack $lr.lp -side left -padx {0 5}
+pack $lr.sw -side left -padx {0 2}
+pack $lr.cb -side left -padx {0 5}
+pack $lr.mc $lr.mh $lr.ch -side left -padx {0 2}
 ttk::label $lf.t -text Layers -style Group.TLabel
-pack $lr -side top -pady 1
-pack $lf.lp -side top -fill x
-pack $lb -side top -fill x
+# one row, set level with the middle of the two-row boxes beside it
+pack $lr -side top -pady {13 13}
 pack $lf.t -side top
 pack $lf -side left -anchor n
 ttk::separator .tb.slayers -orient vertical
@@ -1072,9 +1077,15 @@ proc toolwin {w} {
     bind $w <Map> [list toolwin_mapped $w %W]
     bind $w <Destroy> [list toolwin_destroyed $w %W]
 }
-proc toolwin_unmapped {w W} { if {$W eq $w} { after 50 [list toolwin_check $w] } }
-proc toolwin_check {w} {
-    if {[winfo exists $w] && [wm state $w] eq "iconic"} { wm withdraw $w; park_add $w }
+# Some desktops say a window is minimized only a while after it has gone, so keep looking for
+# a second; a window that was only hidden (withdrawn) is left alone.
+proc toolwin_unmapped {w W} { if {$W eq $w} { after 50 [list toolwin_check $w 20] } }
+proc toolwin_check {w {tries 1}} {
+    if {![winfo exists $w] || [winfo ismapped $w] || [pal_inside $w]} return
+    switch -- [wm state $w] {
+        iconic { wm withdraw $w; park_add $w }
+        normal { if {$tries > 1} { after 50 [list toolwin_check $w [expr {$tries - 1}]] } }
+    }
 }
 proc toolwin_mapped {w W} { if {$W eq $w} { park_remove $w } }
 proc toolwin_destroyed {w W} { if {$W eq $w} { park_remove $w } }
@@ -1085,7 +1096,7 @@ proc park_add {w} {
     }
     set t [park_tab $w]
     if {![winfo exists $t]} {
-        label $t -text "\u25b8 [wm title $w]" -anchor w -padx 6 -pady 2 -cursor hand2 \
+        label $t -text "\u25b8 [win_title $w]" -anchor w -padx 6 -pady 2 -cursor hand2 \
             -background "#1b1f24" -foreground "#c9ced6" -activebackground "#2b3340" -font {Helvetica 9}
         bind $t <Button-1> [list park_restore $w]
         bind $t <Enter> [list $t configure -background "#2b3340"]
@@ -1101,11 +1112,137 @@ proc park_remove {w} {
     if {[winfo exists .c.park] && [llength [winfo children .c.park]] == 0} { place forget .c.park }
 }
 # put window W away at the side of the drawing (what minimizing it does too)
-proc park {w} { if {[winfo exists $w]} { wm withdraw $w; park_add $w } }
+proc park {w} {
+    if {![winfo exists $w]} return
+    if {[pal_inside $w]} { place forget $w } else { wm withdraw $w }
+    park_add $w
+}
 proc park_restore {w} {
     park_remove $w
-    if {[winfo exists $w]} { wm deiconify $w; raise $w; focus $w }
+    if {![winfo exists $w]} return
+    if {[pal_inside $w]} { pal_show $w } else { wm deiconify $w; raise $w }
+    focus $w
 }
+proc win_title {w} {
+    if {[pal_inside $w]} { return $::pal_title($w) }
+    if {[catch {wm title $w} t]} { set t $w }
+    return $t
+}
+
+# ---------------------------------------------------------------- palettes: windows inside the main window
+# A palette (the Layer Properties Manager) sits over the drawing, inside the Fancy Pencil window,
+# with its own title bar: drag the title to move it, the corner to size it; \u2013 minimizes it to
+# a tab at the side of the drawing (on every desktop: GNOME doesn't tell a program its own window
+# was minimized), \u00d7 closes it. Pop Out makes it a window of its own again (remembered).
+proc pal_inside {w} {
+    expr {[info exists ::pal_title($w)] && [winfo exists $w] && !$::pal_out($w)}
+}
+proc pal_embed {w title width height} {
+    set ::pal_title($w) $title
+    if {![info exists ::pal_out($w)]} { set ::pal_out($w) [expr {[info exists ::pal_pref($w)] && $::pal_pref($w)}] }
+    if {![info exists ::pal_geom($w)]} {
+        set cw [winfo width .c]
+        if {$cw < 100} { set cw 1000 }
+        set ::pal_geom($w) [list [expr {max(0, $cw - $width - 16)}] 16 $width $height]
+    }
+    set bg "#2b3340"
+    set t [frame $w.pal -background $bg]
+    label $t.l -text $title -anchor w -background $bg -foreground "#e8ecf1" -font {Helvetica 10 bold} -padx 8 -pady 3 -cursor fleur
+    foreach {b txt tip cmd} [list x "\u00d7" Close [list pal_close $w] min "\u2013" Minimize [list park $w]] {
+        label $t.$b -text $txt -background $bg -foreground "#e8ecf1" -font {Helvetica 12 bold} -padx 8 -cursor hand2
+        bind $t.$b <Enter> [list $t.$b configure -background "#46505e"]
+        bind $t.$b <Leave> [list $t.$b configure -background $bg]
+        bind $t.$b <ButtonRelease-1> $cmd
+        pack $t.$b -side right
+    }
+    pack $t.l -side left -fill x -expand 1
+    bind $t.l <ButtonPress-1> [list pal_drag_start $w move %X %Y]
+    bind $t.l <B1-Motion> {pal_drag %X %Y}
+    bind $t.l <Double-Button-1> [list park $w]
+    # the sizing corner: three short diagonal lines (drawn, so no font needs the glyph)
+    canvas $w.palgrip -width 14 -height 14 -highlightthickness 0 -background $::panel -cursor bottom_right_corner
+    foreach d {4 8 12} { $w.palgrip create line $d 13 13 $d -fill "#6b7686" }
+    bind $w.palgrip <ButtonPress-1> [list pal_drag_start $w size %X %Y]
+    bind $w.palgrip <B1-Motion> {pal_drag %X %Y}
+    if {$::pal_out($w)} {
+        pal_float $w
+    } else {
+        wm forget $w
+        pal_decorate $w 1
+        pal_show $w
+    }
+}
+proc pal_decorate {w on} {
+    if {$on} {
+        pack $w.pal -side top -fill x -before [lindex [pack slaves $w] 0]
+        place $w.palgrip -relx 1 -rely 1 -anchor se
+        raise $w.palgrip
+        $w configure -highlightthickness 1 -highlightbackground "#46505e" -highlightcolor "#46505e"
+    } else {
+        pack forget $w.pal
+        place forget $w.palgrip
+        $w configure -highlightthickness 0
+    }
+}
+proc pal_show {w} {
+    lassign $::pal_geom($w) x y ww hh
+    set cw [winfo width .c]; set ch [winfo height .c]
+    if {$cw > 100 && $ch > 100} {
+        set ww [expr {max(300, min($ww, $cw - 4))}]
+        set hh [expr {max(180, min($hh, $ch - 4))}]
+        set x [expr {max(0, min($x, $cw - $ww))}]
+        set y [expr {max(0, min($y, $ch - $hh))}]
+    }
+    set ::pal_geom($w) [list $x $y $ww $hh]
+    place $w -in .c -x $x -y $y -width $ww -height $hh -anchor nw
+    raise $w
+}
+proc pal_drag_start {w what X Y} { set ::pal_drag [list $w $what $X $Y {*}$::pal_geom($w)] }
+proc pal_drag {X Y} {
+    if {![info exists ::pal_drag]} return
+    lassign $::pal_drag w what X0 Y0 x y ww hh
+    if {$what eq "move"} {
+        set ::pal_geom($w) [list [expr {$x + $X - $X0}] [expr {$y + $Y - $Y0}] $ww $hh]
+    } else {
+        set ::pal_geom($w) [list $x $y [expr {max(420, $ww + $X - $X0)}] [expr {max(220, $hh + $Y - $Y0)}]]
+    }
+    pal_show $w
+}
+proc pal_close {w} { destroy $w; focus .cmd.e }
+# a window of its own (Pop Out), or back inside (Put Inside)
+proc pal_float {w} {
+    lassign $::pal_geom($w) x y ww hh
+    set ::pal_out($w) 1
+    place forget $w
+    pal_decorate $w 0
+    wm manage $w
+    wm title $w $::pal_title($w)
+    wm geometry $w ${ww}x${hh}+[expr {[winfo rootx .c] + $x}]+[expr {[winfo rooty .c] + $y}]
+    toolwin $w
+    wm deiconify $w
+    raise $w
+    pal_buttons $w
+}
+proc pal_inside_again {w} {
+    park_remove $w
+    set ::pal_out($w) 0
+    wm forget $w
+    pal_decorate $w 1
+    pal_show $w
+    pal_buttons $w
+}
+proc pal_toggle {w} {
+    if {[pal_inside $w]} { pal_float $w } else { pal_inside_again $w }
+    set ::pal_pref($w) $::pal_out($w)
+    catch scr_save
+}
+proc pal_buttons {w} {
+    if {[winfo exists $w.tb.pop]} {
+        $w.tb.pop configure -text [expr {$::pal_out($w) ? "Put Inside" : "Pop Out"}]
+    }
+}
+# palettes stay inside the drawing when the window changes size
+bind .c <Configure> {+foreach w [array names ::pal_title] { if {[pal_inside $w] && [winfo ismapped $w]} { pal_show $w } }}
 proc dlg_owner {w} {
     set f [focus]
     if {$f eq ""} { set f [grab current] }
@@ -4436,8 +4573,9 @@ proc qc_applyit {} {
 # ---------------------------------------------------------------- layer dialog
 proc layerdlg {rows {ltypes {}} {lweights {}}} {
     set w .ld
-    # minimized or lost off the screen: start it afresh, where it can be seen
-    if {[winfo exists $w] && ![winfo viewable $w]} { destroy $w }
+    # a window of its own that is minimized or lost off the screen: start it afresh, where it can
+    # be seen (inside the main window it is only parked, and comes back)
+    if {[winfo exists $w] && ![winfo viewable $w] && ![pal_inside $w]} { destroy $w }
     if {![winfo exists $w]} {
         toplevel $w -background $::panel
         wm title $w "Layer Properties Manager"
@@ -4451,8 +4589,9 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         }
         ttk::button $w.tb.cs -text "Color..." -command {layeract pickcolor}
         pack $w.tb.cs -side left -padx 2
-        ttk::button $w.tb.park -text "Park \u25c2" -command {park .ld}
-        pack $w.tb.park -side right -padx 2
+        ttk::button $w.tb.park -text "Minimize" -command {park .ld}
+        ttk::button $w.tb.pop -text "Pop Out" -command {pal_toggle .ld}
+        pack $w.tb.park $w.tb.pop -side right -padx 2
         pack $w.tb -side top -fill x
         ttk::frame $w.tb2 -padding {6 0 6 6}
         ttk::label $w.tb2.ll -text "Linetype:"
@@ -4478,6 +4617,8 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         bind $w.t <Double-Button-1> {layerdbl %x %y}
         bind $w.t <F2> {ld_edit_name [.ld.t selection]}
         bind $w <Escape> {destroy .ld; focus .cmd.e; break}
+        pal_embed $w "Layer Properties Manager" 790 420
+        pal_buttons $w
     }
     $w.tb2.lt configure -values $ltypes
     $w.tb2.lw configure -values $lweights
@@ -4495,8 +4636,13 @@ proc layerdlg {rows {ltypes {}} {lweights {}}} {
         if {$name eq $selname} { $w.t selection set $id }
     }
     # (brought back if it was minimized)
-    if {[wm state $w] ne "normal"} { wm deiconify $w }
-    raise $w
+    if {[pal_inside $w]} {
+        park_remove $w
+        pal_show $w
+    } else {
+        if {[wm state $w] ne "normal"} { wm deiconify $w }
+        raise $w
+    }
 }
 proc layersel {} {
     set s [.ld.t selection]
@@ -4696,6 +4842,7 @@ proc scr_save {} {
         puts $fd "# Fancy Pencil screen settings (written by the program; delete it for the standard screen)"
         foreach {n t} $::scr_panels { puts $fd [list panel $n $::scr_on($n)] }
         puts $fd [list history $::scr_hist]
+        foreach w [array names ::pal_pref] { puts $fd [list palette $w $::pal_pref($w)] }
         close $fd
     }
 }
@@ -4706,6 +4853,7 @@ proc scr_load {} {
         switch -- $k {
             panel { if {[info exists ::scr_on($a)] && $b in {0 1}} { set ::scr_on($a) $b } }
             history { if {[string is integer -strict $a] && $a >= 1 && $a <= 60} { set ::scr_hist $a } }
+            palette { if {[string match .* $a] && $b in {0 1}} { set ::pal_pref($a) $b } }
         }
     }
 }
