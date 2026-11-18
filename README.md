@@ -226,6 +226,20 @@ Drawings that name AutoCAD's Century Gothic files (GOTHIC.TTF, GOTHICB.TTF ...) 
 when it is installed, otherwise a free look-alike (URW Gothic / TeX Gyre Adventor) if there is one.
 Fonts are not part of the Fancy Pencil download: commercial fonts stay under their own licenses.
 
+### The ribbon and the command history
+
+- The boxes on the ribbon under the menus - **Draw, Modify, Annotation, Layers, Properties,
+  View** - switch off and on one by one: **View → Ribbon Panels**, or right-click the ribbon.
+  The others close up; with them all off the ribbon goes and the drawing gets the room. Clean
+  Screen (Ctrl+0) still hides everything at once.
+- **Annotation** and **Layers** are menus on the menu bar as well: text, dimensions, leaders and
+  blocks; layer properties, **Current Layer** (pick one from the list), the layer tools (isolate,
+  off, freeze, lock, merge, delete ...). They work with their boxes switched off.
+- The **command history** above the command line (5 lines to start) gets taller or shorter by
+  dragging the bar along its top edge; double-click the bar for 5 lines again.
+- These settings are remembered (in ~/.config/fancypencil/screen.tcl; delete it for the standard
+  screen).
+
 ### Toolbars
 
 Every menu has a toolbar of command icons, and so does each sub-menu (3D Views, Visual Styles,

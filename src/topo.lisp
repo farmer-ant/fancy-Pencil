@@ -331,7 +331,7 @@ data), saying what was found (the contour lines only when TELL-CONTOURS)."
             (when out
               (let* ((vals (remove-duplicates (mapcar #'pz out) :from-end t))
                      (shown (subseq vals 0 (min 8 (length vals)))))
-                (out (format nil "~D height text~:P left out (~:[their numbers don't~;its number doesn't~] fit the contours): ~{~A~^, ~}~:[~;, ...~].~%"
+                (out (format nil "~D height text~:P left out (~:[their numbers don't~;its number doesn't~] fit the contours): ~{~A~^, ~}~:[.~;, ...~]~%"
                              (length out) (= 1 (length out)) (mapcar #'fmt-plain shown) (> (length vals) 8)))))
             (out (format nil "~D height text~:P used with the contours.~%" (length kept)))
             (setf tpts kept))

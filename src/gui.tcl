@@ -4680,6 +4680,161 @@ proc aliasdlg {pairs} {
     return $::aliasresult
 }
 source [file join [file dirname [file normalize [info script]]] toolbars.tcl]
+# ---------------------------------------------------------------- screen: ribbon panels, menus, history size
+# Each box on the ribbon (Draw, Modify, Annotation, Layers, Properties, View) can be switched off
+# and on: View > Ribbon Panels, or right-click the ribbon. The command history above the command
+# line gets taller or shorter by dragging its top edge (double-click it: back to 5 lines). Both are
+# remembered in ~/.config/fancypencil/screen.tcl. Annotation and Layers are also menus on the bar.
+set ::scr_file [file join $env(HOME) .config fancypencil screen.tcl]
+set ::scr_panels {draw Draw modify Modify annot Annotation layers Layers props Properties view View}
+foreach {n t} $::scr_panels { set ::scr_on($n) 1 }
+set ::scr_hist 5
+proc scr_save {} {
+    catch {
+        file mkdir [file dirname $::scr_file]
+        set fd [open $::scr_file w]
+        puts $fd "# Fancy Pencil screen settings (written by the program; delete it for the standard screen)"
+        foreach {n t} $::scr_panels { puts $fd [list panel $n $::scr_on($n)] }
+        puts $fd [list history $::scr_hist]
+        close $fd
+    }
+}
+proc scr_load {} {
+    if {[catch {set fd [open $::scr_file]; set data [read $fd]; close $fd}]} return
+    foreach line [split $data \n] {
+        if {[string match "#*" $line] || [catch {lassign $line k a b}]} continue
+        switch -- $k {
+            panel { if {[info exists ::scr_on($a)] && $b in {0 1}} { set ::scr_on($a) $b } }
+            history { if {[string is integer -strict $a] && $a >= 1 && $a <= 60} { set ::scr_hist $a } }
+        }
+    }
+}
+
+# the ribbon panels in their order, each with its separator, leaving out the ones switched off;
+# with none on, the ribbon strip goes too (and comes back where it was)
+proc scr_panels_apply {} {
+    foreach {n t} $::scr_panels { catch {pack forget .tb.$n .tb.s$n} }
+    set any 0
+    foreach {n t} $::scr_panels {
+        if {!$::scr_on($n)} continue
+        pack .tb.$n -side left -anchor n
+        pack .tb.s$n -side left -fill y -padx 3
+        set any 1
+    }
+    if {$::clean_screen} return  ;# Clean Screen puts the ribbon back when it is turned off
+    set packed [expr {![catch {pack info .tb}]}]
+    if {!$any && $packed} {
+        pack forget .tb
+    } elseif {$any && !$packed} {
+        if {![catch {pack info .dock_t}]} { pack .tb -side top -fill x -before .dock_t } \
+        else { pack .tb -side top -fill x -before .tabs }
+    }
+}
+proc scr_panel_set {n on} {
+    set ::scr_on($n) $on
+    scr_panels_apply
+    scr_save
+}
+proc scr_panels_all {on} {
+    foreach {n t} $::scr_panels { set ::scr_on($n) $on }
+    scr_panels_apply
+    scr_save
+}
+proc scr_panels_menu {m} {
+    $m delete 0 end
+    foreach {n t} $::scr_panels {
+        $m add checkbutton -label $t -variable ::scr_on($n) -command [list scr_panel_set_cb $n]
+    }
+    $m add separator
+    $m add command -label "Show All Panels" -command {scr_panels_all 1}
+    $m add command -label "Hide All Panels" -command {scr_panels_all 0}
+}
+# a checkbutton has already set ::scr_on($n) when its command runs
+proc scr_panel_set_cb {n} { scr_panel_set $n $::scr_on($n) }
+
+menu .mb.view.panels -tearoff 0
+.mb.view insert [.mb.view index "Toolbars"] cascade -label "Ribbon Panels" -menu .mb.view.panels
+scr_panels_menu .mb.view.panels
+# right-click anywhere on the ribbon: the same list
+proc scr_ribbon_menu {X Y} {
+    if {![winfo exists .scrmenu]} { menu .scrmenu -tearoff 0 }
+    scr_panels_menu .scrmenu
+    fp_popup .scrmenu $X $Y
+}
+proc scr_bind_ribbon {w} {
+    bind $w <Button-3> {+scr_ribbon_menu %X %Y}
+    foreach c [winfo children $w] { scr_bind_ribbon $c }
+}
+scr_bind_ribbon .tb
+
+# Annotation and Layers menus on the menu bar (beside Dimension and Modify)
+menu .mb.annot
+.mb insert [expr {[.mb index "Dimension"] + 1}] cascade -label "Annotation" -menu .mb.annot
+foreach {l c} {"Text" TEXT "Multiline Text" MTEXT "Edit Text" TEXTEDIT "Text Style..." STYLE "Spelling..." SPELL} { mcmd .mb.annot $l $c }
+.mb.annot add separator
+foreach {l c} {"Linear Dimension" DIMLINEAR "Aligned Dimension" DIMALIGNED "Dimension Style..." DIMSTYLE} { mcmd .mb.annot $l $c }
+.mb.annot add separator
+foreach {l c} {"Leader" LEADER "Quick Leader" QLEADER "Multileader" MLEADER "Tolerance" TOLERANCE "Revision Cloud" REVCLOUD "Wipeout" WIPEOUT} { mcmd .mb.annot $l $c }
+.mb.annot add separator
+foreach {l c} {"Block" BLOCK "Insert Block" INSERT "List" LIST} { mcmd .mb.annot $l $c }
+
+menu .mb.layers
+.mb insert [expr {[.mb index "Modify"] + 1}] cascade -label "Layers" -menu .mb.layers
+mcmd .mb.layers "Layer Properties..." LAYER
+menu .mb.layers.cur -tearoff 0 -postcommand scr_layers_fill
+.mb.layers add cascade -label "Current Layer" -menu .mb.layers.cur
+foreach {l c} {"Make Object's Layer Current" LAYMCUR "Match Object Layer" LAYMCH "Change Objects to Layer..." CHANGELAYER
+               "Change to Current Layer" LAYCUR} { mcmd .mb.layers $l $c }
+.mb.layers add separator
+foreach {l c} {"Isolate" LAYISO "Unisolate" LAYUNISO "Off (pick)" LAYOFF "All On" LAYON
+               "Freeze (pick)" LAYFRZ "Thaw All" LAYTHW "Lock (pick)" LAYLCK "Unlock (pick)" LAYULK} { mcmd .mb.layers $l $c }
+.mb.layers add separator
+foreach {l c} {"Merge Layers" LAYMRG "Delete Layer" LAYDEL} { mcmd .mb.layers $l $c }
+# Current Layer lists the drawing's layers (the same list as the Layers box, which may be switched off)
+proc scr_layers_fill {} {
+    set m .mb.layers.cur
+    $m delete 0 end
+    set ::scr_curlayer [.tb.layers.r.cb get]
+    foreach name [.tb.layers.r.cb cget -values] {
+        $m add radiobutton -label $name -value $name -variable ::scr_curlayer \
+            -command [list apply {{name} { emit LAYERSET $name; focus .cmd.e }} $name]
+    }
+    if {[$m index end] eq "none"} { $m add command -label "(no drawing open)" -state disabled }
+}
+
+# the command history: drag the bar on its top edge to give it more or fewer lines
+frame .hgrip -height 6 -background "#2a313b" -cursor sb_v_double_arrow
+pack .hgrip -in .bottom -side bottom -fill x -after .h
+raise .hgrip
+bind .hgrip <Enter> {.hgrip configure -background "#3d5a80"}
+bind .hgrip <Leave> {if {![info exists ::scr_drag]} {.hgrip configure -background "#2a313b"}}
+bind .hgrip <ButtonPress-1> {set ::scr_drag [list %Y [.h cget -height]]}
+bind .hgrip <B1-Motion> {scr_hist_drag %Y}
+bind .hgrip <ButtonRelease-1> {unset -nocomplain ::scr_drag; .hgrip configure -background "#2a313b"; scr_save}
+bind .hgrip <Double-Button-1> {scr_hist_set 5; scr_save}
+proc scr_hist_set {n} {
+    set ls [font metrics [.h cget -font] -linespace]
+    # at most half the window (once it has its size)
+    set most [expr {[winfo height .] > 200 ? max(3, ([winfo height .] / 2) / max(1, $ls)) : 60}]
+    set n [expr {max(1, min($n, $most, 60))}]
+    if {$n != [.h cget -height]} { .h configure -height $n; .h see end }
+    set ::scr_hist $n
+}
+proc scr_hist_drag {Y} {
+    if {![info exists ::scr_drag]} return
+    lassign $::scr_drag y0 n0
+    set ls [font metrics [.h cget -font] -linespace]
+    scr_hist_set [expr {$n0 + round(double($y0 - $Y) / max(1, $ls))}]
+}
+
+scr_load
+scr_panels_apply
+proc scr_hist_first {} {
+    if {![winfo ismapped .] || [winfo height .] < 200} { after 100 scr_hist_first; return }
+    scr_hist_set $::scr_hist
+}
+after idle scr_hist_first
+
 emit READY
 # test hook: FANCYPENCIL_TEST_TCL=script.tcl is sourced after startup (used by the automated GUI tests)
 if {[info exists env(FANCYPENCIL_TEST_TCL)]} { after 1500 [list source $env(FANCYPENCIL_TEST_TCL)] }
