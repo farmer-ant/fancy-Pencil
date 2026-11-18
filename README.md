@@ -48,6 +48,8 @@ cd fancypencil
 ```
 
 The first start compiles the sources (a few seconds); later starts use the cached build in `build/`.
+If Fancy Pencil is started twice at once (a drawing double-clicked twice), the second waits for the
+first to finish compiling; a compiled file that is damaged is simply compiled again.
 Nothing else is needed: no Quicklisp, no libraries. The GUI is Tk, driven over a pipe from Lisp.
 If `wish` isn't on your PATH, set `FANCYPENCIL_WISH=/path/to/wish`.
 When started from the app launcher, error messages go to `~/.cache/fancypencil.log`.
