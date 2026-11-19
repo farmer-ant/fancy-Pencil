@@ -229,7 +229,7 @@ Fonts are not part of the Fancy Pencil download: commercial fonts stay under the
 ### The ribbon and the command history
 
 - The boxes on the ribbon under the menus - **Draw, Modify, Annotation, Layers, Properties,
-  View** - switch off and on one by one: **View → Ribbon Panels**, or right-click the ribbon.
+  View**, left to right - switch off and on one by one: **View → Ribbon Panels**, or right-click the ribbon.
   The others close up; with them all off the ribbon goes and the drawing gets the room. Clean
   Screen (Ctrl+0) still hides everything at once.
 - **Annotation** and **Layers** are menus on the menu bar as well: text, dimensions, leaders and
@@ -237,9 +237,14 @@ Fonts are not part of the Fancy Pencil download: commercial fonts stay under the
   off, freeze, lock, merge, delete ...). They work with their boxes switched off.
 - The **command history** above the command line (5 lines to start) gets taller or shorter by
   dragging the bar along its top edge; double-click the bar for 5 lines again.
-- The **Layers** box is one row of buttons: **Layer Properties**, then the current layer (its
-  color and a list to pick from), then **Make Current**, **Match** and **Change**. With all six
-  boxes showing the ribbon needs a window about 1620 pixels wide; switch a box off on a smaller one.
+- The ribbon's buttons are small and carry short names - mostly the command-line aliases, so the
+  button and what you would type match: Draw **L PL C A REC DT**, Modify **M CO RO MI SC O TR EX F
+  E X AR**, Annotation **DLI DAL LE ED B I LI**, View **ZE ZW U MR**. Rest the mouse on a button
+  for its full name.
+- The **Layers** box is one row: **LP** (Layer Properties), the current layer (its color and a
+  list to pick from), then **MC** (Make Current), **M** (Match) and **C** (Change).
+- **Properties** is color and lineweight on one row, linetype under them. The boxes have no names
+  under them; the whole ribbon fits a window about 1100 pixels wide.
 - The **Layer Properties Manager** opens inside the Fancy Pencil window, over the drawing, with its
   own title bar: drag the title to move it and the corner to size it, **-** (or **Minimize**, or a
   double-click on the title) puts it away as a tab at the top left of the drawing - click the tab

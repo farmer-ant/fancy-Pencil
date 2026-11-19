@@ -67,7 +67,7 @@ catch {
     ttk::style configure Tool.TButton -padding {5 1} -background $panel -relief flat -font {Helvetica 9}
     ttk::style map Tool.TButton -background [list active "#46505e" pressed $accent]
     # a button with a visible edge, for the ribbon (the Layers box)
-    ttk::style configure Box.TButton -padding {5 2} -background $panel2 -relief raised -borderwidth 1 \
+    ttk::style configure Box.TButton -padding {4 1} -background $panel2 -relief raised -borderwidth 1 \
         -bordercolor "#566170" -lightcolor "#4a5462" -darkcolor "#1b2027" -font {Helvetica 9}
     ttk::style map Box.TButton -background [list active "#46505e" pressed $accent] -relief [list pressed sunken]
     ttk::style configure Toggle.TButton -padding {6 1} -background $panel -foreground $dim -relief flat
@@ -409,62 +409,75 @@ mcmd .mb.help "About Fancy Pencil" ABOUT
 # ---------------------------------------------------------------- toolbar
 ttk::frame .tb -padding {4 3}
 pack .tb -side top -fill x
+# A ribbon box: small buttons with short names (the command-line aliases), the full name in a
+# tooltip; ITEMS is short name, full name, command, ...
+proc ribbon_tip {w text} {
+    bind $w <Enter> [list tbx_tip $w $text]
+    bind $w <Leave> {tbx_tip_hide}
+    bind $w <ButtonPress> {+tbx_tip_hide}
+}
 proc tbgroup {name title items {rows 2}} {
-    set f [ttk::frame .tb.$name -padding {2 0 6 0}]
+    set f [ttk::frame .tb.$name -padding {2 0 4 0}]
     set grid [ttk::frame $f.g]
-    set n [expr {[llength $items] / 2}]
+    set n [expr {[llength $items] / 3}]
     set cols [expr {($n + $rows - 1) / $rows}]
     set i 0
-    foreach {lbl cmd} $items {
+    foreach {lbl full cmd} $items {
         set w $grid.b$i
-        ttk::button $w -text $lbl -style Tool.TButton -width 0 -takefocus 0 -command [list menucmd $cmd]
+        ttk::button $w -text $lbl -style Box.TButton -width 0 -takefocus 0 -command [list menucmd $cmd]
+        ribbon_tip $w $full
         grid $w -row [expr {$i / $cols}] -column [expr {$i % $cols}] -sticky ew -padx 1 -pady 1
         incr i
     }
-    ttk::label $f.t -text $title -style Group.TLabel
-    pack $grid -side top
-    pack $f.t -side top
-    pack $f -side left -anchor n
+    pack $grid -side top -expand 1
+    pack $f -side left -fill y
     ttk::separator .tb.s$name -orient vertical
     pack .tb.s$name -side left -fill y -padx 3
 }
-tbgroup draw Draw {Line LINE Polyline PLINE Circle CIRCLE Arc ARC Rectangle RECTANG Text TEXT}
-tbgroup modify Modify {Move MOVE Copy COPY Rotate ROTATE Mirror MIRROR Scale SCALE Offset OFFSET Trim TRIM Extend EXTEND Fillet FILLET Erase ERASE Explode EXPLODE Array ARRAY}
-tbgroup annot Annotation {Linear DIMLINEAR Aligned DIMALIGNED Leader LEADER "Edit Text" TEXTEDIT Block BLOCK Insert INSERT List LIST}
-# Layers: [Layer Properties] [current layer, with its color] [Make Current] [Match] [Change]
-set lf [ttk::frame .tb.layers -padding {2 0 6 0}]
+tbgroup draw Draw {L Line LINE PL Polyline PLINE C Circle CIRCLE A Arc ARC REC Rectangle RECTANG DT Text TEXT}
+tbgroup modify Modify {M Move MOVE CO Copy COPY RO Rotate ROTATE MI Mirror MIRROR SC Scale SCALE O Offset OFFSET
+                       TR Trim TRIM EX Extend EXTEND F Fillet FILLET E Erase ERASE X Explode EXPLODE AR Array ARRAY}
+tbgroup annot Annotation {DLI "Linear Dimension" DIMLINEAR DAL "Aligned Dimension" DIMALIGNED LE Leader LEADER
+                          ED "Edit Text" TEXTEDIT B Block BLOCK I "Insert Block" INSERT LI List LIST}
+# Layers: [LP] [current layer, with its color] [MC] [M] [C]
+set lf [ttk::frame .tb.layers -padding {2 0 4 0}]
 set lr [ttk::frame $lf.r]
-ttk::button $lr.lp -text "Layer Properties" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYER}
+ttk::button $lr.lp -text "LP" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYER}
 canvas $lr.sw -width 14 -height 14 -highlightthickness 0 -background $panel
 $lr.sw create rectangle 1 1 13 13 -fill white -outline "#000000" -tags sw
 ttk::combobox $lr.cb -width 14 -state readonly -takefocus 0
 bind $lr.cb <<ComboboxSelected>> { emit LAYERSET [.tb.layers.r.cb get]; focus .cmd.e }
-ttk::button $lr.mc -text "Make Current" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYMCUR}
-ttk::button $lr.mh -text "Match" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
-ttk::button $lr.ch -text "Change" -style Box.TButton -width 0 -takefocus 0 -command {menucmd CHANGELAYER}
-pack $lr.lp -side left -padx {0 5}
+ttk::button $lr.mc -text "MC" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYMCUR}
+ttk::button $lr.mh -text "M" -style Box.TButton -width 0 -takefocus 0 -command {menucmd LAYMCH}
+ttk::button $lr.ch -text "C" -style Box.TButton -width 0 -takefocus 0 -command {menucmd CHANGELAYER}
+foreach {b t} {lp "Layer Properties" mc "Make Current (the layer of an object you pick)" mh "Match (put objects on the layer of another)" ch "Change (objects to a layer you choose)"} { ribbon_tip $lr.$b $t }
+pack $lr.lp -side left -padx {0 4}
 pack $lr.sw -side left -padx {0 2}
-pack $lr.cb -side left -padx {0 5}
+pack $lr.cb -side left -padx {0 4}
 pack $lr.mc $lr.mh $lr.ch -side left -padx {0 2}
-ttk::label $lf.t -text Layers -style Group.TLabel
-# one row, set level with the middle of the two-row boxes beside it
-pack $lr -side top -pady {13 13}
-pack $lf.t -side top
-pack $lf -side left -anchor n
+# one row, level with the middle of the two-row boxes beside it
+pack $lr -side top -expand 1
+pack $lf -side left -fill y
 ttk::separator .tb.slayers -orient vertical
 pack .tb.slayers -side left -fill y -padx 3
-set pf [ttk::frame .tb.props -padding {2 0 6 0}]
-foreach {w lbl key wd} {color Color COLOR 12 ltype Linetype LTYPE 14 lweight Lineweight LWEIGHT 10} {
+# Properties: color and lineweight on one row, linetype under them (two rows, like the other boxes)
+set pf [ttk::frame .tb.props -padding {2 0 4 0}]
+set pg [ttk::frame $pf.g]
+foreach {w lbl key wd row col tip} {color Color COLOR 11 0 0 "Color for new objects"
+                                    lweight Lwt LWEIGHT 8 0 2 "Lineweight for new objects"
+                                    ltype Ltype LTYPE 11 1 0 "Linetype for new objects"} {
+    # (each list keeps its old name, .tb.props.<w>.cb, which the program fills in)
     set r [ttk::frame $pf.$w]
-    ttk::label $r.l -text $lbl -width 9 -style Dim.TLabel
+    ttk::label $r.l -text $lbl -style Dim.TLabel
     ttk::combobox $r.cb -width $wd -state readonly -takefocus 0
     bind $r.cb <<ComboboxSelected>> [list propcombo $key $r.cb]
-    pack $r.l $r.cb -side left
-    pack $r -side top -anchor w
+    ribbon_tip $r.l $tip
+    pack $r.l -side left -padx {0 3}
+    pack $r.cb -side left
+    grid $r -in $pg -row $row -column $col -sticky w -padx {0 6} -pady 1
 }
-ttk::label $pf.t -text Properties -style Group.TLabel
-pack $pf.t -side top
-pack $pf -side left -anchor n
+pack $pg -side top -expand 1
+pack $pf -side left -fill y
 ttk::separator .tb.sprops -orient vertical
 pack .tb.sprops -side left -fill y -padx 3
 proc propcombo {key cb} { emit CURPROP $key [$cb get]; focus .cmd.e }
@@ -473,7 +486,7 @@ proc setcurprops {colors color ltypes ltype lweights lweight} {
     .tb.props.ltype.cb configure -values $ltypes;   .tb.props.ltype.cb set $ltype
     .tb.props.lweight.cb configure -values $lweights; .tb.props.lweight.cb set $lweight
 }
-tbgroup view View {Extents "ZOOM E" Window "ZOOM W" Undo U Redo REDO}
+tbgroup view View {ZE "Zoom Extents" "ZOOM E" ZW "Zoom Window" "ZOOM W" U Undo U MR Redo REDO}
 
 # ---------------------------------------------------------------- canvas
 # file tabs: one per open drawing, like AutoCAD's
@@ -4865,7 +4878,7 @@ proc scr_panels_apply {} {
     set any 0
     foreach {n t} $::scr_panels {
         if {!$::scr_on($n)} continue
-        pack .tb.$n -side left -anchor n
+        pack .tb.$n -side left -fill y
         pack .tb.s$n -side left -fill y -padx 3
         set any 1
     }
