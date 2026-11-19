@@ -243,7 +243,7 @@ Fonts are not part of the Fancy Pencil download: commercial fonts stay under the
   for its full name.
 - The **Layers** box is one row: **LP** (Layer Properties), the current layer (its color and a
   list to pick from), then **MC** (Make Current), **M** (Match) and **C** (Change).
-- **Properties** is color and lineweight on one row, linetype under them. The boxes have no names
+- **Properties** is color, linetype and lineweight, side by side on one row. The boxes have no names
   under them; the whole ribbon fits a window about 1100 pixels wide.
 - The **Layer Properties Manager** opens inside the Fancy Pencil window, over the drawing, with its
   own title bar: drag the title to move it and the corner to size it, **-** (or **Minimize**, or a

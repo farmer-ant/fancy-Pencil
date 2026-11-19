@@ -460,12 +460,12 @@ pack $lr -side top -expand 1
 pack $lf -side left -fill y
 ttk::separator .tb.slayers -orient vertical
 pack .tb.slayers -side left -fill y -padx 3
-# Properties: color and lineweight on one row, linetype under them (two rows, like the other boxes)
+# Properties: color, linetype and lineweight on one row
 set pf [ttk::frame .tb.props -padding {2 0 4 0}]
 set pg [ttk::frame $pf.g]
 foreach {w lbl key wd row col tip} {color Color COLOR 11 0 0 "Color for new objects"
-                                    lweight Lwt LWEIGHT 8 0 2 "Lineweight for new objects"
-                                    ltype Ltype LTYPE 11 1 0 "Linetype for new objects"} {
+                                    ltype Ltype LTYPE 11 0 1 "Linetype for new objects"
+                                    lweight Lwt LWEIGHT 8 0 2 "Lineweight for new objects"} {
     # (each list keeps its old name, .tb.props.<w>.cb, which the program fills in)
     set r [ttk::frame $pf.$w]
     ttk::label $r.l -text $lbl -style Dim.TLabel
