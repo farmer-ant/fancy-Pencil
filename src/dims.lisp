@@ -8,7 +8,8 @@
 
 (defparameter *dimvar-names*
   '(:dimscale :dimasz :dimtxt :dimexo :dimexe :dimgap :dimdec :dimtad :dimtsz :dimclrd :dimclre
-    :dimclrt :dimlfac :dimpost :dimcen :dimdli :dimtih :dimadec :dimblk))
+    :dimclrt :dimlfac :dimpost :dimcen :dimdli :dimtih :dimadec :dimblk
+    :dimlunit :dimrnd :dimzin :dimaunit))
 
 (defstruct dimstyle name (vars nil))
 
@@ -19,7 +20,10 @@
 (defun standard-dimvars ()
   (list :dimscale 1d0 :dimasz 0.18d0 :dimtxt 0.18d0 :dimexo 0.0625d0 :dimexe 0.18d0 :dimgap 0.09d0
         :dimdec 4 :dimtad 1 :dimtsz 0d0 :dimclrd 0 :dimclre 0 :dimclrt 0 :dimlfac 1d0 :dimpost ""
-        :dimcen 0.09d0 :dimdli 0.38d0 :dimtih 0 :dimadec 0 :dimblk ""))
+        :dimcen 0.09d0 :dimdli 0.38d0 :dimtih 0 :dimadec 0 :dimblk ""
+        ;; unit format 0 = the drawing's own units (LUNITS); 1-6 as AutoCAD's DIMLUNIT.
+        ;; zero suppression 3 = 6" and 2'-0" (as Fancy Pencil always wrote them)
+        :dimlunit 0 :dimrnd 0d0 :dimzin 3 :dimaunit 0))
 
 (defun all-dimstyles ()
   (or (drawing-dimstyles *dwg*)
@@ -42,11 +46,54 @@
 
 (defun colored (data c) (if (and c (/= c 0)) (append data (list (cons 62 c))) data))
 
+(defun dim-unit-format (vars)
+  "The unit format a style's dimensions use: its own (1-6), or the drawing's for 0."
+  (let ((u (dv vars :dimlunit)))
+    (if (and (integerp u) (<= 1 u 6)) u (or (sysvar "LUNITS") 2))))
+
+(defun suppress-decimal-zeros (s zin)
+  "DIMZIN 4: 0.50 -> .50; DIMZIN 8: 0.50 -> 0.5 (and 2.00 -> 2)."
+  (when (and (logtest zin 8) (find #\. s) (not (find #\E s)))
+    (setf s (string-right-trim "." (string-right-trim "0" s))))
+  (when (and (logtest zin 4) (not (find #\E s)))
+    (cond ((and (> (length s) 1) (string= (subseq s 0 2) "0.")) (setf s (subseq s 1)))
+          ((and (> (length s) 2) (string= (subseq s 0 3) "-0.")) (setf s (concatenate 'string "-" (subseq s 2))))))
+  (if (string= s "") "0" s))
+
+(defun dim-length-string (val unit prec zin)
+  "VAL as dimension text in UNIT format (DIMLUNIT 1-6) with precision PREC and zero suppression ZIN."
+  (case unit
+    ((3 4)
+     ;; feet and inches; zin 0: 6" and 2', 1: 0'-6" and 2'-0", 2: 0'-6" and 2', 3: 6" and 2'-0"
+     (let* ((step (if (= unit 4) (/ 1 (expt 2 (max 0 prec))) (expt 10 (- (max 0 prec)))))
+            (total (* step (round (rational (abs val)) step)))
+            (ft (floor total 12)) (in (- total (* ft 12)))
+            (sign (if (and (minusp val) (plusp total)) "-" ""))
+            (ins (if (= unit 4) (fraction-string in prec) (suppress-decimal-zeros (fmt-decimal in prec) (logand zin 12))))
+            (show-ft (or (plusp ft) (member (logand zin 3) '(1 2))))
+            (show-in (or (plusp in) (not show-ft) (member (logand zin 3) '(1 3)))))
+       (cond ((not show-ft) (format nil "~A~A\"" sign ins))
+             ((not show-in) (format nil "~A~D'" sign ft))
+             (t (format nil "~A~D'-~A\"" sign ft ins)))))
+    (5 (fraction-string val prec))
+    (t (suppress-decimal-zeros (rtos val (if (= unit 1) 1 2) prec) zin))))
+
+(defun dim-angle-string (a vars)
+  (let ((prec (dv vars :dimadec)))
+    (case (dv vars :dimaunit)
+      (1 (replace-all (angtos a 1 prec) "d" "%%d"))
+      (2 (angtos a 2 prec))
+      (3 (angtos a 3 prec))
+      (t (format nil "~A%%d" (suppress-decimal-zeros (fmt-decimal (deg a) prec) (logand (dv vars :dimzin) 12)))))))
+
 (defun dim-text-string (meas vars override &key (kind :linear))
   (let* ((val (* meas (d (dv vars :dimlfac))))
+         (rnd (d (or (dv vars :dimrnd) 0)))
+         ;; round off (not angles, as in AutoCAD)
+         (val (if (and (not (eq kind :angular)) (plusp rnd)) (* rnd (fround val rnd)) val))
          (num (if (eq kind :angular)
-                  (format nil "~A%%d" (fmt-decimal (deg meas) (dv vars :dimadec)))
-                  (rtos val (or (sysvar "LUNITS") 2) (dv vars :dimdec))))
+                  (dim-angle-string meas vars)
+                  (dim-length-string val (dim-unit-format vars) (dv vars :dimdec) (or (dv vars :dimzin) 3))))
          (num (case kind (:radius (concatenate 'string "R" num)) (:diameter (concatenate 'string "%%c" num)) (t num)))
          (post (dv vars :dimpost))
          (num (cond ((or (null post) (string= post "")) num)
@@ -459,7 +506,7 @@ for the right-hand end of a horizontal dimension line, colour ByBlock."
                                       (dim-data 5 (cons 15 vertex) (cons 13 pa) (cons 14 pb) (cons 10 (pt3 loc))
                                                 (cons 11 tp) (cons 42 meas)))
                                   (if text (list (cons 1 text)) nil)))
-                     (out (format nil "Dimension text = ~A~%" (fmt-decimal (deg meas) (dv vars :dimadec)))))
+                     (out (format nil "Dimension text = ~A~%" (dim-angle-string meas vars))))
                    (return))
                   (t (return)))))))))
 

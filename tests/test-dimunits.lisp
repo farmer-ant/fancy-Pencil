@@ -1,0 +1,88 @@
+;; Dimension style units (0.5.24): unit format, precision, round off, zero suppression, angle format.
+;; Run: sbcl --non-interactive --load load.lisp --load tests/test-dimunits.lisp
+(in-package :fancy-pencil)
+(setf *ui* :tty *output-fn* (lambda (s) s))
+(load-aliases) (current-doc)
+(defvar *pass* 0) (defvar *fail* 0)
+(defmacro chk (name form expect)
+  `(let ((v (handler-case ,form (error (c) (format nil "ERROR ~A" c)))))
+     (if (equalp v ,expect) (incf *pass*) (incf *fail*))
+     (format t "~:[FAIL~;ok  ~] ~A: ~S~%" (equalp v ,expect) ,name v)))
+(defun al (s) (alisp-eval-string s))
+(defun newest () (car (last (live-entities))))
+(defun shown (e)
+  "The text a dimension's picture shows."
+  (let ((b (find-block (dxf 2 (ent-data e)))))
+    (loop for x in (and b (block-def-entities b))
+          when (member (dxf 0 x) '("TEXT" "MTEXT") :test #'equal) return (dxf 1 x))))
+(defun style (&rest vars) (append vars (standard-dimvars)))
+
+;; the formats
+(chk "architectural, 1/16" (dim-length-string 30.4d0 4 4 3) "2'-6 3/8\"")
+(chk "architectural, 1/64" (dim-length-string 30.4d0 4 6 3) "2'-6 13/32\"")
+(chk "  ...whole feet show 0 inches (zero suppression 3)" (dim-length-string 24d0 4 4 3) "2'-0\"")
+(chk "  ...or not (0)" (dim-length-string 24d0 4 4 0) "2'")
+(chk "  ...under a foot: no 0 feet (3)" (dim-length-string 6.5d0 4 4 3) "6 1/2\"")
+(chk "  ...or with them (1)" (dim-length-string 6.5d0 4 4 1) "0'-6 1/2\"")
+(chk "engineering" (dim-length-string 30.4d0 3 2 3) "2'-6.40\"")
+(chk "fractional" (dim-length-string 30.4d0 5 3 0) "30 3/8")
+(chk "decimal" (dim-length-string 0.5d0 2 3 0) "0.500")
+(chk "  ...no leading zero (4)" (dim-length-string 0.5d0 2 3 4) ".500")
+(chk "  ...no trailing zeros (8)" (dim-length-string 2.5d0 2 3 8) "2.5")
+(chk "scientific" (dim-length-string 1234d0 1 2 4) "1.23E+03")
+(chk "same as drawing units: follows LUNITS"
+     (let ((old (sysvar "LUNITS"))) (setf (sysvar "LUNITS") 4)
+       (prog1 (dim-unit-format (style :dimlunit 0)) (setf (sysvar "LUNITS") old)))
+     4)
+(chk "the style's own format wins" (dim-unit-format (style :dimlunit 2)) 2)
+(chk "round off to 1/2\"" (dim-text-string 30.4d0 (style :dimlunit 4 :dimdec 4 :dimrnd 0.5d0) nil) "2'-6 1/2\"")
+(chk "round off to 0.25" (dim-text-string 3.37d0 (style :dimlunit 2 :dimdec 2 :dimrnd 0.25d0) nil) "3.25")
+(chk "scale factor" (dim-text-string 2d0 (style :dimlunit 4 :dimdec 4 :dimlfac 48d0) nil) "8'-0\"")
+(chk "angles: decimal degrees" (dim-text-string (/ pi 4) (style :dimadec 1) nil :kind :angular) "45.0%%d")
+(chk "angles: degrees minutes seconds" (dim-text-string 0.7909d0 (style :dimaunit 1 :dimadec 4) nil :kind :angular) "45%%d18'55\"")
+(chk "angles: radians" (dim-text-string 1d0 (style :dimaunit 3 :dimadec 3) nil :kind :angular) "1.000r")
+(chk "radius gets its R" (dim-text-string 9d0 (style :dimlunit 4 :dimdec 4) nil :kind :radius) "R9\"")
+
+;; a dimension drawn with an Architectural style, through SETVAR as AutoLISP would
+(al "(setvar \"DIMLUNIT\" 4) (setvar \"DIMDEC\" 4) (setvar \"DIMZIN\" 3)")
+(al "(command \"dimlinear\" '(0 0) '(30.4 0) '(15 -5))")
+(defvar dm (newest))
+(chk "the dimension shows feet and inches" (shown dm) "2'-6 3/8\"")
+(al "(command \"-dimstyle\" \"save\" \"ARCH\")")
+(chk "the style keeps its format" (dv (dimstyle-vars (find-dimstyle "ARCH")) :dimlunit) 4)
+
+;; the dialog shows factors as plain numbers (the scale factor showed as 1")
+(setf (sysvar "LUNITS") 4)
+(chk "scale factor in the dialog" (dimvar-display :dimlfac 1d0) "1")
+(chk "  ...overall scale" (dimvar-display :dimscale 48d0) "48")
+(chk "  ...round off" (dimvar-display :dimrnd 0.5d0) "0.5")
+(chk "  ...read back" (dimvar-parse :dimrnd "0.5") 0.5d0)
+(setf (sysvar "LUNITS") 2)
+
+;; saved and opened again
+(let ((f "/tmp/fp-dimunits.dxf"))
+  (setf (drawing-dimstyles *dwg*)
+        (append (drawing-dimstyles *dwg*)
+                (list (make-dimstyle :name "SURVEY" :vars (style :dimlunit 2 :dimdec 2 :dimzin 8 :dimrnd 0.05d0 :dimaunit 1 :dimadec 4))
+                      (make-dimstyle :name "DRAWINGUNITS" :vars (style :dimlunit 0)))))
+  (dxf-export-2000 f)
+  (new-drawing) (setf (sysvar "LUNITS") 4)
+  (dxf-import f :replace t)
+  (let ((a (dimstyle-vars (find-dimstyle "ARCH"))) (s (dimstyle-vars (find-dimstyle "SURVEY"))))
+    (chk "reopened: Architectural" (list (dv a :dimlunit) (dv a :dimdec) (dv a :dimzin)) '(4 4 3))
+    (chk "reopened: decimal, round off, angles" (list (dv s :dimlunit) (dv s :dimzin) (dv s :dimrnd) (dv s :dimaunit) (dv s :dimadec))
+         '(2 8 0.05d0 1 4))
+    (chk "\"same as drawing units\" saved as the drawing's units (AutoCAD has no such choice)"
+         (dv (dimstyle-vars (find-dimstyle "DRAWINGUNITS")) :dimlunit) 2))
+  (chk "the dimension still shows feet and inches"
+       (shown (find "DIMENSION" (live-entities) :key #'ent-type :test #'equal)) "2'-6 3/8\""))
+
+;; an AutoCAD style without DIMLUNIT follows the drawing's units, as before
+(let ((f "/tmp/fp-dimunits2.dxf"))
+  (with-open-file (o f :direction :output :if-exists :supersede)
+    (format o "0~%SECTION~%2~%HEADER~%9~%$LUNITS~%70~%4~%0~%ENDSEC~%0~%SECTION~%2~%TABLES~%0~%TABLE~%2~%DIMSTYLE~%0~%DIMSTYLE~%2~%OLD~%271~%4~%0~%ENDTAB~%0~%ENDSEC~%0~%EOF~%"))
+  (new-drawing) (dxf-import f :replace t)
+  (chk "no DIMLUNIT: the drawing's units" (dim-text-string 30.4d0 (dimstyle-vars (find-dimstyle "OLD")) nil) "2'-6 3/8\""))
+
+(format t "~%Dimension units tests: ~D passed, ~D failed.~%" *pass* *fail*)
+(sb-ext:exit :code (if (zerop *fail*) 0 1))

@@ -2521,10 +2521,14 @@ set ::dimfields {
         DIMSCALE "Use overall scale of" entry
     }
     "Primary Units" {
-        DIMDEC  "Precision (decimal places)" {0 0 1 0.0 2 0.00 3 0.000 4 0.0000 5 0.00000 6 0.000000}
+        DIMLUNIT "Unit format" {0 "Same as drawing units" 1 Scientific 2 Decimal 3 Engineering 4 Architectural 5 Fractional 6 "Windows Desktop"}
+        DIMDEC  "Precision" precision
+        DIMRND  "Round off to (0 = none)" entry
         DIMLFAC "Measurement scale factor" entry
         DIMPOST "Prefix / suffix (<> is the measurement)" entry
-        DIMADEC "Angular precision (decimal places)" {0 0 1 0.0 2 0.00 3 0.000 4 0.0000}
+        DIMZIN  "Zero suppression" zin
+        DIMAUNIT "Angle format" {0 "Decimal degrees" 1 "Degrees Minutes Seconds" 2 Gradians 3 Radians}
+        DIMADEC "Angular precision" aprec
     }
 }
 proc dimdlg_choices {kind} {
@@ -2533,15 +2537,125 @@ proc dimdlg_choices {kind} {
         foreach a $::dimarrows { lappend out {*}$a }
         return $out
     }
+    # lists that follow the unit format chosen (precision in fractions for Architectural ...)
+    set u [dimdlg_unit]
+    switch -- $kind {
+        precision {
+            set out {}
+            for {set i 0} {$i <= 8} {incr i} {
+                if {$i == 0} { set d 0 } else { set d "0.[string repeat 0 $i]" }
+                switch -- $u { 3 { set d "0'-$d\"" } 1 { set d "${d}E+01" } }
+                lappend out $i $d
+            }
+            if {$u == 4 || $u == 5} {
+                set out {}
+                for {set i 0} {$i <= 8} {incr i} {
+                    set f [expr {$i == 0 ? "" : " 1/[expr {1 << $i}]"}]
+                    if {$u == 4} { lappend out $i "0'-0$f\"" } else { lappend out $i "0$f" }
+                }
+            }
+            return $out
+        }
+        zin {
+            if {$u == 3 || $u == 4} {
+                return [list 3 "0 feet (6\" and 2'-0\")" 0 "0 feet and 0 inches (6\" and 2')" \
+                            2 "0 inches (0'-6\" and 2')" 1 "None (0'-6\" and 2'-0\")"]
+            }
+            return {0 "None (0.50)" 4 "Leading zeros (.50)" 8 "Trailing zeros (0.5)" 12 "Leading and trailing (.5)"}
+        }
+        aprec {
+            if {[dimdlg_num DIMAUNIT 0] == 1} {
+                return [list 0 "0\u00b0" 2 "0\u00b000'" 4 "0\u00b000'00\"" 5 "0\u00b000'00.0\"" 6 "0\u00b000'00.00\""]
+            }
+            return {0 0 1 0.0 2 0.00 3 0.000 4 0.0000}
+        }
+    }
     return $kind
 }
-proc dimstyledlg {records current arrows} {
+# the unit format the selected style uses: its own, or the drawing's
+proc dimdlg_unit {} {
+    set u [expr {[info exists ::dsv(DIMLUNIT)] ? $::dsv(DIMLUNIT) : 0}]
+    if {![string is integer -strict $u] || $u < 1 || $u > 6} { set u $::ds(lunits) }
+    return $u
+}
+proc dimdlg_frac {x prec} {
+    set den [expr {1 << $prec}]
+    set t [expr {round(abs($x) * $den)}]
+    set whole [expr {$t / $den}]; set num [expr {$t % $den}]
+    if {$num == 0} { return $whole }
+    set a $num; set b $den
+    while {$b} { set r [expr {$a % $b}]; set a $b; set b $r }
+    set fr "[expr {$num / $a}]/[expr {$den / $a}]"
+    if {$whole == 0} { return $fr }
+    return "$whole $fr"
+}
+proc dimdlg_zeros {s zin} {
+    if {($zin & 8) && [string first . $s] >= 0 && [string first E $s] < 0} { set s [string trimright [string trimright $s 0] .] }
+    if {($zin & 4) && [string first E $s] < 0} { regsub {^(-?)0\.} $s {\1.} s }
+    if {$s eq ""} { return 0 }
+    return $s
+}
+# a length as dimension text: the same rules as dim-length-string in dims.lisp
+proc dimdlg_fmtlen {val u prec zin {plain 0}} {
+    set prec [expr {max(0, int($prec))}]
+    switch -- $u {
+        3 - 4 {
+            if {$u == 4} { set den [expr {1 << $prec}] } else { set den [expr {round(pow(10, $prec))}] }
+            set t [expr {round(abs($val) * $den)}]
+            set ft [expr {$t / (12 * $den)}]
+            set rest [expr {$t - $ft * 12 * $den}]
+            if {$u == 4} {
+                set ins [dimdlg_frac [expr {double($rest) / $den}] $prec]
+            } else {
+                set ins [dimdlg_zeros [format "%.${prec}f" [expr {double($rest) / $den}]] [expr {$zin & 12}]]
+            }
+            set z [expr {$zin & 3}]
+            set showft [expr {$ft > 0 || $z == 1 || $z == 2}]
+            set showin [expr {$rest > 0 || !$showft || $z == 1 || $z == 3}]
+            set sign [expr {$val < 0 && $t > 0 ? "-" : ""}]
+            if {!$showft} { return "$sign$ins\"" }
+            if {!$showin} { return "$sign$ft'" }
+            return "$sign$ft'-$ins\""
+        }
+        5 { return [dimdlg_frac $val $prec] }
+        1 {
+            set e [expr {$val == 0 ? 0 : int(floor(log10(abs($val))))}]
+            return [format "%.${prec}f" [expr {$val / pow(10, $e)}]][format "E%s%02d" [expr {$e < 0 ? "-" : "+"}] [expr {abs($e)}]]
+        }
+        default { return [dimdlg_zeros [format "%.${prec}f" $val] $zin] }
+    }
+}
+# the label a combobox shows for value V (zero suppression keeps the bits the other formats use)
+proc dimdlg_label {key kind v} {
+    set ch [dimdlg_choices $kind]
+    foreach {code lbl} $ch { if {[string equal -nocase $code $v]} { return $lbl } }
+    if {$kind eq "zin" && [string is integer -strict $v]} {
+        set u [dimdlg_unit]
+        set m [expr {$u == 3 || $u == 4 ? $v & 3 : $v & 12}]
+        foreach {code lbl} $ch { if {$code == $m} { return $lbl } }
+    }
+    return $v
+}
+# after the unit format changes: the precision and zero lists follow it
+proc dimdlg_relabel {} {
+    foreach key [array names ::dsw] {
+        set kind [dimdlg_kind $key]
+        if {$kind eq "entry" || ![info exists ::dsv($key)]} continue
+        set labels {}
+        foreach {code lbl} [dimdlg_choices $kind] { lappend labels $lbl }
+        $::dsw($key) configure -values $labels
+        set ::dsl($key) [dimdlg_label $key $kind $::dsv($key)]
+    }
+}
+proc dimstyledlg {records current arrows {lunits 2}} {
     set w .dsm
     catch {destroy $w}
     toplevel $w -background $::panel
     wm title $w "Dimension Style Manager"
     wm transient $w [dlg_owner $w]
     set ::dimarrows $arrows
+    set ::ds(lunits) $lunits
+    array unset ::dsw
     array unset ::dsdata
     array unset ::dsv
     array unset ::dsl
@@ -2587,8 +2701,9 @@ proc dimstyledlg {records current arrows} {
                 set ch [dimdlg_choices $kind]
                 set labels {}
                 foreach {code lbl} $ch { lappend labels $lbl }
-                ttk::combobox $p.v$key -textvariable ::dsl($key) -values $labels -state readonly -width 26
+                ttk::combobox $p.v$key -textvariable ::dsl($key) -values $labels -state readonly -width 30
                 bind $p.v$key <<ComboboxSelected>> [list dimdlg_combo $key $kind]
+                set ::dsw($key) $p.v$key
             }
             grid $p.l$key -row $row -column 0 -sticky w -pady 3 -padx {0 10}
             grid $p.v$key -row $row -column 1 -sticky w -pady 3
@@ -2619,7 +2734,17 @@ proc dimdlg_kind {key} {
     return entry
 }
 proc dimdlg_combo {key kind} {
-    foreach {code lbl} [dimdlg_choices $kind] { if {$lbl eq $::dsl($key)} { set ::dsv($key) $code } }
+    foreach {code lbl} [dimdlg_choices $kind] {
+        if {$lbl ne $::dsl($key)} continue
+        if {$kind eq "zin" && [string is integer -strict $::dsv($key)]} {
+            # feet/inches and decimal zeros are separate bits: keep the ones this list doesn't show
+            set u [dimdlg_unit]
+            set mask [expr {$u == 3 || $u == 4 ? 3 : 12}]
+            set code [expr {($::dsv($key) & ~$mask) | $code}]
+        }
+        set ::dsv($key) $code
+    }
+    if {$key eq "DIMLUNIT" || $key eq "DIMAUNIT"} { dimdlg_relabel }
     dimdlg_preview
 }
 proc dimdlg_fill {} {
@@ -2641,14 +2766,8 @@ proc dimdlg_select {name} {
     if {$name eq ""} return
     dimdlg_store
     set ::ds(sel) $name
-    foreach {k v} $::dsdata($name) {
-        set ::dsv($k) $v
-        set kind [dimdlg_kind $k]
-        if {$kind ne "entry"} {
-            set ::dsl($k) $v
-            foreach {code lbl} [dimdlg_choices $kind] { if {[string equal -nocase $code $v]} { set ::dsl($k) $lbl } }
-        }
-    }
+    foreach {k v} $::dsdata($name) { set ::dsv($k) $v }
+    dimdlg_relabel
     set i [lsearch -exact $::ds(order) $name]
     .dsm.f.left.list selection clear 0 end
     .dsm.f.left.list selection set $i
@@ -2707,8 +2826,12 @@ proc dimdlg_preview {} {
     dimdlg_arrow $c $x1 $dimy -1 $ks $code $tsz
     dimdlg_arrow $c $x2 $dimy 1 $ks $code $tsz
     set txt [expr {max(6, round([dimdlg_num DIMTXT 0.18] * $ks / 0.72))}]
-    set dec [expr {int([dimdlg_num DIMDEC 4])}]
-    set val [format "%.${dec}f" [expr {2.4 * [dimdlg_num DIMLFAC 1]}]]
+    set val [expr {2.4 * [dimdlg_num DIMLFAC 1]}]
+    set rnd [dimdlg_num DIMRND 0]
+    if {$rnd > 0} { set val [expr {$rnd * round($val / $rnd)}] }
+    # feet and inches: a sample a few feet long
+    if {[dimdlg_unit] == 3 || [dimdlg_unit] == 4} { set val [expr {$val * 12.6667}] }
+    set val [dimdlg_fmtlen $val [dimdlg_unit] [dimdlg_num DIMDEC 4] [expr {int([dimdlg_num DIMZIN 3])}]]
     set post [expr {[info exists ::dsv(DIMPOST)] ? $::dsv(DIMPOST) : ""}]
     if {[string first "<>" $post] >= 0} { set val [string map [list "<>" $val] $post] } elseif {$post ne ""} { set val $post }
     set gap [expr {[dimdlg_num DIMGAP 0.09] * $ks}]

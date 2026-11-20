@@ -205,11 +205,14 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
 
 (defparameter *dimstyle-dialog-keys*
   '(:dimclrd :dimdli :dimclre :dimexe :dimexo :dimblk :dimasz :dimtsz :dimcen
-    :dimtxt :dimclrt :dimtad :dimgap :dimtih :dimscale :dimdec :dimlfac :dimpost :dimadec))
+    :dimtxt :dimclrt :dimtad :dimgap :dimtih :dimscale :dimlunit :dimdec :dimrnd :dimlfac :dimpost :dimzin
+    :dimaunit :dimadec))
 
 (defun dimvar-display (k v)
   (cond ((eq k :dimblk) (arrow-code v))
         ((integerp v) (princ-to-string v))
+        ;; factors (and the round-off step) are plain numbers, never feet and inches (the scale factor showed as 1")
+        ((member k '(:dimlfac :dimscale :dimrnd)) (fmt-factor v))
         ((realp v) (fmt-num v))
         (t (princ-to-string (or v "")))))
 
@@ -235,7 +238,7 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
                                                append (list (symbol-name k) (tq (dimvar-display k (dv (dimstyle-vars ds) k)))))))
                                (all-dimstyles))))
          (arrows (format nil "{~{{~A ~A}~^ ~}}" (loop for (code label) in *arrowheads* append (list (tq code) (tq label)))))
-         (r (tk-ask (format nil "dimstyledlg ~A ~A ~A" recs (tq (sysvar "DIMSTYLE")) arrows))))
+         (r (tk-ask (format nil "dimstyledlg ~A ~A ~A ~D" recs (tq (sysvar "DIMSTYLE")) arrows (or (sysvar "LUNITS") 2)))))
     (unless (or (string= r "CANCEL") (string= r ""))
       (let* ((parts (split-string r (code-char 30)))
              (current (first parts))

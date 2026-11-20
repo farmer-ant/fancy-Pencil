@@ -355,7 +355,8 @@ its shape back."
         (let ((vars (standard-dimvars)))
           (loop for (code key) in '((3 :dimpost) (40 :dimscale) (41 :dimasz) (42 :dimexo) (43 :dimdli) (44 :dimexe)
                                     (140 :dimtxt) (141 :dimcen) (142 :dimtsz) (144 :dimlfac) (147 :dimgap)
-                                    (73 :dimtih) (77 :dimtad) (271 :dimdec) (176 :dimclrd) (177 :dimclre) (178 :dimclrt))
+                                    (73 :dimtih) (77 :dimtad) (271 :dimdec) (176 :dimclrd) (177 :dimclre) (178 :dimclrt)
+                                    (277 :dimlunit) (45 :dimrnd) (78 :dimzin) (275 :dimaunit) (179 :dimadec))
                 for v = (dxf code g)
                 when v do (setf (getf vars key) (if (floatp v) (d v) v)))
           ;; arrowhead: 342 points at a BLOCK_RECORD (AutoCAD 2000+); R12 names the block in group 5
