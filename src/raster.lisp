@@ -513,12 +513,59 @@ FADE percent toward white. A gray PGM is spread to RGB."
                              (and (eql (logand (or (dxf 280 data) 2) 2) 0) (list (cons :hidden t))))))))
         (append d (and layer (list (cons 8 layer))) (and color (list color)))))))
 
+(defun path-parts (f)
+  "The folder and file names of path F (slashes either way), without the ., .. and drive parts."
+  (remove-if (lambda (p) (or (member p '("" "." "..") :test #'string=)
+                             (and (= (length p) 2) (char= (char p 1) #\:))))
+             (split-string (substitute #\/ #\\ f) #\/)))
+
+(defun join-path (dir parts)
+  (format nil "~A~{~A~^/~}" (namestring (dir-with-slash dir)) parts))
+(defun dir-with-slash (dir)
+  (let ((d (namestring dir))) (if (and (plusp (length d)) (char/= (char d (1- (length d))) #\/)) (concatenate 'string d "/") d)))
+
+(defvar *attached-scan* (make-hash-table :test #'equal)
+  "Folder -> (time . files under it), for finding attached files by name.")
+(defun files-under (dir &key (depth 5) (most 20000))
+  "The files in DIR and its folders, DEPTH deep, at most MOST of them (remembered for a minute)."
+  (let* ((key (namestring (dir-with-slash dir))) (memo (gethash key *attached-scan*)))
+    (if (and memo (< (- (get-universal-time) (car memo)) 60))
+        (cdr memo)
+        (let ((found '()) (n 0))
+          (labels ((walk (d left)
+                     (dolist (f (ignore-errors (directory (merge-pathnames "*.*" d) :resolve-symlinks nil)))
+                       (when (and (pathname-name f) (< n most)) (push (namestring f) found) (incf n)))
+                     (when (plusp left)
+                       (dolist (sub (ignore-errors (directory (merge-pathnames "*/" d) :resolve-symlinks nil)))
+                         (when (< n most) (walk sub (1- left)))))))
+            (walk (pathname key) depth))
+          (setf (gethash key *attached-scan*) (cons (get-universal-time) found))
+          found))))
+
 (defun resolve-attached-path (file base-dir)
-  "FILE as saved (maybe relative, maybe with backslashes): the file if it can be found, else as given."
+  "FILE as saved (maybe relative, maybe a path on another computer, with backslashes): the file if
+it can be found, else as given (with forward slashes). Looked for as saved, then by the end of its
+path from the drawing's folder (..\\..\\Desktop\\stuff\\job\\forms\\a.pdf finds job/forms/a.pdf or
+forms/a.pdf there), then by its name anywhere in the drawing's folder and its folders, the one whose
+folders match the saved path best."
   (let* ((f (substitute #\/ #\\ file))
-         (cands (remove nil (list f (and base-dir (namestring (merge-pathnames f base-dir)))
-                                  (and base-dir (namestring (merge-pathnames (file-namestring f) base-dir)))))))
-    (or (find-if #'probe-file cands) f)))
+         (parts (path-parts f))
+         (name (car (last parts)))
+         (cands (remove nil (append (list f (and base-dir (namestring (merge-pathnames f base-dir))))
+                                    (and base-dir (loop for tail on parts collect (join-path base-dir tail)))))))
+    (or (let ((hit (find-if (lambda (c) (ignore-errors (probe-file c))) cands)))
+          (and hit (namestring (probe-file hit))))
+        (and base-dir name
+             (let ((best nil) (best-score -1))
+               (dolist (c (files-under base-dir))
+                 (when (string-equal (file-namestring c) name)
+                   ;; how many folder names, from the file up, it shares with the saved path
+                   (let ((score (loop for a in (rest (reverse (path-parts c)))
+                                      for b in (rest (reverse parts))
+                                      while (string-equal a b) count t)))
+                     (when (> score best-score) (setf best c best-score score)))))
+               best))
+        f)))
 
 (defun image-defs-from-objects (objects)
   "IMAGEDEF and PDFDEFINITION objects: handle -> (file page)."

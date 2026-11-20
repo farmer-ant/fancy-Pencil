@@ -441,6 +441,12 @@ its shape back."
                                    (apply-draw-order (convert-entity-list ents) (sortents-map objects tables)))
                            paper-blocks))
       (when (equal (dxf 0 data) "3DFACE") (setf data (mesh-from-3dface data)))
+      ;; underlays under their class names (ODA File Converter writes PDFREFERENCE where AutoCAD
+      ;; writes PDFUNDERLAY): the same objects
+      (let ((same (assoc (dxf 0 data) '(("PDFREFERENCE" . "PDFUNDERLAY") ("DWFREFERENCE" . "DWFUNDERLAY")
+                                        ("DGNREFERENCE" . "DGNUNDERLAY"))
+                         :test #'equal)))
+        (when same (setf data (cons (cons 0 (cdr same)) (remove 0 data :key #'car)))))
       ;; pictures and PDF underlays: linked to their files through IMAGEDEF / PDFDEFINITION objects
       (when (member (dxf 0 data) '("IMAGE" "PDFUNDERLAY") :test #'equal)
         (let ((im (funcall 'image-from-dxf data image-defs (or *attached-base-dir* (directory-namestring (pathname path))))))

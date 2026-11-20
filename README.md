@@ -798,7 +798,10 @@ height, fade and whether they show. They show at any angle and in every view, th
 smoothly at the screen's own scale (Fancy Pencil keeps averaged smaller copies of big photos, so
 thin lines in a scan don't vanish when zoomed out). They plot (into the PDF, turned or not), and are saved in DXF 2000 files as AutoCAD keeps them
 (IMAGE, and PDFUNDERLAY for PDF pages). The drawing keeps each file's name, not the picture, so keep
-the files with the drawing.
+the files with the drawing. A .dwg converted by ODA File Converter names PDF pages PDFREFERENCE; they
+open the same way. Files saved with Windows paths (`.\forms\plan.pdf`, or a path from another
+computer) are looked for beside the drawing by the end of their path, then by name in the folders
+under the drawing's folder; a file found nowhere keeps its place and frame until it is put back.
 
 PNG and GIF are read directly. JPEG, TIFF, BMP and WebP need ImageMagick (or GraphicsMagick, vips,
 ffmpeg or Python's PIL), and PDF pages need poppler-utils: on Fedora,
