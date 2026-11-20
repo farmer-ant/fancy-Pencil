@@ -205,14 +205,15 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
 
 (defparameter *dimstyle-dialog-keys*
   '(:dimclrd :dimdli :dimclre :dimexe :dimexo :dimblk :dimasz :dimtsz :dimcen
-    :dimtxt :dimclrt :dimtad :dimgap :dimtih :dimscale :dimlunit :dimdec :dimrnd :dimlfac :dimpost :dimzin
-    :dimaunit :dimadec))
+    :dimtxt :dimclrt :dimtad :dimgap :dimtih :dimscale :dimlunit :dimfrac :dimdec :dimrnd :dimlfac :dimpost :dimzin
+    :dimaunit :dimadec :dimalt :dimaltu :dimaltd :dimaltf :dimaltrnd :dimapost
+    :tolmethod :dimtdec :dimtp :dimtm :dimtfac))
 
 (defun dimvar-display (k v)
   (cond ((eq k :dimblk) (arrow-code v))
         ((integerp v) (princ-to-string v))
         ;; factors (and the round-off step) are plain numbers, never feet and inches (the scale factor showed as 1")
-        ((member k '(:dimlfac :dimscale :dimrnd)) (fmt-factor v))
+        ((member k '(:dimlfac :dimscale :dimrnd :dimtfac :dimaltf :dimaltrnd :dimtp :dimtm)) (fmt-factor v))
         ((realp v) (fmt-num v))
         (t (princ-to-string (or v "")))))
 
@@ -223,6 +224,12 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
           ((stringp std) text)
           ((integerp std) (ignore-errors (round (parse-number-text (string-trim " " text)))))
           (t (let ((n (parse-number-text (string-trim " " text)))) (and n (d n)))))))
+
+(defun tolerance-method (vars)
+  "0 none, 1 symmetrical (plus = minus), 2 deviation, 3 limits."
+  (cond ((eql (dv vars :dimlim) 1) 3)
+        ((eql (dv vars :dimtol) 1) (if (< (abs (- (d (dv vars :dimtp)) (d (dv vars :dimtm)))) 1d-12) 1 2))
+        (t 0)))
 
 (defun dimstyle-dialog ()
   ;; make sure the current style's record holds the live settings
@@ -235,7 +242,10 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
                        (mapcar (lambda (ds)
                                  (format nil "{~A {~{~A~^ ~}}}" (tq (dimstyle-name ds))
                                          (loop for k in *dimstyle-dialog-keys*
-                                               append (list (symbol-name k) (tq (dimvar-display k (dv (dimstyle-vars ds) k)))))))
+                                               append (list (symbol-name k)
+                                                            (tq (if (eq k :tolmethod)
+                                                                    (princ-to-string (tolerance-method (dimstyle-vars ds)))
+                                                                    (dimvar-display k (dv (dimstyle-vars ds) k))))))))
                                (all-dimstyles))))
          (arrows (format nil "{~{{~A ~A}~^ ~}}" (loop for (code label) in *arrowheads* append (list (tq code) (tq label)))))
          (r (tk-ask (format nil "dimstyledlg ~A ~A ~A ~D" recs (tq (sysvar "DIMSTYLE")) arrows (or (sysvar "LUNITS") 2)))))
@@ -252,6 +262,13 @@ stretch so S1->S2 is as long as D1->D2. Points in 3D."
                   for k = (intern (string-upcase ks) :keyword)
                   for val = (and v (dimvar-parse k v))
                   when (and (member k *dimvar-names*) val) do (setf (getf vars k) val))
+            ;; the tolerance method sets DIMTOL and DIMLIM (Symmetrical: minus = plus)
+            (let ((m (loop for (ks v) on (rest f) by #'cddr
+                           when (string-equal ks "TOLMETHOD") return (ignore-errors (parse-integer v)))))
+              (when m
+                (setf (getf vars :dimtol) (if (member m '(1 2)) 1 0)
+                      (getf vars :dimlim) (if (= m 3) 1 0))
+                (when (= m 1) (setf (getf vars :dimtm) (dv vars :dimtp)))))
             (push name kept)
             (setf (drawing-dimstyles *dwg*)
                   (append (remove name (all-dimstyles) :key #'dimstyle-name :test #'string-equal)

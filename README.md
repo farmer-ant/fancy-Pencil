@@ -98,6 +98,15 @@ Fancy Pencil was called LispDraft before 0.3. Aliases you saved with ALIASEDIT u
   round off, scale factor, prefix/suffix, zero suppression (6" or 0'-6", 2'-0" or 2'; .5 or 0.50) and the
   angle format (decimal degrees, degrees minutes seconds, gradians, radians), as AutoCAD's DIMLUNIT,
   DIMDEC, DIMRND, DIMLFAC, DIMPOST, DIMZIN, DIMAUNIT and DIMADEC; they are saved in the drawing.
+  **Fractions** can be stacked over a bar (2'-6 ³⁄₈" with the 3 over the 8), diagonal, or left
+  unstacked (DIMFRAC), at a height of their own (DIMTFAC). **Alternate Units** adds a second value
+  in [ ] (inches and millimetres: multiplier 25.4) with its own format, precision, round off and
+  prefix/suffix (DIMALT, DIMALTU, DIMALTD, DIMALTF, DIMALTRND, DIMAPOST). **Tolerances**: None,
+  Symmetrical (2.40±0.01), Deviation (+0.01 over −0.02), or Limits (2.41 over 2.38), with their own
+  precision (DIMTOL, DIMLIM, DIMTP, DIMTM, DIMTDEC). Stacks are MTEXT's own `\S` codes, so any MTEXT
+  with a stacked fraction now shows it stacked too, on screen and in plots. A dimension style from
+  an AutoCAD drawing gets AutoCAD's values for what it leaves out (AutoCAD saves only settings that
+  differ from them).
   Arrowheads are saved the way AutoCAD stores them (`_ArchTick`, `_Oblique` ... blocks referenced by
   the dimension style), in both DXF formats and so in DWG, and are read back from AutoCAD drawings.
 

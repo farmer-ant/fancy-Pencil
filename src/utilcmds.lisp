@@ -1167,7 +1167,7 @@ a DXF next to it instead and leave the DWG untouched."
                    "PICKBOX" "APERTURE" "PDMODE" "HIGHLIGHT" "BLIPMODE" "PICKFIRST" "MIRRTEXT" "FILEDIA"
                    "EXPERT" "ANGDIR" "LIMCHECK" "GRIDDISPLAY" "SNAPSTYL" "SNAPISOPAIR" "ROLLOVERTIPS" "AUTOSNAPSIZE" "CURSORSIZE" "INSUNITS" "LWDISPLAY" "CELWEIGHT" "GRIPS" "GRIPOBJLIMIT"
                    "GRIPSIZE" "DIMDEC" "DIMTAD" "DIMCLRD" "DIMCLRE" "DIMCLRT" "DIMTIH" "DIMADEC" "PLINEGEN"
-                   "DIMLUNIT" "DIMZIN" "DIMAUNIT")
+                   "DIMLUNIT" "DIMZIN" "DIMAUNIT" "DIMFRAC" "DIMTOL" "DIMLIM" "DIMTDEC" "DIMALT" "DIMALTD" "DIMALTU")
                :test #'string=)
        (unless (integerp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))
        (setf (sysvar n) val))
@@ -1177,6 +1177,7 @@ a DXF next to it instead and leave the DWG untouched."
       ((member n '("TEXTSIZE" "PDSIZE" "FILLETRAD" "OFFSETDIST" "ANGBASE" "DIMSCALE" "DIMTXT" "DIMASZ"
                    "DIMEXO" "DIMEXE" "DIMGAP" "PLINEWID" "CHAMFERA" "CHAMFERB" "CIRCLERAD" "LASTROTATION"
                    "LTSCALE" "CELTSCALE" "HPSCALE" "HPANG" "DIMCEN" "DIMLFAC" "DIMDLI" "DIMTSZ" "PEDITFUZZ" "DIMRND"
+                   "DIMTFAC" "DIMTP" "DIMTM" "DIMALTF" "DIMALTRND"
                    "REVCLOUDARC" "BRKLSIZE")
                :test #'string=)
        (unless (realp val) (aerr "AutoCAD variable setting rejected: ~S ~A" n (lisp-repr val)))

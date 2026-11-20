@@ -14,11 +14,16 @@
 (defun run-underline (r) (fifth r))
 (defun run-height (r) (sixth r))
 (defun run-aci (r) (seventh r))
+(defun run-stack (r)
+  "A stacked fraction or tolerance (\\S): (TOP BOTTOM KIND), KIND :bar (a/b over a line),
+:diagonal (a#b) or :tolerance (a^b, no line); NIL for ordinary text. Its text is the flat a/b."
+  (eighth r))
 
 (defun same-height-p (a b) (<= (abs (- a b)) (* 1d-6 (max (abs a) (abs b) 1d-9))))
 
 (defun run-format= (a b)
-  (and (string-equal (run-font a) (run-font b))
+  (and (null (run-stack a)) (null (run-stack b))
+       (string-equal (run-font a) (run-font b))
        (eq (and (run-bold a) t) (and (run-bold b) t))
        (eq (and (run-italic a) t) (and (run-italic b) t))
        (eq (and (run-underline a) t) (and (run-underline b) t))
@@ -100,11 +105,22 @@
                  (#\L (setf-fmt 3 t) (incf i 2))
                  (#\l (setf-fmt 3 nil) (incf i 2))
                  (#\S
-                  ;; stacked fraction: shown as a/b
-                  (let ((semi (to-semi)))
-                    (emit (substitute-if #\/ (lambda (x) (member x '(#\^ #\#))) (subseq content (+ i 2) semi)))
+                  ;; stacked fraction or tolerance: a run of its own, drawn as two small rows
+                  (let* ((semi (to-semi))
+                         (body (subseq content (+ i 2) semi))
+                         (k (position-if (lambda (x) (member x '(#\/ #\# #\^))) body)))
+                    (flush) (setf buf-fmt nil)
+                    (if k
+                        (let ((top (string-trim " " (subseq body 0 k))) (bottom (string-trim " " (subseq body (1+ k)))))
+                          (push (append (list (mtext-special-chars (format nil "~A/~A" top bottom))) (copy-list fmt)
+                                        (list (list (mtext-special-chars top) (mtext-special-chars bottom)
+                                                    (case (char body k) (#\/ :bar) (#\# :diagonal) (t :tolerance)))))
+                                runs))
+                        (emit body))
                     (setf i (1+ semi))))
-                 ((#\c #\A #\Q #\W #\T #\p #\X)
+                 ;; \X: what follows goes under the dimension line (alternate units): a new line here
+                 (#\X (emit #\Newline) (incf i 2))
+                 ((#\c #\A #\Q #\W #\T #\p)
                   (setf i (1+ (to-semi))))
                  (t (incf i 2)))))
             ((and (char= ch #\^) (< (1+ i) n) (find (char content (1+ i)) "JIM @"))
@@ -132,6 +148,7 @@
          (and (find #\\ c)
               (let ((runs (mtext-data-runs data)))
                 (or (and (some #'run-aci runs) t)
+                    (and (some #'run-stack runs) t)
                     (and (rest runs)
                          (notevery (lambda (r) (run-format= r (first runs))) (rest runs)))))))))
 
@@ -182,8 +199,49 @@ with only the codes that differ elsewhere. Heights are written relative to BASE-
 
 (defun run-size (r) (/ (run-height r) +cap+))
 
+(defparameter *stack-scale* 1d0
+  "Each row of a stack is the run's own height (AutoCAD sets the size with \\H: DIMTFAC).")
+
+(defun stack-rows (r)
+  "How a stack sits: (values TOP-BASELINE BOTTOM-BASELINE LINE-Y TOP-WIDTH BOTTOM-WIDTH), heights
+above the text's baseline, from run R (its rows are run-height high)."
+  (destructuring-bind (top bottom kind) (run-stack r)
+    (let* ((h (* *stack-scale* (run-height r)))
+           (plain (append (list "") (rest (butlast r 1)) (list nil)))
+           (wt (run-width top plain)) (wb (run-width bottom plain)))
+      (case kind
+        (:diagonal (values (* 0.55d0 h) (* -0.25d0 h) nil wt wb))
+        (t (values (* 0.8d0 h) (* -0.5d0 h) (and (eq kind :bar) (* 0.65d0 h)) wt wb))))))
+
+(defun stack-parts (r x y)
+  "A stack placed with its left end at X on baseline Y (Y up): a list of (:text STRING X Y) for
+each row's baseline-left corner and (:line X1 Y1 X2 Y2) for its bar or slash."
+  (destructuring-bind (top bottom kind) (run-stack r)
+    (multiple-value-bind (tb bb ly wt wb) (stack-rows r)
+      (let ((h (run-height r)) (w (max wt wb)))
+        (case kind
+          (:diagonal
+           (list (list :text top x (+ y tb))
+                 (list :line (+ x wt (* 0.05d0 h)) (+ y bb) (+ x wt (* 0.45d0 h)) (+ y tb h))
+                 (list :text bottom (+ x wt (* 0.5d0 h)) (+ y bb))))
+          (:tolerance                     ; rows left-aligned, no line
+           (list (list :text top x (+ y tb)) (list :text bottom x (+ y bb))))
+          (t
+           (let ((ww (+ w (* 0.1d0 h))))
+             (list (list :text top (+ x (/ (- ww wt) 2)) (+ y tb))
+                   (list :line x (+ y ly) (+ x ww) (+ y ly))
+                   (list :text bottom (+ x (/ (- ww wb) 2)) (+ y bb))))))))))
+
+(defun stack-width (r)
+  (multiple-value-bind (tb bb ly wt wb) (stack-rows r)
+    (declare (ignore tb bb ly))
+    (if (eq (third (run-stack r)) :diagonal)
+        (+ wt wb (* 0.5d0 (run-height r)))
+        (+ (max wt wb) (* 0.1d0 (run-height r))))))
+
 (defun run-width (s r)
   "Approximate width of S in run R's format, in drawing units."
+  (when (run-stack r) (return-from run-width (stack-width r)))
   (let ((fam (string-downcase (font-family-for (run-font r)))))
     (* (run-size r)
        (if (or (search "mono" fam) (search "cour" fam)) (* 0.6d0 (length s)) (text-em-width s))
@@ -212,7 +270,9 @@ with only the codes that differ elsewhere. Heights are written relative to BASE-
                (setf cur nil curw 0d0 pend nil)))
       (dolist (r runs)
         (setf last-run r)
-        (let ((s (run-text r)) (i 0))
+        (let ((s (if (run-stack r) "" (run-text r))) (i 0))
+          (when (run-stack r)             ; a stack is one piece: never split
+            (setf word (append word (list (list (run-text r) r)))))
           (loop while (< i (length s)) do
             (let* ((c (char s i))
                    (j (cond ((char= c #\Newline) (1+ i))
@@ -272,9 +332,11 @@ with only the codes that differ elsewhere. Heights are written relative to BASE-
             (fmtn x) (fmtn y) (or (dxf 71 data) 1) (deg (or (dxf 50 data) 0d0))
             (if (and w (plusp w)) (max 1 (round (* w *vscale*))) 0) tags
             (mapcar (lambda (r)
-                      (format nil "~A {~A} ~A" (tcl-elt (run-text r))
+                      (format nil "~A {~A} ~A~@[ {~A}~]" (tcl-elt (run-text r))
                               (run-font-spec r (round (* (run-height r) k)))
-                              (cond (hl "#8fc4ff") ((run-aci r) (aci->hex (run-aci r))) (t color))))
+                              (cond (hl "#8fc4ff") ((run-aci r) (aci->hex (run-aci r))) (t color))
+                              (let ((st (run-stack r)))
+                                (and st (format nil "~A ~A ~(~A~)" (tcl-elt (first st)) (tcl-elt (second st)) (third st))))))
                     runs))))
 
 ;;; ---------- the editor: runs in and out ----------

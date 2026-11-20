@@ -9,7 +9,9 @@
 (defparameter *dimvar-names*
   '(:dimscale :dimasz :dimtxt :dimexo :dimexe :dimgap :dimdec :dimtad :dimtsz :dimclrd :dimclre
     :dimclrt :dimlfac :dimpost :dimcen :dimdli :dimtih :dimadec :dimblk
-    :dimlunit :dimrnd :dimzin :dimaunit))
+    :dimlunit :dimrnd :dimzin :dimaunit
+    :dimfrac :dimtfac :dimtol :dimlim :dimtp :dimtm :dimtdec
+    :dimalt :dimaltf :dimaltd :dimaltu :dimaltrnd :dimapost))
 
 (defstruct dimstyle name (vars nil))
 
@@ -23,7 +25,21 @@
         :dimcen 0.09d0 :dimdli 0.38d0 :dimtih 0 :dimadec 0 :dimblk ""
         ;; unit format 0 = the drawing's own units (LUNITS); 1-6 as AutoCAD's DIMLUNIT.
         ;; zero suppression 3 = 6" and 2'-0" (as Fancy Pencil always wrote them)
-        :dimlunit 0 :dimrnd 0d0 :dimzin 3 :dimaunit 0))
+        :dimlunit 0 :dimrnd 0d0 :dimzin 3 :dimaunit 0
+        ;; fractions: 0 stacked over a bar, 1 diagonal, 2 not stacked (Fancy Pencil's look before);
+        ;; DIMTFAC: height of stacked fractions and tolerances against the text
+        :dimfrac 2 :dimtfac 1d0
+        ;; tolerances: DIMTOL plus DIMTP / minus DIMTM (equal: shown as ±), or DIMLIM limits
+        :dimtol 0 :dimlim 0 :dimtp 0d0 :dimtm 0d0 :dimtdec 4
+        ;; alternate units, in [ ] after the measurement: DIMALTF times it (25.4: inches to mm)
+        :dimalt 0 :dimaltf 25.4d0 :dimaltd 2 :dimaltu 2 :dimaltrnd 0d0 :dimapost ""))
+
+(defun autocad-dimvar-defaults ()
+  "AutoCAD's values for the unit settings a DIMSTYLE record leaves out (AutoCAD writes only the
+ones that differ from these)."
+  (list :dimlunit 2 :dimzin 0 :dimaunit 0 :dimrnd 0d0 :dimfrac 0 :dimtfac 1d0 :dimtol 0 :dimlim 0
+    :dimtp 0d0 :dimtm 0d0 :dimtdec 4 :dimalt 0 :dimaltf 25.4d0 :dimaltd 2 :dimaltu 2 :dimaltrnd 0d0
+    :dimapost "" :dimadec 0 :dimdec 4))
 
 (defun all-dimstyles ()
   (or (drawing-dimstyles *dwg*)
@@ -86,23 +102,80 @@
       (3 (angtos a 3 prec))
       (t (format nil "~A%%d" (suppress-decimal-zeros (fmt-decimal (deg a) prec) (logand (dv vars :dimzin) 12)))))))
 
+(defun tfac-wrap (s vars)
+  "S (MTEXT) at the stacked-text height DIMTFAC."
+  (let ((f (d (or (dv vars :dimtfac) 1))))
+    (if (< (abs (- f 1)) 1d-9) s (format nil "{\\H~Ax;~A}" (num-text f) s))))
+
+(defun stack-fractions (s vars)
+  "Feet-and-inches or fractional text with its fraction stacked (DIMFRAC 0 over a bar, 1 diagonal):
+2'-6 3/8\" -> 2'-6\\S3/8;\" (in MTEXT codes)."
+  (let ((frac (or (dv vars :dimfrac) 2)) (slash (position #\/ s)))
+    (if (or (not (member frac '(0 1))) (null slash)) s
+        (let* ((a (or (position-if-not #'digit-char-p s :end slash :from-end t) -1))
+               (b (or (position-if-not #'digit-char-p s :start (1+ slash)) (length s)))
+               (num (subseq s (1+ a) slash)) (den (subseq s (1+ slash) b))
+               ;; "6 3/8": the space goes, the stack sits against the 6
+               (pre (subseq s 0 (if (and (>= a 1) (char= (char s a) #\Space) (digit-char-p (char s (1- a)))) a (1+ a)))))
+          (if (or (string= num "") (string= den "")) s
+              (concatenate 'string pre
+                           (tfac-wrap (format nil "\\S~A~A~A;" num (if (= frac 1) "#" "/") den) vars)
+                           (subseq s b)))))))
+
+(defun dim-value-string (x vars kind &key prec stack)
+  "A length or angle X as this style writes it (no prefix, suffix or tolerance)."
+  (if (eq kind :angular)
+      (dim-angle-string x (if prec (list* :dimadec prec vars) vars))
+      (let ((s (dim-length-string x (dim-unit-format vars) (or prec (dv vars :dimdec)) (or (dv vars :dimzin) 3))))
+        (if (and stack (member (dim-unit-format vars) '(4 5))) (stack-fractions s vars) s))))
+
+(defun signed (s x) (if (plusp x) (concatenate 'string "+" s) (if (minusp x) (concatenate 'string "-" s) s)))
+
 (defun dim-text-string (meas vars override &key (kind :linear))
-  (let* ((val (* meas (d (dv vars :dimlfac))))
+  (let* ((val (* meas (if (eq kind :angular) 1d0 (d (dv vars :dimlfac)))))
          (rnd (d (or (dv vars :dimrnd) 0)))
          ;; round off (not angles, as in AutoCAD)
          (val (if (and (not (eq kind :angular)) (plusp rnd)) (* rnd (fround val rnd)) val))
-         (num (if (eq kind :angular)
-                  (dim-angle-string meas vars)
-                  (dim-length-string val (dim-unit-format vars) (dv vars :dimdec) (or (dv vars :dimzin) 3))))
+         (tp (d (or (dv vars :dimtp) 0))) (tm (d (or (dv vars :dimtm) 0)))
+         (tdec (dv vars :dimtdec))
+         (num (cond
+                ;; limits: the largest and smallest sizes, one over the other
+                ((eql (dv vars :dimlim) 1)
+                 (tfac-wrap (format nil "\\S~A^~A;" (dim-value-string (+ val tp) vars kind)
+                                    (dim-value-string (- val tm) vars kind)) vars))
+                ((eql (dv vars :dimtol) 1)
+                 (let ((m (dim-value-string val vars kind :stack t)))
+                   (if (< (abs (- tp tm)) 1d-12)
+                       ;; the same both ways: ±
+                       (format nil "~A%%p~A" m (dim-value-string (abs tp) vars kind :prec tdec))
+                       (format nil "~A~A" m
+                               (tfac-wrap (format nil "\\S~A^~A;"
+                                                  (signed (dim-value-string (abs tp) vars kind :prec tdec) tp)
+                                                  (signed (dim-value-string (abs tm) vars kind :prec tdec) (- tm)))
+                                          vars)))))
+                (t (dim-value-string val vars kind :stack t))))
          (num (case kind (:radius (concatenate 'string "R" num)) (:diameter (concatenate 'string "%%c" num)) (t num)))
-         (post (dv vars :dimpost))
-         (num (cond ((or (null post) (string= post "")) num)
-                    ((search "<>" post) (let ((p (search "<>" post))) (concatenate 'string (subseq post 0 p) num (subseq post (+ p 2)))))
-                    (t (concatenate 'string num post)))))
+         (num (apply-post num (dv vars :dimpost)))
+         ;; alternate units: [25.40] after it
+         (num (if (and (eql (dv vars :dimalt) 1) (not (eq kind :angular)))
+                  (let* ((a (* val (d (or (dv vars :dimaltf) 25.4d0))))
+                         (ar (d (or (dv vars :dimaltrnd) 0)))
+                         (a (if (plusp ar) (* ar (fround a ar)) a))
+                         (u (let ((u (dv vars :dimaltu))) (if (and (integerp u) (<= 1 u 6)) u 2)))
+                         (as (dim-length-string a u (dv vars :dimaltd) (logand (or (dv vars :dimzin) 0) 12)))
+                         (as (case kind (:radius (concatenate 'string "R" as)) (:diameter (concatenate 'string "%%c" as)) (t as))))
+                    (format nil "~A [~A]" num (apply-post as (dv vars :dimapost))))
+                  num)))
     (cond ((or (null override) (string= override "")) num)
           ((search "<>" override)
            (let ((p (search "<>" override))) (concatenate 'string (subseq override 0 p) num (subseq override (+ p 2)))))
           (t override))))
+
+(defun apply-post (num post)
+  "DIMPOST / DIMAPOST: <> stands for the measurement; otherwise a suffix."
+  (cond ((or (null post) (string= post "")) num)
+        ((search "<>" post) (let ((p (search "<>" post))) (concatenate 'string (subseq post 0 p) num (subseq post (+ p 2)))))
+        (t (concatenate 'string num post))))
 
 (defparameter *arrowheads*
   '(("" "Closed filled") ("CLOSEDBLANK" "Closed blank") ("OPEN" "Open") ("OPEN90" "Right angle")

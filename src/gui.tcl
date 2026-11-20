@@ -1678,17 +1678,22 @@ proc mtrich {x y attach ang wpx tags runs} {
         }
     }
     foreach r $runs {
-        lassign $r txt f col
+        lassign $r txt f col stk
         set lastf $f
+        if {$stk ne ""} {
+            # a stacked fraction or tolerance: one piece, never split
+            lappend word [list $txt $f $col [mtstack_width $f $stk] $stk]
+            continue
+        }
         foreach piece [regexp -all -inline {\n|[ ]+|[^ \n]+} $txt] {
             if {$piece eq "\n"} {
                 eval $flush_word
                 lappend lines [list $cur $curw $f]; set cur {}; set curw 0; set pend {}
             } elseif {[string index $piece 0] eq " "} {
                 eval $flush_word
-                lappend pend [list $piece $f $col [font measure $f $piece]]
+                lappend pend [list $piece $f $col [font measure $f $piece] {}]
             } else {
-                lappend word [list $piece $f $col [font measure $f $piece]]
+                lappend word [list $piece $f $col [font measure $f $piece] {}]
             }
         }
     }
@@ -1720,15 +1725,64 @@ proc mtrich {x y attach ang wpx tags runs} {
         set base [expr {$ly + $asc}]
         set dx [expr {$col == 0 ? 0 : ($col == 1 ? ($boxw - $lw) / 2.0 : $boxw - $lw)}]
         foreach it $items {
-            lassign $it s f c w px
-            if {[string trim $s] eq "" && ![string match *underline* $f]} continue
+            lassign $it s f c w stk px
             set lx [expr {$left + $dx + $px}]
+            if {$stk ne ""} { mtstack_draw $x $y $lx $base $ca $sa $ang $f $c $tags $stk; continue }
+            if {[string trim $s] eq "" && ![string match *underline* $f]} continue
             set ly2 [expr {$base + [font metrics $f -descent]}]
             set X [expr {$x + $lx * $ca + $ly2 * $sa}]
             set Y [expr {$y - $lx * $sa + $ly2 * $ca}]
             .c create text $X $Y -text $s -anchor sw -angle $ang -font $f -fill $c -tags $tags
         }
         set ly [expr {$ly + $asc + $desc}]
+    }
+}
+# stacked fractions and tolerances (MTEXT \S): rows as high as the run's capitals, as stack-parts
+# in richtext.lisp. stk = {top bottom kind}, kind bar, diagonal or tolerance.
+proc mtstack_h {f} { return [expr {abs([lindex $f 1]) * 0.72}] }
+proc mtstack_width {f stk} {
+    lassign $stk top bottom kind
+    set h [mtstack_h $f]
+    set wt [font measure $f $top]; set wb [font measure $f $bottom]
+    if {$kind eq "diagonal"} { return [expr {$wt + $wb + 0.5 * $h}] }
+    return [expr {max($wt, $wb) + 0.1 * $h}]
+}
+proc mtstack_draw {x y lx base ca sa ang f c tags stk {cv .c}} {
+    lassign $stk top bottom kind
+    set h [mtstack_h $f]
+    set wt [font measure $f $top]; set wb [font measure $f $bottom]
+    set W [mtstack_width $f $stk]
+    set d [font metrics $f -descent]
+    # parts in the text's own frame: x along the line, y down from the baseline
+    if {$kind eq "diagonal"} {
+        set parts [list t $top 0 [expr {-0.55 * $h}] \
+                        l [expr {$wt + 0.05 * $h}] [expr {0.25 * $h}] [expr {$wt + 0.45 * $h}] [expr {-1.55 * $h}] \
+                        t $bottom [expr {$wt + 0.5 * $h}] [expr {0.25 * $h}]]
+    } elseif {$kind eq "tolerance"} {
+        set parts [list t $top 0 [expr {-0.8 * $h}] t $bottom 0 [expr {0.5 * $h}]]
+    } else {
+        set parts [list t $top [expr {($W - $wt) / 2.0}] [expr {-0.8 * $h}] \
+                        l 0 [expr {-0.65 * $h}] $W [expr {-0.65 * $h}] \
+                        t $bottom [expr {($W - $wb) / 2.0}] [expr {0.5 * $h}]]
+    }
+    set i 0
+    while {$i < [llength $parts]} {
+        if {[lindex $parts $i] eq "t"} {
+            lassign [lrange $parts $i+1 $i+3] str px py
+            set px [expr {$lx + $px}]; set py [expr {$base + $py + $d}]
+            $cv create text [expr {$x + $px * $ca + $py * $sa}] [expr {$y - $px * $sa + $py * $ca}] \
+                -text $str -anchor sw -angle $ang -font $f -fill $c -tags $tags
+            incr i 4
+        } else {
+            lassign [lrange $parts $i+1 $i+4] ax ay bx by
+            set coords {}
+            foreach {px py} [list $ax $ay $bx $by] {
+                set px [expr {$lx + $px}]; set py [expr {$base + $py}]
+                lappend coords [expr {$x + $px * $ca + $py * $sa}] [expr {$y - $px * $sa + $py * $ca}]
+            }
+            $cv create line {*}$coords -fill $c -tags $tags
+            incr i 5
+        }
     }
 }
 proc mtedit {mode x y width fpx color init {justify left} {minh 0} {opts {}}} {
@@ -2523,12 +2577,28 @@ set ::dimfields {
     "Primary Units" {
         DIMLUNIT "Unit format" {0 "Same as drawing units" 1 Scientific 2 Decimal 3 Engineering 4 Architectural 5 Fractional 6 "Windows Desktop"}
         DIMDEC  "Precision" precision
+        DIMFRAC "Fraction format" {0 "Horizontal (stacked over a bar)" 1 "Diagonal" 2 "Not stacked"}
         DIMRND  "Round off to (0 = none)" entry
         DIMLFAC "Measurement scale factor" entry
         DIMPOST "Prefix / suffix (<> is the measurement)" entry
         DIMZIN  "Zero suppression" zin
         DIMAUNIT "Angle format" {0 "Decimal degrees" 1 "Degrees Minutes Seconds" 2 Gradians 3 Radians}
         DIMADEC "Angular precision" aprec
+    }
+    "Alternate Units" {
+        DIMALT  "Display alternate units" {0 No 1 Yes}
+        DIMALTU "Unit format" {1 Scientific 2 Decimal 3 Engineering 4 Architectural 5 Fractional 6 "Windows Desktop"}
+        DIMALTD "Precision" altprecision
+        DIMALTF "Multiplier for alternate units" entry
+        DIMALTRND "Round off to (0 = none)" entry
+        DIMAPOST "Prefix / suffix (<> is the value)" entry
+    }
+    "Tolerances" {
+        TOLMETHOD "Method" {0 None 1 Symmetrical 2 Deviation 3 Limits}
+        DIMTDEC "Precision" precision
+        DIMTP   "Upper value (plus)" entry
+        DIMTM   "Lower value (minus)" entry
+        DIMTFAC "Height scale (fractions and tolerances)" entry
     }
 }
 proc dimdlg_choices {kind} {
@@ -2540,7 +2610,8 @@ proc dimdlg_choices {kind} {
     # lists that follow the unit format chosen (precision in fractions for Architectural ...)
     set u [dimdlg_unit]
     switch -- $kind {
-        precision {
+        altprecision - precision {
+            if {$kind eq "altprecision"} { set u [expr {int([dimdlg_num DIMALTU 2])}] }
             set out {}
             for {set i 0} {$i <= 8} {incr i} {
                 if {$i == 0} { set d 0 } else { set d "0.[string repeat 0 $i]" }
@@ -2744,7 +2815,7 @@ proc dimdlg_combo {key kind} {
         }
         set ::dsv($key) $code
     }
-    if {$key eq "DIMLUNIT" || $key eq "DIMAUNIT"} { dimdlg_relabel }
+    if {$key in {DIMLUNIT DIMAUNIT DIMALTU}} { dimdlg_relabel }
     dimdlg_preview
 }
 proc dimdlg_fill {} {
@@ -2807,7 +2878,8 @@ proc dimdlg_preview {} {
     set c .dsm.f.right.pv
     if {![winfo exists $c]} return
     $c delete all
-    set sc [dimdlg_num DIMSCALE 1]
+    # on paper: the overall scale (DIMSCALE) only enlarges everything in the drawing
+    set sc 1
     # the sample: a 1.2-unit wide object, drawn so the arrow size looks as it would on paper
     set k 100.0
     set x1 90; set x2 [expr {$x1 + 2.4 * $k}]; set ybase 138
@@ -2826,23 +2898,95 @@ proc dimdlg_preview {} {
     dimdlg_arrow $c $x1 $dimy -1 $ks $code $tsz
     dimdlg_arrow $c $x2 $dimy 1 $ks $code $tsz
     set txt [expr {max(6, round([dimdlg_num DIMTXT 0.18] * $ks / 0.72))}]
-    set val [expr {2.4 * [dimdlg_num DIMLFAC 1]}]
+    set u [dimdlg_unit]
+    # the sample: 2.4 units, or a few feet for feet and inches
+    set val [expr {2.4 * [dimdlg_num DIMLFAC 1] * ($u == 3 || $u == 4 ? 12.6667 : 1)}]
     set rnd [dimdlg_num DIMRND 0]
     if {$rnd > 0} { set val [expr {$rnd * round($val / $rnd)}] }
-    # feet and inches: a sample a few feet long
-    if {[dimdlg_unit] == 3 || [dimdlg_unit] == 4} { set val [expr {$val * 12.6667}] }
-    set val [dimdlg_fmtlen $val [dimdlg_unit] [dimdlg_num DIMDEC 4] [expr {int([dimdlg_num DIMZIN 3])}]]
-    set post [expr {[info exists ::dsv(DIMPOST)] ? $::dsv(DIMPOST) : ""}]
-    if {[string first "<>" $post] >= 0} { set val [string map [list "<>" $val] $post] } elseif {$post ne ""} { set val $post }
+    set segs [dimdlg_text $val]
     set gap [expr {[dimdlg_num DIMGAP 0.09] * $ks}]
     set above [expr {[dimdlg_num DIMTAD 1] != 0}]
-    set ty [expr {$above ? $dimy - $gap : $dimy}]
-    set anchor [expr {$above ? "s" : "center"}]
-    if {!$above} {
-        set tw [expr {[font measure [list Helvetica -$txt] $val] / 2 + $gap}]
-        $c create rectangle [expr {($x1+$x2)/2 - $tw}] [expr {$dimy - 3}] [expr {($x1+$x2)/2 + $tw}] [expr {$dimy + 3}] -fill "#171c23" -outline ""
+    set f [list Helvetica -$txt]
+    set sf [list Helvetica -[expr {max(5, round($txt * [dimdlg_num DIMTFAC 1]))}]]
+    set W 0
+    foreach sg $segs {
+        set W [expr {$W + ([llength $sg] == 1 ? [font measure $f [lindex $sg 0]] : [mtstack_width $sf $sg])}]
     }
-    $c create text [expr {($x1 + $x2) / 2}] $ty -text $val -anchor $anchor -font [list Helvetica -$txt] -fill white
+    set cx [expr {($x1 + $x2) / 2.0}]
+    set desc [font metrics $f -descent]
+    if {$above} {
+        set base [expr {$dimy - $gap - $desc}]
+    } else {
+        set base [expr {$dimy + ([font metrics $f -ascent] - $desc) / 2.0 - 1}]
+        set tw [expr {$W / 2 + $gap}]
+        $c create rectangle [expr {$cx - $tw}] [expr {$dimy - 3}] [expr {$cx + $tw}] [expr {$dimy + 3}] -fill "#171c23" -outline ""
+    }
+    set lx [expr {$cx - $W / 2.0}]
+    foreach sg $segs {
+        if {[llength $sg] == 1} {
+            $c create text $lx [expr {$base + $desc}] -text [lindex $sg 0] -anchor sw -font $f -fill white
+            set lx [expr {$lx + [font measure $f [lindex $sg 0]]}]
+        } else {
+            mtstack_draw 0 0 $lx $base 1 0 0 $sf white {} $sg $c
+            set lx [expr {$lx + [mtstack_width $sf $sg]}]
+        }
+    }
+}
+# the preview's text as segments: {text} or {top bottom kind} for a stack (as dim-text-string)
+proc dimdlg_text {val} {
+    set u [dimdlg_unit]
+    set zin [expr {int([dimdlg_num DIMZIN 3])}]
+    set dec [dimdlg_num DIMDEC 4]; set tdec [dimdlg_num DIMTDEC 4]
+    set tp [dimdlg_num DIMTP 0]; set tm [dimdlg_num DIMTM 0]
+    set m [expr {[info exists ::dsv(TOLMETHOD)] ? $::dsv(TOLMETHOD) : 0}]
+    if {$m == 1} { set tm $tp }
+    switch -- $m {
+        3 { set segs [list [list [dimdlg_fmtlen [expr {$val + $tp}] $u $dec $zin] [dimdlg_fmtlen [expr {$val - $tm}] $u $dec $zin] tolerance]] }
+        1 { set segs [concat [dimdlg_stacked $val $u $dec $zin] [list [list "\u00b1[dimdlg_fmtlen [expr {abs($tp)}] $u $tdec $zin]"]]] }
+        2 {
+            set segs [dimdlg_stacked $val $u $dec $zin]
+            lappend segs [list [dimdlg_sign [dimdlg_fmtlen [expr {abs($tp)}] $u $tdec $zin] $tp] \
+                               [dimdlg_sign [dimdlg_fmtlen [expr {abs($tm)}] $u $tdec $zin] [expr {-$tm}]] tolerance]
+        }
+        default { set segs [dimdlg_stacked $val $u $dec $zin] }
+    }
+    set segs [dimdlg_post $segs DIMPOST]
+    if {[dimdlg_num DIMALT 0] == 1} {
+        set au [expr {int([dimdlg_num DIMALTU 2])}]
+        set a [expr {$val * [dimdlg_num DIMALTF 25.4]}]
+        set ar [dimdlg_num DIMALTRND 0]
+        if {$ar > 0} { set a [expr {$ar * round($a / $ar)}] }
+        set as [dimdlg_post [list [list [dimdlg_fmtlen $a $au [dimdlg_num DIMALTD 2] [expr {$zin & 12}]]]] DIMAPOST]
+        set segs [concat $segs [list [list " \["]] $as [list [list "\]"]]]
+    }
+    return $segs
+}
+proc dimdlg_sign {s x} { if {$x > 0} { return "+$s" } elseif {$x < 0} { return "-$s" }; return $s }
+# a value, its fraction stacked as DIMFRAC says (2'-6 3/8" -> 2'-6 + stack 3 8 + ")
+proc dimdlg_stacked {val u dec zin} {
+    set s [dimdlg_fmtlen $val $u $dec $zin]
+    set fr [expr {int([dimdlg_num DIMFRAC 2])}]
+    if {($u != 4 && $u != 5) || $fr > 1 || ![regexp -indices {(\d+)/(\d+)} $s all ni di]} { return [list [list $s]] }
+    set pre [string range $s 0 [lindex $all 0]-1]; set post [string range $s [lindex $all 1]+1 end]
+    set n [string range $s {*}$ni]; set d [string range $s {*}$di]
+    if {[regexp {\d $} $pre]} { set pre [string range $pre 0 end-1] }
+    set out {}
+    if {$pre ne ""} { lappend out [list $pre] }
+    lappend out [list $n $d [expr {$fr == 1 ? "diagonal" : "bar"}]]
+    if {$post ne ""} { lappend out [list $post] }
+    return $out
+}
+# DIMPOST / DIMAPOST around segments: <> is the measurement, otherwise a suffix
+proc dimdlg_post {segs key} {
+    set post [expr {[info exists ::dsv($key)] ? $::dsv($key) : ""}]
+    if {$post eq ""} { return $segs }
+    set i [string first "<>" $post]
+    if {$i < 0} { return [concat $segs [list [list $post]]] }
+    set out {}
+    if {$i > 0} { lappend out [list [string range $post 0 $i-1]] }
+    set out [concat $out $segs]
+    if {$i + 2 < [string length $post]} { lappend out [list [string range $post $i+2 end]] }
+    return $out
 }
 proc dimdlg_setcurrent {} {
     set ::ds(current) $::ds(sel)

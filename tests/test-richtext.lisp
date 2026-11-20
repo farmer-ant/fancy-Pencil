@@ -28,7 +28,8 @@
 (chk "SHX fonts use \\F" (mtext-encode-runs (list (list "x" "Arial" nil nil nil 1d0 nil) (list "y" "romans.shx" nil nil nil 1d0 nil)) :font "Arial") "x{\\Fromans.shx;y}")
 (chk "\\F without an extension is a .shx" (run-font (first (mtext-runs "\\Fromans;x" :height 1))) "romans.shx")
 (chk "absolute \\H" (run-height (second (mtext-runs "a{\\H0.75;b}" :height 0.25d0))) 0.75d0)
-(chk "%%d and stacks" (texts (mtext-runs "45%%d \\S1/2;" :height 1)) (list "45° 1/2"))
+(chk "%%d and stacks: the stack is a run of its own (0.5.25)" (texts (mtext-runs "45%%d \\S1/2;" :height 1)) (list "45° " "1/2"))
+(chk "  ...stacked 1 over 2" (run-stack (second (mtext-runs "45%%d \\S1/2;" :height 1))) '("1" "2" :bar))
 (chk "base height: what most characters have" (runs-base-height (list (list "abcdef" "A" nil nil nil 2d0 nil) (list "xy" "A" nil nil nil 5d0 nil))) 2d0)
 (chk "plain text: no codes at all" (mtext-encode-runs (list (list "hello" "Arial" nil nil nil 1d0 nil)) :font "Arial") "hello")
 

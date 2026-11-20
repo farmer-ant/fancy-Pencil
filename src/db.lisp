@@ -87,7 +87,9 @@
               "DIMSTYLE" "Standard" "DIMSCALE" 1d0 "DIMASZ" 0.18d0 "DIMTXT" 0.18d0 "DIMEXO" 0.0625d0
               "DIMEXE" 0.18d0 "DIMGAP" 0.09d0 "DIMDEC" 4 "DIMTAD" 1 "DIMTSZ" 0d0 "DIMCLRD" 0 "DIMCLRE" 0
               "DIMCLRT" 0 "DIMLFAC" 1d0 "DIMPOST" "" "DIMCEN" 0.09d0 "DIMDLI" 0.38d0 "DIMTIH" 0 "DIMADEC" 0
-              "DIMBLK" "" "DIMLUNIT" 0 "DIMRND" 0d0 "DIMZIN" 3 "DIMAUNIT" 0 "LOGFILEMODE" 0 "LOGFILEPATH" "" "DYNPICOORDS" 0 "DYNMODE" 3 "DYNPROMPT" 1 "SAVETIME" 10 "AUTOSNAP" 63 "POLARANG" 90d0 "POLARADDANG" "" "POLARMODE" 0 "ORBITAUTOTARGET" 1 "SURFTAB1" 6 "SURFTAB2" 6
+              "DIMBLK" "" "DIMLUNIT" 0 "DIMRND" 0d0 "DIMZIN" 3 "DIMAUNIT" 0
+              "DIMFRAC" 2 "DIMTFAC" 1d0 "DIMTOL" 0 "DIMLIM" 0 "DIMTP" 0d0 "DIMTM" 0d0 "DIMTDEC" 4
+              "DIMALT" 0 "DIMALTF" 25.4d0 "DIMALTD" 2 "DIMALTU" 2 "DIMALTRND" 0d0 "DIMAPOST" "" "LOGFILEMODE" 0 "LOGFILEPATH" "" "DYNPICOORDS" 0 "DYNMODE" 3 "DYNPROMPT" 1 "SAVETIME" 10 "AUTOSNAP" 63 "POLARANG" 90d0 "POLARADDANG" "" "POLARMODE" 0 "ORBITAUTOTARGET" 1 "SURFTAB1" 6 "SURFTAB2" 6
               "CMLJUST" 0 "CMLSCALE" 1d0 "CMLSTYLE" "STANDARD" "TRACEWID" 0.05d0 "WIPEOUTFRAME" 1 "DIMARCSYM" 0)
         by #'cddr do (setf (gethash k *sysvars*) v)))
 (reset-sysvars)
@@ -305,6 +307,19 @@ and is only redrawn by Fancy Pencil once it is edited.")
                  (case nx
                    (#\P (write-char #\Newline out) (incf i 2))
                    ((#\\ #\{ #\}) (write-char (char s (1+ i)) out) (incf i 2))
+                   ;; a stacked fraction or tolerance: a/b
+                   (#\S (let ((semi (or (position #\; s :start i) n)))
+                          ;; 2'-6\S3/8; reads 2'-6 3/8
+                          (let ((k (1- i)))       ; back over { } and codes like \H0.75x;
+                            (loop while (>= k 0)
+                                  do (cond ((member (char s k) '(#\{ #\})) (decf k))
+                                           ((and (char= (char s k) #\;) (position #\\ s :end k :from-end t))
+                                            (setf k (1- (position #\\ s :end k :from-end t))))
+                                           (t (return))))
+                            (when (and (>= k 0) (digit-char-p (char s k))) (write-char #\Space out)))
+                          (write-string (substitute-if #\/ (lambda (x) (member x '(#\^ #\#))) (subseq s (+ i 2) semi)) out)
+                          (setf i (min n (1+ semi)))))
+                   (#\X (write-char #\Newline out) (incf i 2))
                    (t (let ((semi (position #\; s :start i)))
                         (if (and semi (member nx '(#\F #\H #\C #\W #\Q #\T #\A)))
                             (setf i (1+ semi))

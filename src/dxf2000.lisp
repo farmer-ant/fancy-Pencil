@@ -204,7 +204,11 @@
           (cons 177 (v :dimclre 0)) (cons 178 (v :dimclrt 0))
           ;; units: "same as the drawing" (0) is written as the drawing's units, which AutoCAD knows
           (cons 277 (let ((u (v :dimlunit 0))) (if (and (integerp u) (<= 1 u 6)) u (or (sysvar "LUNITS") 2))))
-          (cons 45 (d (v :dimrnd 0))) (cons 78 (v :dimzin 3)) (cons 275 (v :dimaunit 0)) (cons 179 (v :dimadec 0)))))
+          (cons 45 (d (v :dimrnd 0))) (cons 78 (v :dimzin 3)) (cons 275 (v :dimaunit 0)) (cons 179 (v :dimadec 0))
+          (cons 276 (v :dimfrac 2)) (cons 146 (d (v :dimtfac 1))) (cons 71 (v :dimtol 0)) (cons 72 (v :dimlim 0))
+          (cons 47 (d (v :dimtp 0))) (cons 48 (d (v :dimtm 0))) (cons 272 (v :dimtdec 4))
+          (cons 170 (v :dimalt 0)) (cons 143 (d (v :dimaltf 25.4))) (cons 171 (v :dimaltd 2))
+          (cons 273 (v :dimaltu 2)) (cons 148 (d (v :dimaltrnd 0))) (cons 4 (v :dimapost "")))))
 
 (defvar *image-defs-2000*)
 (defvar *underlay-defs-2000* nil "While writing: (kind file sheet handle) per underlay file and sheet.")

@@ -82,7 +82,15 @@
   (with-open-file (o f :direction :output :if-exists :supersede)
     (format o "0~%SECTION~%2~%HEADER~%9~%$LUNITS~%70~%4~%0~%ENDSEC~%0~%SECTION~%2~%TABLES~%0~%TABLE~%2~%DIMSTYLE~%0~%DIMSTYLE~%2~%OLD~%271~%4~%0~%ENDTAB~%0~%ENDSEC~%0~%EOF~%"))
   (new-drawing) (dxf-import f :replace t)
-  (chk "no DIMLUNIT: the drawing's units" (dim-text-string 30.4d0 (dimstyle-vars (find-dimstyle "OLD")) nil) "2'-6 3/8\""))
+  ;; AutoCAD writes only settings that differ from its defaults: no 277 means Decimal (0.5.25)
+  (chk "from AutoCAD, no DIMLUNIT: decimal, as AutoCAD shows it" (dim-text-string 30.4d0 (dimstyle-vars (find-dimstyle "OLD")) nil) "30.4000"))
+;; a style saved by Fancy Pencil before 0.5.24 (it writes every setting, colors 176-178 too) keeps
+;; following the drawing's units
+(let ((f "/tmp/fp-dimunits3.dxf"))
+  (with-open-file (o f :direction :output :if-exists :supersede)
+    (format o "0~%SECTION~%2~%HEADER~%9~%$LUNITS~%70~%4~%0~%ENDSEC~%0~%SECTION~%2~%TABLES~%0~%TABLE~%2~%DIMSTYLE~%0~%DIMSTYLE~%2~%FPOLD~%271~%4~%176~%0~%177~%0~%178~%0~%0~%ENDTAB~%0~%ENDSEC~%0~%EOF~%"))
+  (new-drawing) (dxf-import f :replace t)
+  (chk "older Fancy Pencil file: the drawing's units" (dim-text-string 30.4d0 (dimstyle-vars (find-dimstyle "FPOLD")) nil) "2'-6 3/8\""))
 
 (format t "~%Dimension units tests: ~D passed, ~D failed.~%" *pass* *fail*)
 (sb-ext:exit :code (if (zerop *fail*) 0 1))

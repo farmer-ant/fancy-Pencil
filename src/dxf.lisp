@@ -352,11 +352,20 @@ its shape back."
     ;; dimension styles
     (dolist (g tables)
       (when (and (equal (cdr (first g)) "DIMSTYLE") (dxf 2 g))
-        (let ((vars (standard-dimvars)))
+        (let ((vars (if (and (dxf 176 g) (dxf 177 g) (dxf 178 g))
+                        ;; written by Fancy Pencil, which writes every setting it has
+                        (standard-dimvars)
+                        ;; AutoCAD (and ODA) write only what differs from AutoCAD's defaults
+                        (let ((v (copy-list (standard-dimvars))))
+                          (loop for (k x) on (autocad-dimvar-defaults) by #'cddr do (setf (getf v k) x))
+                          v))))
           (loop for (code key) in '((3 :dimpost) (40 :dimscale) (41 :dimasz) (42 :dimexo) (43 :dimdli) (44 :dimexe)
                                     (140 :dimtxt) (141 :dimcen) (142 :dimtsz) (144 :dimlfac) (147 :dimgap)
                                     (73 :dimtih) (77 :dimtad) (271 :dimdec) (176 :dimclrd) (177 :dimclre) (178 :dimclrt)
-                                    (277 :dimlunit) (45 :dimrnd) (78 :dimzin) (275 :dimaunit) (179 :dimadec))
+                                    (277 :dimlunit) (45 :dimrnd) (78 :dimzin) (275 :dimaunit) (179 :dimadec)
+                                    (276 :dimfrac) (146 :dimtfac) (71 :dimtol) (72 :dimlim) (47 :dimtp) (48 :dimtm)
+                                    (272 :dimtdec) (170 :dimalt) (143 :dimaltf) (171 :dimaltd) (273 :dimaltu)
+                                    (148 :dimaltrnd) (4 :dimapost))
                 for v = (dxf code g)
                 when v do (setf (getf vars key) (if (floatp v) (d v) v)))
           ;; arrowhead: 342 points at a BLOCK_RECORD (AutoCAD 2000+); R12 names the block in group 5
