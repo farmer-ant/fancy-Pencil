@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.5.26"
+VERSION = "0.5.27"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -78,7 +78,9 @@ ch(
       "converter by itself once it is installed."),
 ("h2", "Updating and removing"),
 ("ul", [
- "**Update**: double-click a newer Install Fancy Pencil.deb and click **Install** (or **Update**). Your settings, toolbars and drawings are kept.",
+ "**Check for Updates** (File menu, or type `UPDATE`): Fancy Pencil looks on GitHub for a newer version. A copy in a folder of your own (like `~/Fancy Pencil/fancypencil`) downloads it, saves the old version in `~/.cache/fancypencil/backups`, and puts the new one in place; close Fancy Pencil and start it again to use it. The installed edition (from Install Fancy Pencil.deb) downloads the newer installer instead and opens it.",
+ "**Update from File** (File menu, or `UPDATEFILE`): the same, from a `fancypencil-0.5.N.tar.gz` or an Install Fancy Pencil.deb you already have - no internet needed.",
+ "**Update by hand**: double-click a newer Install Fancy Pencil.deb and click **Install** (or **Update**). Your settings, toolbars and drawings are kept.",
  "**Remove**: in App Center, **Manage**, find fancypencil and remove it; or type `sudo apt remove fancypencil`.",
  "**Your settings** live in the hidden folder `~/.config/fancypencil`: preferences, recent files, aliases, toolbars and plot settings. Copy it to another computer to bring them along.",
 ]),

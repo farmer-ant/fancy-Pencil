@@ -172,6 +172,18 @@ DXF name instead and never touches the DWG.
 Any `acaddoc.lsp` or `fancypencil.lsp` in the current directory, and `~/.fancypencil.lsp`, are loaded
 at startup, and `S::STARTUP` is called if defined, just like AutoCAD.
 
+### Updating
+
+**File > Check for Updates...** (`UPDATE`) compares this copy with the version on GitHub's `main`
+branch. A copy in a folder you can write to (such as `~/Fancy Pencil/fancypencil`) downloads the new
+version (with curl or wget), checks it is Fancy Pencil, saves the old version as a tarball in
+`~/.cache/fancypencil/backups/`, and copies the new files over it; the next start compiles what
+changed. The installed edition (`/opt/fancypencil`, from the .deb) downloads the newest
+`Install Fancy Pencil.deb` from the GitHub releases instead and opens it in the software installer.
+**File > Update from File...** (`UPDATEFILE`) does the same from a `fancypencil-*.tar.gz` or `.deb`
+you already have. A git clone is left to `git pull`, and the Snap Store edition updates itself.
+To go back, unpack the backup over the folder: `tar xzf ~/.cache/fancypencil/backups/fancypencil-<old>-*.tar.gz -C <folder>`.
+
 ## Using it
 
 It behaves like AutoCAD's command line:

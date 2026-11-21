@@ -161,6 +161,9 @@ mcmd .mb.file "Export STEP (.step)..." STEPOUT
 mcmd .mb.file "Import STEP (.step)..." STEPIN
 mcmd .mb.file "Export DXF..." DXFOUT
 .mb.file add separator
+mcmd .mb.file "Check for Updates..." UPDATE
+mcmd .mb.file "Update from File..." UPDATEFILE
+.mb.file add separator
 mcmd .mb.file "Exit" QUIT
 
 mcmd .mb.edit "Undo" U Ctrl+Z
