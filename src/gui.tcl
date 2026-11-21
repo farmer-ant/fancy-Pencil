@@ -163,6 +163,7 @@ mcmd .mb.file "Export DXF..." DXFOUT
 .mb.file add separator
 mcmd .mb.file "Check for Updates..." UPDATE
 mcmd .mb.file "Update from File..." UPDATEFILE
+mcmd .mb.file "Snap Store Page..." SNAPSTORE
 .mb.file add separator
 mcmd .mb.file "Exit" QUIT
 

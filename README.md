@@ -182,6 +182,8 @@ changed. The installed edition (`/opt/fancypencil`, from the .deb) downloads the
 `Install Fancy Pencil.deb` from the GitHub releases instead and opens it in the software installer.
 **File > Update from File...** (`UPDATEFILE`) does the same from a `fancypencil-*.tar.gz` or `.deb`
 you already have. A git clone is left to `git pull`, and the Snap Store edition updates itself.
+**File > Snap Store Page...** (`SNAPSTORE`) opens Fancy Pencil's page in the Snap Store,
+https://snapcraft.io/fancypencil (`sudo snap install fancypencil`; `snap refresh fancypencil` updates it).
 To go back, unpack the backup over the folder: `tar xzf ~/.cache/fancypencil/backups/fancypencil-<old>-*.tar.gz -C <folder>`.
 
 ## Using it

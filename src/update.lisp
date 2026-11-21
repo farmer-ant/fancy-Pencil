@@ -6,11 +6,14 @@
 ;;;; copied over it. The next start compiles what changed.
 ;;;; The installed edition (/opt/fancypencil, from Install Fancy Pencil.deb) can't be written to:
 ;;;; there a newer installer is downloaded from the GitHub releases and opened in the system's
-;;;; software installer. The Snap Store edition is kept up to date by the Snap Store.
+;;;; software installer. The Snap Store edition (https://snapcraft.io/fancypencil) is kept up to date
+;;;; by the Snap Store; File > Snap Store Page... opens that page.
 
 (in-package :fancy-pencil)
 
 (defparameter *update-repo* "farmer-ant/fancy-Pencil")
+(defparameter *snap-store-url* "https://snapcraft.io/fancypencil"
+  "Fancy Pencil's page in the Snap Store: the third way to get it (File > Snap Store Page...).")
 
 (defun update-source ()
   "FANCYPENCIL_UPDATE_SOURCE: another place to update from (a folder, or a URL ending in /) holding
@@ -173,10 +176,17 @@ To put it back: tar xzf ~A -C ~A" (last-lines text 3) backup (shell-quote backup
                   t)
                 (progn (tell-user info) nil)))))))
 
+(defun open-snap-store ()
+  "Opens Fancy Pencil's Snap Store page in the web browser."
+  (run-shell (format nil "(xdg-open ~A >/dev/null 2>&1 &)" (shell-quote *snap-store-url*))))
+
+(defun snap-store-line ()
+  (format nil "Fancy Pencil is also in the Snap Store: ~A~%(File > Snap Store Page...)" *snap-store-url*))
+
 (defun kind-note (kind)
   (case kind
-    (:snap (format nil "This copy comes from the Snap Store, which updates it by itself.~%~
-To update now: snap refresh fancypencil"))
+    (:snap (format nil "This copy comes from the Snap Store (~A),~%which updates it by itself.~%~
+To update now, in a terminal: snap refresh fancypencil" *snap-store-url*))
     (:git (format nil "This copy is a git clone (~A): update it with~%    git pull~%and start Fancy Pencil again."
                   (namestring (program-root))))
     (t nil)))
@@ -212,8 +222,8 @@ To update now: snap refresh fancypencil"))
            (tell-user (format nil "You have Fancy Pencil ~A. The newest installer on GitHub is ~A~:[~; (with no .deb)~].~%~%~
 This copy is installed for the whole computer (~A), so it is updated with a new~%~
 Install Fancy Pencil.deb. A copy in a folder of your own (like ~~/Fancy Pencil/fancypencil)~%~
-can update itself from GitHub with File > Check for Updates."
-                              *version* tag (null url) (namestring (program-root)))))
+can update itself from GitHub with File > Check for Updates.~%~%~A"
+                              *version* tag (null url) (namestring (program-root)) (snap-store-line))))
           ((ask-yes (format nil "Fancy Pencil ~A is available (you have ~A).~%~%Download the installer and open it?" tag *version*))
            (let ((out (format nil "~A/Downloads/~A" (or (getenv "HOME") "/tmp") (or name "Install Fancy Pencil.deb"))))
              (ensure-directories-exist out)
@@ -231,7 +241,10 @@ Install it there (or in a terminal: sudo apt install ~A),~%then close Fancy Penc
 (defcmd "UPDATE" ("CHECKUPDATES" "UPDATECHECK")
     "Checks GitHub for a newer Fancy Pencil and installs it (File > Check for Updates...)."
   (let ((kind (install-kind)))
-    (cond ((kind-note kind) (tell-user (kind-note kind)))
+    (cond ((eq kind :snap)
+           (when (ask-yes (format nil "~A~%~%Open its Snap Store page?" (kind-note kind)))
+             (open-snap-store)))
+          ((kind-note kind) (tell-user (kind-note kind)))
           ((eq kind :system) (update-system-copy))
           (t
            (out (format nil "Looking for a newer Fancy Pencil on GitHub...~%"))
@@ -239,8 +252,8 @@ Install it there (or in a terminal: sudo apt install ~A),~%then close Fancy Penc
              (let ((ver (and asd (asd-version asd))))
                (cond ((null ver)
                       (tell-user (format nil "Couldn't find out the newest version on GitHub.~%~A~%~%~
-Check the internet connection and try again, or use File > Update from File~%with a fancypencil-*.tar.gz you have."
-                                         (or why "(fancypencil.asd had no version)"))))
+Check the internet connection and try again, or use File > Update from File~%with a fancypencil-*.tar.gz you have.~%~%~A"
+                                         (or why "(fancypencil.asd had no version)") (snap-store-line))))
                      ((not (version-newer-p ver *version*))
                       (tell-user (format nil "You have the newest Fancy Pencil: ~A.~@[~%(GitHub has ~A.)~]"
                                          *version* (and (string/= ver *version*) ver))))
@@ -252,6 +265,15 @@ Check the internet connection and try again, or use File > Update from File~%wit
                               (update-with-tarball tgz :where "The download")
                               (tell-user why)))))
                      (t (out (format nil "Nothing was changed.~%"))))))))))
+
+(defcmd "SNAPSTORE" ("SNAPPAGE")
+    "Opens Fancy Pencil's page in the Snap Store (https://snapcraft.io/fancypencil) in the web browser (File > Snap Store Page...)."
+  (open-snap-store)
+  (out (format nil "Opening ~A~%~
+To install the Snap Store edition:  sudo snap install fancypencil~%~
+To update it:                       snap refresh fancypencil~%~
+(The Snap Store edition opens and saves DXF; for .dwg files use the Install Fancy Pencil.deb edition.)~%"
+               *snap-store-url*)))
 
 (defcmd "UPDATEFILE" ("UPDATEFROMFILE")
     "Updates Fancy Pencil from a fancypencil-*.tar.gz (or an Install Fancy Pencil.deb) you have (File > Update from File...)."

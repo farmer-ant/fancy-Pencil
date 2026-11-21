@@ -100,6 +100,12 @@
 (chk "latest release and its installer" (multiple-value-list (release-deb))
      '("v0.6.0" "https://github.com/x/releases/download/v0.6.0/Install%20Fancy%20Pencil.deb" "Install Fancy Pencil.deb"))
 
+;; the Snap Store: its page, and the note for a copy from it
+(setf *said* nil) (al "(command \"snapstore\")")
+(chk "Snap Store page" (said "Opening https://snapcraft.io/fancypencil") t)
+(chk "  ...how to install and update it" (list (said "sudo snap install fancypencil") (said "snap refresh fancypencil")) '(t t))
+(chk "the Snap copy is pointed at its page" (and (search "https://snapcraft.io/fancypencil" (kind-note :snap)) t) t)
+
 (sb-posix:unsetenv "FANCYPENCIL_UPDATE_SOURCE")
 (chk "GitHub by default" (list (update-url :version) (update-url :tarball))
      '("https://raw.githubusercontent.com/farmer-ant/fancy-Pencil/main/fancypencil.asd"
