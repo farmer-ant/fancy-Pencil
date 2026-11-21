@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Lays out the Fancy Pencil manual on 10 x 12 inch portrait pages and writes it as an
+# Lays out the Fancy Pencil manual (run make.sh to get the finished PDF) on 10 x 12 inch portrait pages and writes it as an
 # OpenDocument presentation (.odp). Every line is measured with the real fonts so the text
 # frames fit; long paragraphs and tables carry on to the next page.
 import re, sys, os
@@ -226,6 +226,9 @@ class Sheet:
 BODY, BODY_LH = 11.0, 15.2
 pages = []          # list of Sheet
 toc = []            # (chapter no, title, page no)
+sections = []       # (chapter no, title, page no, y inches) - the PDF's bookmarks
+toc_rows = []       # (chapter page, x, y, w, h) on the contents page - links in the PDF
+BUTTONS = []        # (name, x, y, w, h) footer buttons, the same on every page after the cover
 state = {"y": MT, "sheet": None, "chapter": None, "chno": 0}
 
 def new_page():
@@ -237,10 +240,21 @@ def new_page():
         sh.text(ML, 0.42, CW, 0.25, [para([("%d  ·  %s" % (state["chno"], state["chapter"]), "r")],
                                          pstyle(8.5, 10, "end", color=DIM), 8.5, DIM)])
         sh.line(ML, 0.68, PW - MR, 0.68)
-    sh.line(ML, PH - 0.62, PW - MR, PH - 0.62)
-    sh.text(ML, PH - 0.55, CW / 2, 0.25, [para([("Fancy Pencil Manual", "r")], pstyle(8.5, 10, color=DIM), 8.5, DIM)])
-    sh.text(ML + CW / 2, PH - 0.55, CW / 2, 0.25, [para([(str(n), "b")], pstyle(9, 10, "end", color=NAVY), 9, NAVY)])
+    footer(sh, n)
     return sh
+
+# Back (to wherever the reader came from: GoBack) and Contents buttons; links.py makes them work
+BW, BH = 1.05, 0.27
+BUTTONS[:] = [("back", PW / 2 - BW - 0.06, PH - 0.56, BW, BH), ("contents", PW / 2 + 0.06, PH - 0.56, BW, BH)]
+def footer(sh, n):
+    sh.line(ML, PH - 0.62, PW - MR, PH - 0.62)
+    sh.text(ML, PH - 0.55, CW / 2 - BW - 0.2, 0.25, [para([("Fancy Pencil Manual", "r")], pstyle(8.5, 10, color=DIM), 8.5, DIM)])
+    for name, x, y, w, h in BUTTONS:
+        label = "\u2039  Back" if name == "back" else "Contents"
+        sh.rect(x, y, w, h, fill=TINT, stroke="#9aa6b5", sw="0.008in")
+        sh.text(x, y + 0.045, w, h - 0.05, [para([(label, "b")], pstyle(9, 11, "center", color=NAVY, bold=True), 9, NAVY)])
+    sh.text(PW / 2 + BW + 0.4, PH - 0.55, PW - MR - (PW / 2 + BW + 0.4), 0.25,
+            [para([(str(n), "b")], pstyle(9, 10, "end", color=NAVY), 9, NAVY)])
 
 def room(): return BOTTOM - state["y"]
 def ensure(h):
@@ -292,6 +306,7 @@ def h2(title, nxt_h=0.6):
     need = 0.5 + nxt_h
     if state["sheet"] is None or room() < need: new_page()
     state["y"] += 0.12
+    sections.append((state["chno"], re.sub(r"[*`]", "", title), len(pages), state["y"]))
     text_block([(t, 'b') for t, k in parse(title)], 15, 19, CW, sb=4, sa=3, color=NAVY, bold=True, keep=True)
     state["sheet"].line(ML, state["y"] - 0.02, ML + 0.6, state["y"] - 0.02, GOLD, "0.025in")
     state["y"] += 0.06
@@ -437,7 +452,7 @@ def cover():
     sh = Sheet(1); pages.append(sh)
     sh.rect(0, 0, PW, PH, fill=NAVY)
     sh.rect(0, 7.05, PW, 0.08, fill=GOLD)
-    sh.image(os.path.join(HERE, "..", "lispdraft", "support", "icons", "fancypencil-512.png"), ML, 1.0, 1.9, 1.9, border=False)
+    sh.image(os.path.join(HERE, "..", "..", "support", "icons", "fancypencil-512.png"), ML, 1.0, 1.9, 1.9, border=False)
     sh.text(ML, 3.15, CW, 1.0, [para([("Fancy Pencil", "b")], pstyle(54, 60, color="#ffffff", bold=True), 54, "#ffffff")])
     sh.text(ML, 4.15, CW, 0.55, [para([("User Manual", "r")], pstyle(26, 30, color="#f2b632"), 26, "#f2b632")])
     sh.text(ML, 4.95, CW, 1.2, [para([("Drafting with AutoCAD-style commands and AutoLISP, in 2D and 3D, on Linux.", "r")],
@@ -451,15 +466,17 @@ def contents_page(sh):
     sh.text(ML, 0.9, CW, 0.7, [para([("Contents", "b")], pstyle(30, 36, color=NAVY, bold=True), 30, NAVY)])
     sh.rect(ML, 1.62, 0.7, 0.04, fill=GOLD)
     y = 2.1
+    step = min(0.405, (PH - 1.2 - y) / max(1, len(toc)))
     for n, title, pg in toc:
         sh.text(ML, y, 0.5, 0.3, [para([(str(n), "b")], pstyle(12, 14, color=GOLD, bold=True), 12, GOLD)])
         sh.text(ML + 0.55, y, CW - 1.4, 0.3, [para([(title, "r")], pstyle(12, 14, color=INK), 12)])
         sh.text(PW - MR - 0.8, y, 0.8, 0.3, [para([(str(pg), "b")], pstyle(12, 14, "end", color=NAVY, bold=True), 12, NAVY)])
         sh.line(ML + 0.55, y + 0.3, PW - MR, y + 0.3, "#e1e6ec", "0.006in")
-        y += 0.405
-    sh.line(ML, PH - 0.62, PW - MR, PH - 0.62)
-    sh.text(ML, PH - 0.55, CW / 2, 0.25, [para([("Fancy Pencil Manual", "r")], pstyle(8.5, 10, color=DIM), 8.5, DIM)])
-    sh.text(ML + CW / 2, PH - 0.55, CW / 2, 0.25, [para([("2", "b")], pstyle(9, 10, "end", color=NAVY), 9, NAVY)])
+        toc_rows.append((pg, ML, y - 0.04, CW, 0.38))
+        y += step
+    sh.text(ML, y + 0.1, CW, 0.3, [para([("Click a chapter to go to it; every page has a Back and a Contents button at the bottom.", "i")],
+                                        pstyle(9.5, 12, color=DIM, italic=True), 9.5, DIM)])
+    footer(sh, 2)
 
 # ---------------------------------------------------------------- go ------------------------
 
@@ -488,5 +505,10 @@ for blocks in content.CHAPTERS:
         elif k == "break": new_page()
 contents_page(toc_sheet)
 doc.save(OUT)
+# where the links go, for links.py (run on the PDF that LibreOffice makes from OUT)
+import json
+with open(os.path.splitext(OUT)[0] + ".links.json", "w") as f:
+    json.dump({"page_size": [PW, PH], "toc_page": 2, "toc": toc, "toc_rows": toc_rows,
+               "sections": sections, "buttons": BUTTONS, "pages": len(pages)}, f, indent=1)
 print("pages:", len(pages), "->", OUT)
 for n, t, p in toc: print(" ", n, t, p)

@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.5.3"
+VERSION = "0.5.26"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -532,6 +532,137 @@ ch(
 ("h2", "Measuring and printing"),
 ("p", "**MASSPROP** reports volume, centroid and moments. **3DPRINT** saves solids as STL, 3MF or OBJ for a "
       "3D printer's slicer, checking that each is watertight; **STLIN** brings in STL or OBJ models."),
+)
+
+# ------------------------------------------------------------------ 3D landscapes
+ch(
+("h1", "3D Landscapes from Topo Maps",
+ "Turn a flat map full of wiggly lines and numbers into a piece of land you can spin around, look at "
+ "from any side, and even 3D print. Written so a 12-year-old can follow it."),
+("p", "A **topo map** (short for “topographic”) is a map that shows how high the ground is, not just where "
+      "things are. Builders, surveyors and hikers use them. Fancy Pencil can read two kinds and turn either "
+      "one into a 3D model of the ground:"),
+("table", [2.2, 3.2, 2.6], [
+ ["**Kind of map**", "**Where it comes from**", "**Command**"],
+ ["Survey drawing (`.dwg` or `.dxf`)", "A surveyor measured a lot or a building site, usually a few hundred feet across", "`ALTXT`, then `TOPOMODEL`"],
+ ["USGS height map (`.tif`)", "The U.S. Geological Survey measured the whole country from airplanes and satellites", "`DEMIMPORT`"],
+ ["USGS contour lines (`.zip` or `.shp`)", "The same USGS maps, as lines instead of a grid of heights", "`CONTOURIMPORT`, then `TOPOMODEL`"],
+]),
+("h2", "How a flat map shows hills"),
+("p", "Imagine a mountain made of clay sitting in a bathtub. Fill the tub with water 10 feet deep and draw a "
+      "line on the clay where the water touches it. Add 10 more feet of water and draw another line. Keep "
+      "going until the mountain is under water. Now look straight down at the clay: you see rings inside "
+      "rings. Those rings are **contour lines**. Every point on one line is at the same height."),
+("ul", [
+ "**Lines close together** mean the ground is **steep** (it climbs a lot in a short distance).",
+ "**Lines far apart** mean the ground is **flat** or gently sloping.",
+ "The height difference between one line and the next is the **contour interval** (often 1, 2 or 5 feet on a survey, 10 or 20 feet on a USGS map).",
+ "Some maps also have **spot heights**: little numbers like `92.45` printed beside a dot or a small cross. Each one says exactly how high the ground is at that spot.",
+]),
+("h2", "How Fancy Pencil builds the ground"),
+("p", "Fancy Pencil collects every point it knows the height of: points along the contour lines and the spot "
+      "heights. Then it joins neighbouring points into **triangles**, like a fishing net thrown over the land. "
+      "Each triangle tilts to match its three corners, so together they make the shape of the ground. That "
+      "net is called a **surface**."),
+("img", "topo-triangles.png", 7.6, "The triangles TOPOMODEL made from a survey drawing, seen from above. Where the contour lines bunch up, the triangles are small."),
+("p", "Next it builds a **solid**: the surface on top, straight walls down the sides, and a flat bottom, like "
+      "a slice of layer cake. The bottom is the **base elevation**. A solid is what you need to cut, measure "
+      "or 3D print the land."),
+("note", "You can't break anything by trying. If you don't like the model, press `Ctrl+Z` (or type `U`) to undo it and try again."),
+
+("h2", "Part 1: a survey drawing (.dwg or .dxf)"),
+("p", "Survey drawings come from a surveyor, an architect or a city office. Open one with **File > Open** "
+      "(`OPEN`). A `.dwg` file needs the free ODA File Converter (see chapter 2); a `.dxf` file opens straight away."),
+("img", "topo-survey-plan.png", 7.6, "Part of a survey: grey contour lines, green spot heights, and yellow survey marks with their labels."),
+("p", "**Step 1 - look around.** Zoom in and find three things:"),
+("ul", [
+ "The **contour lines**. Click one and look at the Properties palette: its **Layer** (often something like `CONT-MJR` for the thick ones and `CONT-MNR` for the thin ones) and its **Elevation** (its height). If the elevation is 0, the line has no height and won't help.",
+ "The **spot heights**: the little numbers. Click one and note its layer.",
+ "The **survey marks**: small circles, crosses or blocks where the surveyor stood the measuring pole.",
+]),
+("p", "**Step 2 - make a layer for the model.** Type `LAYER` (or click LP on the ribbon), make a new layer "
+      "called `TERRAIN`, and set it current. The solid goes on the current layer, so this keeps it tidy."),
+("p", "**Step 3 - put the heights on their marks (ALTXT).** Surveyors print each height a little to the side "
+      "of its mark so you can read it. Fancy Pencil needs the number to sit exactly on the spot it describes. "
+      "Type `ALTXT`, click one survey mark, then click one height number. Every height number that looks like "
+      "that one moves onto the centre of the nearest mark of the same kind. (If your heights already sit on "
+      "their spots, skip this step.)"),
+("p", "**Step 4 - build it (TOPOMODEL).** Type `TOPOMODEL`."),
+("ol", [
+ "At “Select sample height mark (TEXT or MTEXT) or contour line”, click one **thick contour line**.",
+ "Fancy Pencil tells you if other layers have contour lines too. At the next prompt type `A` (**Add samples**) and click one **thin contour line**.",
+ "Type `A` again and click one **spot height** number. Every number on that layer and in that color comes in.",
+ "Press `Enter` when you've added everything. Fancy Pencil reports how many points it used, and which numbers it **left out**: things like lot numbers, `0.00` placeholders and directions such as `N85°34'52\"W`, which aren't heights at all.",
+ "At “Specify base elevation for the solid”, press `Enter` to take the suggested height (a little below the lowest ground), type your own, or type `S` for a surface without a solid.",
+]),
+("p", "**Step 5 - look at it in 3D.** Type `VIEW` and choose `SWiso` (south-west, from above), then "
+      "`VSCURRENT` and choose `Shaded`. Type `3DORBIT` and drag with the mouse to spin it. To see only the "
+      "model, type `LAYISO` and click the solid; `LAYUNISO` brings the other layers back."),
+("img", "topo-survey-3d.png", 7.0, "The finished survey model: a solid piece of ground about 150 by 120 feet."),
+("note", "A survey site is usually much wider than it is tall, so it can look quite flat. That's real! For a "
+         "landscape with hills that stand out, try a USGS map, where Fancy Pencil can stretch the heights for "
+         "you (see Part 2)."),
+("h2", "When TOPOMODEL says no"),
+("table", [3.2, 4.8], [
+ ["**It says**", "**What to do**"],
+ ["“At least three points are needed”", "You picked something with too few heights. Pick a contour line or a spot height instead."],
+ ["“The points are all at one height”", "The contour lines have no Elevation. Select them and type their heights into the Properties palette, one height per line."],
+ ["“Invalid selection”", "TOPOMODEL only takes contour lines (polylines) and text. Blocks, circles and hatches don't count."],
+ ["Lots of numbers “left out”", "That's normal: lot numbers and distances aren't heights. Check the list for a real height that was dropped."],
+]),
+
+("h2", "Part 2: a USGS height map (.tif)"),
+("p", "The U.S. Geological Survey (USGS) gives away height maps of the whole United States for free. A height "
+      "map is a picture where every pixel is a number - the height of the ground at that spot - instead of a "
+      "color. The file ends in `.tif` and is called a **GeoTIFF** or **DEM** (Digital Elevation Model)."),
+("p", "**Getting the map** (ask a grown-up if you're not allowed to download files):"),
+("ol", [
+ "Go to **The National Map Downloader**: `apps.nationalmap.gov/downloader`",
+ "Move and zoom the map to the place you want: your town, a mountain, a canyon.",
+ "Draw a box around it (the rectangle button), then tick **Elevation Products (3DEP)**.",
+ "Choose **1/3 arc-second DEM** (one height about every 10 meters) or **1 meter DEM** where there is one, with the file format **GeoTIFF**. (The 1/9 arc-second maps come as IMG files, which Fancy Pencil can't read.)",
+ "Click **Search Products**, then download the `.tif` file. One file covers a big square of land, so it can be a few hundred megabytes.",
+]),
+("p", "**Building the model.** Start a new drawing and type `DEMIMPORT` (or just `DEM`), then pick the `.tif` file. "
+      "Fancy Pencil tells you how big the map is and how far apart the heights are, then asks:"),
+("table", [2.6, 5.4], [
+ ["**Question**", "**What to answer**"],
+ ["“Specify area [Whole/Center/Corners]”", "`Whole` for the whole map (good for small maps). `Center` lets you type a place's latitude and longitude and a width like `2 km` or `1 mi`. `Corners` takes two corners."],
+ ["“Specify drawing units [Meters/Feet]”", "Asked only in a new drawing. Pick what you like to measure in."],
+ ["“Specify spacing between heights or [Finest]”", "Press `Enter` for the suggestion. A smaller spacing (or `Finest`) gives more detail but takes longer and makes a bigger file."],
+ ["“Specify vertical exaggeration”", "How much taller to make the hills. `1` is real life. Flat places look much better at `5` to `10`; mountains look fine at `1` or `2`."],
+ ["“Specify base elevation for the solid or [Surface only]”", "`Enter` for a solid with a flat bottom, or `S` for just the surface."],
+]),
+("img", "topo-usgs-3d.png", 7.0, "Eight kilometers of hilly land from a USGS-style height map, with the heights stretched 12 times so the valleys show."),
+("p", "Fancy Pencil puts the map's south-west corner at the drawing's `0,0` and leaves a small note on layer "
+      "`GEO_ORIGIN` saying which latitude and longitude that is. If you bring in a second map of the same place "
+      "into the same drawing - a closer, more detailed one, or its contour lines - it lines up with the first."),
+("h2", "USGS contour lines"),
+("p", "The National Map also has **Elevation contours** (tick that box instead of Elevation Products). They "
+      "download as a `.zip` file holding a **shapefile**. Type `CONTOURIMPORT` (or `CONTOURS`) and pick the "
+      "`.zip` - no need to unzip it. Answer the same area, units and exaggeration questions. The lines arrive "
+      "on layer `Contours`, each one at its own height, so you can then run `TOPOMODEL` on them, just like a "
+      "survey drawing."),
+
+("h2", "Make it real: 3D print your land"),
+("ol", [
+ "Make sure you have a **solid** (not “Surface only”).",
+ "A model of real land is real size - maybe a mile wide! Use `SCALE` on the solid so it's a few inches wide. For example, to shrink 1 km to 10 cm, scale by `0.0001` in a drawing in meters.",
+ "Type `3DPRINT`, choose `STL` (or `3MF`), select the solid, and save the file.",
+ "Open the file in your 3D printer's slicer program and print it. A layer height of 0.2 mm shows contour-like steps that look great.",
+]),
+("h2", "The commands in this chapter"),
+("table", [1.8, 1.4, 4.8], [
+ ["**Command**", "**Short name**", "**What it does**"],
+ ["`TOPOMODEL`", "", "Builds a surface and a solid from contour lines and spot heights."],
+ ["`ALTXT`", "", "Moves height numbers onto the centre of their survey marks."],
+ ["`DEMIMPORT`", "`DEM`", "Builds the ground from a USGS height map (GeoTIFF)."],
+ ["`CONTOURIMPORT`", "`CONTOURS`", "Brings in USGS contour lines at their heights."],
+ ["`VSCURRENT`", "`VS`", "Shaded, Hidden or Wireframe look."],
+ ["`3DORBIT`", "`ORBIT`", "Spin the view with the mouse."],
+ ["`LAYISO` / `LAYUNISO`", "", "Show only one object's layer / show everything again."],
+ ["`3DPRINT`", "", "Saves solids for a 3D printer (STL, 3MF or OBJ)."],
+]),
 )
 
 # ------------------------------------------------------------------ 14

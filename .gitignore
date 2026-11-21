@@ -5,3 +5,4 @@ fonts/
 .~lock.*#
 lib
 support/solids/fancypencil-solids
+__pycache__/
