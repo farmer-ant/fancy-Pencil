@@ -1,4 +1,4 @@
-;;;; prefs.lisp — the cursor and selection settings (OPTIONS, Tools > Cursor & Selection) and the
+;;;; prefs.lisp — the cursor and selection settings (OPTIONS, Tools > Options) and the
 ;;;; user preferences file ~/.config/fancypencil/settings.lisp, so the settings stay the way you
 ;;;; left them the next time Fancy Pencil starts (and in every drawing tab).
 
@@ -74,7 +74,7 @@
     (gui-regen)))
 
 (defun cursor-dialog ()
-  (let ((r (tk-ask (format nil "cursordlg ~D ~A ~D ~D ~D ~D ~D ~A ~A ~A ~A ~A"
+  (let ((r (tk-ask (format nil "cursordlg ~D ~A ~D ~D ~D ~D ~D ~A ~A ~A ~A ~A ~A"
                            (or (sysvar "CURSORSIZE") 100)
                            (tq (let ((c (sysvar "CURSORCOLOR"))) (if (stringp c) c "#c9ced6")))
                            (or (sysvar "PICKBOX") 5) (or (sysvar "APERTURE") 10)
@@ -85,9 +85,16 @@
                            (format nil "{~{{~A ~A}~^ ~}}" (loop for (n c) in (remove "AutoCAD dark" *background-colors* :key #'first :test #'string=)
                                                                 append (list (tq n) c)))
                            (painter-color)
-                           (format nil "{~{{~A ~A}~^ ~}}" (loop for (n c) in *painter-colors* append (list (tq n) c)))))))
+                           (format nil "{~{{~A ~A}~^ ~}}" (loop for (n c) in *painter-colors* append (list (tq n) c)))
+                           (memory-dialog-arg)))))
     (when (and (> (length r) 3) (string= (subseq r 0 3) "OK "))
-      (destructuring-bind (cs col pb ap sn gs rt &optional bg paint) (split-string (subseq r 3) #\Space)
+      (destructuring-bind (cs col pb ap sn gs rt &optional bg paint heap speed) (split-string (subseq r 3) #\Space)
+        (when (and heap speed)
+          (let ((h (if (string-equal heap "auto") :auto (ignore-errors (parse-integer heap))))
+                (sp (ignore-errors (parse-integer speed))))
+            (when (and h sp (<= 0 sp 4))
+              (when (set-memory h sp)
+                (out (format nil "The memory limit changes the next time Fancy Pencil starts.~%"))))))
         (when (and bg (= (length bg) 7) (char= (char bg 0) #\#)) (setf (sysvar "BKGCOLOR") (string-downcase bg)))
         (when (and paint (= (length paint) 7) (char= (char paint 0) #\#)) (setf (sysvar "PAINTERCOLOR") (string-downcase paint)))
         (flet ((int (s lo hi) (let ((v (ignore-errors (parse-integer s)))) (and v (max lo (min hi v))))))

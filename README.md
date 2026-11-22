@@ -374,7 +374,17 @@ the Properties palette and the rollover tips all follow it. The units are saved 
 Rest the cursor on an object for half a second and a small box shows what it is and its sizes:
 a line's length and angle, a rectangle's width × height and area, a circle's radius, diameter,
 circumference and area, an arc's length, text style and height, a block's scale and size, a
-hatch's pattern and area. Turn them off in Tools → Cursor & Selection (or `ROLLOVERTIPS` 0).
+hatch's pattern and area. Turn them off in Tools → Options (or `ROLLOVERTIPS` 0).
+
+### Memory and speed (Tools → Options, or MEMORY)
+
+**Most memory Fancy Pencil may use**: Automatic (half the computer's memory, at least 2 GB; 32 GB on a
+64 GB computer) or a size up to four fifths of it. The `fancypencil` launcher passes it to SBCL as
+`--dynamic-space-size` when Fancy Pencil starts, so a change takes effect at the next start; it is a
+ceiling, and memory is only taken when a model needs it. `FANCYPENCIL_HEAP=<MB>` overrides it for one start.
+**Speed** (Light 50 MB, Normal 200 MB, Fast 800 MB, Fastest 2 GB of work between garbage
+collections, never more than a tenth of the limit; Automatic picks by the computer's memory) takes effect
+at once. Both are kept in `~/.config/fancypencil/memory.conf`.
 
 ### Blocks (BLOCK, B)
 

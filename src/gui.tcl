@@ -389,7 +389,7 @@ mcmd .mb.tools.alias "Open Alias File (fancypencil.pgp)" ALIASFILE
 mcmd .mb.tools.alias "Open Alias Folder" ALIASFOLDER
 mcmd .mb.tools.alias "Reload Aliases" REINIT
 mcmd .mb.tools "Object Snap Settings..." OSNAP
-mcmd .mb.tools "Cursor, Selection & Background..." OPTIONS
+mcmd .mb.tools "Options (Cursor, Background, Memory & Speed)..." OPTIONS
 mcmd .mb.tools "Spelling..." SPELL
 mcmd .mb.tools "Distance" DIST
 mcmd .mb.tools "ID Point" ID
@@ -3355,11 +3355,11 @@ proc bd_done {act} {
 
 # ---------------------------------------------------------------- Cursor & Selection settings (OPTIONS)
 # colors: list of {name #rrggbb}. Returns "CANCEL" or "OK size color pickbox aperture snapsize gripsize rollover".
-proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {bg "#212830"} {bgs {}} {paint "#ffa53a"} {paints {}}} {
+proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {bg "#212830"} {bgs {}} {paint "#ffa53a"} {paints {}} {mem {}}} {
     set w .cud
     catch {destroy $w}
     toplevel $w -background $::panel
-    wm title $w "Options - Cursor & Selection"
+    wm title $w "Options"
     wm transient $w [dlg_owner $w]
     set f [ttk::frame $w.f -padding 12]
     pack $f -fill both -expand 1
@@ -3431,6 +3431,7 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     grid $f.sz -row 1 -column 0 -sticky nsew -pady {8 0} -padx {0 8}
     grid $f.bgf -row 2 -column 0 -columnspan 2 -sticky ew -pady {8 0}
     grid $f.roll -row 3 -column 0 -columnspan 2 -sticky w -pady {10 0}
+    if {[llength $mem]} { cud_memory $f.mem $mem; grid $f.mem -row 4 -column 0 -columnspan 2 -sticky ew -pady {10 0} }
     set b [ttk::frame $f.b]
     ttk::button $b.def -text "Defaults" -command {
         set ::cud(size) 100; set ::cud(pick) 5; set ::cud(ap) 10; set ::cud(snap) 6; set ::cud(grip) 5; set ::cud(roll) 1
@@ -3438,12 +3439,13 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
         .cud.f.bgf.sw configure -background $::cud(bg); .cud.f.pv configure -background $::cud(bg)
         .cud.f.ch.c set [lindex [lindex $::cud(colors) 0] 0]
         if {[llength $::cud(paints)]} { .cud.f.ch.p set [lindex [lindex $::cud(paints) 0] 0] }
+        if {[winfo exists .cud.f.mem]} { .cud.f.mem.hc set [lindex [.cud.f.mem.hc cget -values] 0]; set ::cud(speedauto) 1; cud_speed }
         cud_preview }
     ttk::button $b.ok -text OK -command {cud_done 1}
     ttk::button $b.no -text Cancel -command {cud_done 0}
     pack $b.def -side left
     pack $b.no $b.ok -side right -padx 3
-    grid $b -row 4 -column 0 -columnspan 2 -sticky ew -pady {12 0}
+    grid $b -row 5 -column 0 -columnspan 2 -sticky ew -pady {12 0}
     foreach key {size pick ap snap grip} { trace add variable ::cud($key) write {apply {args cud_preview}} }
     cud_preview
     bind $w <Escape> {cud_done 0}
@@ -3453,6 +3455,56 @@ proc cursordlg {size color pickbox aperture snapsize gripsize rollover colors {b
     tkwait window $w
     foreach key {size pick ap snap grip} { catch {trace remove variable ::cud($key) write {apply {args cud_preview}}} }
     return $::cud(result)
+}
+# Memory and speed. mem = {ramMB heapMB usedMB heapSetting speed autoHeapMB autoSpeed {choicesMB}}
+proc mem_gb {mb} {
+    if {$mb < 1024} { return "$mb MB" }
+    set g [expr {$mb / 1024.0}]
+    if {abs($g - round($g)) < 0.05} { return "[expr {round($g)}] GB" }
+    return [format "%.1f GB" $g]
+}
+set ::speednames {1 Light 2 Normal 3 Fast 4 Fastest}
+set ::speedwhat {1 "cleans up after every 50 MB of work: uses the least memory"
+                 2 "cleans up after every 200 MB of work"
+                 3 "cleans up after every 800 MB of work: big models go faster"
+                 4 "cleans up after every 2 GB of work: fastest for big models, uses the most memory"}
+proc cud_memory {m mem} {
+    lassign $mem ram heap used setting speed autoheap autospeed choices
+    ttk::labelframe $m -text " Memory and speed " -padding 8
+    ttk::label $m.info -style Dim.TLabel -text "This computer has [expr {$ram ? [mem_gb $ram] : {unknown memory}}]. Fancy Pencil can use up to [mem_gb $heap] now ([mem_gb $used] in use)."
+    ttk::label $m.hl -text "Most memory Fancy Pencil may use:"
+    set vals [list "Automatic ([mem_gb $autoheap]: half of this computer's)"]
+    set ::cud(heapmb) $choices
+    foreach mb $choices { lappend vals [mem_gb $mb] }
+    ttk::combobox $m.hc -state readonly -width 34 -values $vals
+    set i [lsearch -exact $choices $setting]
+    if {$setting eq "auto" || $i < 0} { $m.hc set [lindex $vals 0] } else { $m.hc set [lindex $vals $i+1] }
+    ttk::label $m.hn -style Dim.TLabel -text "(used from the next start; it is only a ceiling - memory is taken when a model needs it)"
+    ttk::label $m.sl -text "Speed:"
+    set ::cud(autospeed) $autospeed
+    set ::cud(speedauto) [expr {$speed == 0}]
+    set ::cud(speed) [expr {$speed == 0 ? $autospeed : $speed}]
+    ttk::frame $m.sf
+    ttk::label $m.sf.lo -text "Light" -style Dim.TLabel
+    ttk::scale $m.sf.sc -from 1 -to 4 -orient horizontal -length 240 -variable ::cud(speed) \
+        -command {apply {{v} {set ::cud(speed) [expr {round($v)}]; cud_speed}}}
+    ttk::label $m.sf.hi -text "Fastest" -style Dim.TLabel
+    pack $m.sf.lo -side left; pack $m.sf.sc -side left -padx 4; pack $m.sf.hi -side left
+    ttk::checkbutton $m.sa -text "Automatic for this computer ([dict get $::speednames $autospeed])" -variable ::cud(speedauto) -command cud_speed
+    ttk::label $m.sw -style Dim.TLabel
+    grid $m.info -row 0 -column 0 -columnspan 2 -sticky w -pady {0 6}
+    grid $m.hl -row 1 -column 0 -sticky w -padx {0 8}; grid $m.hc -row 1 -column 1 -sticky w
+    grid $m.hn -row 2 -column 0 -columnspan 2 -sticky w -pady {2 8}
+    grid $m.sl -row 3 -column 0 -sticky w; grid $m.sf -row 3 -column 1 -sticky w
+    grid $m.sa -row 4 -column 1 -sticky w -pady {2 0}
+    grid $m.sw -row 5 -column 0 -columnspan 2 -sticky w -pady {4 0}
+    cud_speed
+}
+proc cud_speed {} {
+    set m .cud.f.mem
+    if {$::cud(speedauto)} { set ::cud(speed) $::cud(autospeed); $m.sf.sc state disabled } else { $m.sf.sc state !disabled }
+    set lv [expr {max(1, min(4, round($::cud(speed))))}]
+    $m.sw configure -text "[dict get $::speednames $lv]: [dict get $::speedwhat $lv]. Changes at once."
 }
 proc cud_bggray {v} {
     set g [expr {max(0, min(255, round($v)))}]
@@ -3528,6 +3580,12 @@ proc cud_done {ok} {
     if {$ok} {
         set ::cud(result) [join [list OK [cud_int size 1 100] [cud_color] [cud_int pick 0 50] [cud_int ap 1 50] \
                                      [cud_int snap 1 20] [cud_int grip 1 20] [expr {$::cud(roll) ? 1 : 0}] $::cud(bg) [cud_paint]] " "]
+        if {[winfo exists .cud.f.mem]} {
+            # memory: auto or MB; speed: 0 automatic, 1-4
+            set i [lsearch -exact [.cud.f.mem.hc cget -values] [.cud.f.mem.hc get]]
+            set heap [expr {$i <= 0 ? "auto" : [lindex $::cud(heapmb) $i-1]}]
+            append ::cud(result) " $heap [expr {$::cud(speedauto) ? 0 : $::cud(speed)}]"
+        }
     }
     destroy .cud
 }

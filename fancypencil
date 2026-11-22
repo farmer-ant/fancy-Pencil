@@ -24,8 +24,20 @@ done
 if [ -n "$NEWFONTS" ] && command -v fc-cache >/dev/null 2>&1; then
     fc-cache -f "$FONTDEST" >/dev/null 2>&1
 fi
-# memory for big models (solids with many faces): half the computer's memory, from 2 GB up to 16 GB
-# (it is only reserved, not used, until needed)
-HEAP=$(awk '/MemTotal/ { m = int($2 / 1024 / 2); if (m < 2048) m = 2048; if (m > 16384) m = 16384; print m }' /proc/meminfo 2>/dev/null)
-[ -n "$HEAP" ] || HEAP=4096
+# the most memory Fancy Pencil may use (Options > Memory and speed, kept in memory.conf): Automatic
+# is half the computer's memory, at least 2 GB; a size chosen there is used as it is, up to four
+# fifths of the memory. It is only reserved, not used, until a big model needs it.
+# FANCYPENCIL_HEAP=<MB> overrides both.
+RAM=$(awk '/MemTotal/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null)
+[ -n "$RAM" ] || RAM=8192
+HEAP=${FANCYPENCIL_HEAP:-$(sed -n 's/^heap=\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$HOME/.config/fancypencil/memory.conf" 2>/dev/null | head -n 1)}
+if [ -z "$HEAP" ]; then
+    HEAP=$((RAM / 2))
+    [ "$HEAP" -ge 2048 ] || HEAP=2048
+else
+    MAXHEAP=$((RAM * 4 / 5))
+    [ "$MAXHEAP" -ge 2048 ] || MAXHEAP=2048
+    [ "$HEAP" -le "$MAXHEAP" ] || HEAP=$MAXHEAP
+    [ "$HEAP" -ge 1024 ] || HEAP=1024
+fi
 exec sbcl --dynamic-space-size "$HEAP" --noinform --disable-debugger --load "$DIR/load.lisp" --eval '(fancy-pencil:main)' --end-toplevel-options "$@"

@@ -187,6 +187,7 @@ AutoCAD menu macros: \"MVIEW 4 Standard\" answers two prompts)."
           (quit-program)))
       (setf *ui* :tty *output-fn* (lambda (s) (write-string s) (force-output) s)))
   (load-aliases)
+  (ignore-errors (apply-speed))            ; Options > Memory and speed
   (when gui (load-prefs) (apply-background) (load-recent) (refresh-recent-menu) (send-view-picker))
   (out (banner))
   (current-doc)

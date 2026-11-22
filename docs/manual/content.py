@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.5.28"
+VERSION = "0.5.29"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -759,10 +759,15 @@ ch(
 ("p", "**Tools > Command Aliases > Edit Aliases...** (`ALIASEDIT`) changes the short names: `L` for LINE, "
       "your own for your AutoLISP commands. Your aliases are kept in `~/.config/fancypencil/fancypencil.pgp`, in "
       "AutoCAD's acad.pgp format."),
-("h2", "Cursor, selection and background"),
-("p", "**OPTIONS** (`OP`, Tools > Cursor, Selection & Background): crosshair size and color, pickbox, snap "
+("h2", "Options: cursor, background, memory and speed"),
+("p", "**OPTIONS** (`OP`, Tools > Options): crosshair size and color, pickbox, snap "
       "marker and grip sizes, rollover tips, and the drawing background (dark, black, gray, paper, white or "
       "any color). These settings are yours: they apply in every drawing and are remembered."),
+("p", "**Memory and speed**, at the bottom of the same window (or `MEMORY` on the command line):"),
+("ul", [
+ "**Most memory Fancy Pencil may use**: **Automatic** is half of the computer's memory (32 GB on a 64 GB computer), or choose a size up to four fifths of it. It is a ceiling, not a reservation: memory is only taken when a big model needs it. It takes effect the next time Fancy Pencil starts.",
+ "**Speed**: how much work Fancy Pencil does between clean-ups of memory it no longer needs. **Light** cleans up often and uses the least memory; **Fastest** cleans up rarely, so big jobs don't pause for it, and uses more memory. **Automatic for this computer** picks one from how much memory the computer has. It changes at once.",
+]),
 )
 
 # ------------------------------------------------------------------ 17
