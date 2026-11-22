@@ -172,6 +172,15 @@ DXF name instead and never touches the DWG.
 Any `acaddoc.lsp` or `fancypencil.lsp` in the current directory, and `~/.fancypencil.lsp`, are loaded
 at startup, and `S::STARTUP` is called if defined, just like AutoCAD.
 
+### A dedicated workstation (support/workstation)
+
+`support/workstation/setup-workstation.sh` (run with `sudo sh`) turns an Ubuntu computer into a
+**Fancy Pencil Workstation**: a GRUB menu entry that starts straight into Fancy Pencil, full screen
+in the `cage` kiosk display server, logged in as a `fancypencil` user, with no desktop. File gets
+**Restart Computer** and **Shut Down**; USB sticks are mounted when plugged in; the normal Ubuntu entry
+still starts the desktop. `--default` makes the workstation the first choice; `--remove` takes it out.
+See `support/workstation/README.md`.
+
 ### Updating
 
 **File > Check for Updates...** (`UPDATE`) compares this copy with the version on GitHub's `main`

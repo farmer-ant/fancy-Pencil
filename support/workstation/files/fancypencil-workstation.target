@@ -1,0 +1,10 @@
+# Fancy Pencil Workstation: the computer starts straight into Fancy Pencil, with no desktop.
+# Chosen from the GRUB menu ("Fancy Pencil Workstation" adds systemd.unit=fancypencil-workstation.target);
+# the normal "Ubuntu" entry still starts the desktop.
+[Unit]
+Description=Fancy Pencil Workstation (Fancy Pencil instead of a desktop)
+Requires=multi-user.target
+Wants=fancypencil-workstation.service
+After=multi-user.target
+Conflicts=rescue.service rescue.target display-manager.service
+AllowIsolate=yes

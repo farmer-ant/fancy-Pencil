@@ -1,0 +1,12 @@
+#!/bin/sh
+# Fancy Pencil Workstation: starts the cage kiosk compositor with the system's keyboard layout.
+# Run by fancypencil-workstation.service as the fancypencil user.
+if [ -r /etc/default/keyboard ]; then . /etc/default/keyboard; fi
+export XKB_DEFAULT_LAYOUT="${XKBLAYOUT:-us}"
+export XKB_DEFAULT_MODEL="${XKBMODEL:-pc105}"
+[ -n "$XKBVARIANT" ] && export XKB_DEFAULT_VARIANT="$XKBVARIANT"
+[ -n "$XKBOPTIONS" ] && export XKB_DEFAULT_OPTIONS="$XKBOPTIONS"
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=FancyPencil
+# -s: Ctrl+Alt+F1...F12 switch screens (Ctrl+Alt+F3: a text login for maintenance)
+exec cage -s -- /usr/local/lib/fancypencil-workstation/session

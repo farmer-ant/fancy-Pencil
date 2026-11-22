@@ -76,6 +76,15 @@
   (chk "launcher: a size" (launcher-heap (format nil "heap=2048~%speed=3~%")) 2048)
   (chk "launcher: too big is lowered" (launcher-heap (format nil "heap=999999~%")) (max 2048 (floor (* ram 4) 5))))
 
+;; the Fancy Pencil Workstation's Shut Down and Restart Computer: "No" changes nothing
+(chk "not a workstation here" (workstation-p) nil)
+(setf *said* nil) (al "(command \"shutdown\" \"No\")")
+(chk "Shut Down asks first" (said "Shut down the computer?") t)
+(chk "  ...No: nothing happens" (said "Shutting down") nil)
+(setf *said* nil) (al "(command \"restartcomputer\" \"No\")")
+(chk "Restart Computer asks first" (said "Restart the computer?") t)
+(chk "  ...No: nothing happens" (said "Restarting") nil)
+
 (sb-posix:setenv "HOME" *real-home* 1)
 (format t "~%Memory tests: ~D passed, ~D failed.~%" *pass* *fail*)
 (sb-ext:exit :code (if (zerop *fail*) 0 1))

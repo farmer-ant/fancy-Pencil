@@ -1,0 +1,15 @@
+#!/bin/sh
+# Fancy Pencil Workstation: what runs inside cage. Fancy Pencil fills the screen; File has
+# Restart Computer and Shut Down. USB sticks are mounted when plugged in, under /media/fancypencil/.
+export FANCYPENCIL_WORKSTATION=1
+mkdir -p "$HOME/Drawings"
+cd "$HOME/Drawings" || cd "$HOME"
+UD=
+if command -v udiskie >/dev/null 2>&1; then
+    udiskie --automount --no-notify --no-tray >/dev/null 2>&1 &
+    UD=$!
+fi
+/usr/bin/fancypencil
+status=$?
+[ -n "$UD" ] && kill "$UD" 2>/dev/null
+exit $status

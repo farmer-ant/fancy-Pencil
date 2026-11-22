@@ -1,0 +1,49 @@
+#!/bin/sh
+# GRUB menu entry "Fancy Pencil Workstation": Ubuntu's newest kernel, starting systemd's
+# fancypencil-workstation.target instead of the desktop. Installed in /etc/grub.d/ by
+# setup-workstation.sh; update-grub runs it (also after every kernel update).
+set -e
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+. "${pkgdatadir:-/usr/share/grub}/grub-mkconfig_lib"
+
+bootdir=${FANCYPENCIL_GRUB_BOOTDIR:-/boot}
+linux=$(ls -1 "$bootdir"/vmlinuz-* 2>/dev/null | grep -v '\.old$' | sort -V | tail -n 1)
+if [ -z "$linux" ]; then
+    echo "Fancy Pencil Workstation: no kernel found in $bootdir, so no menu entry" >&2
+    exit 0
+fi
+version=${linux#"$bootdir"/vmlinuz-}
+initrd=
+for i in "$bootdir/initrd.img-$version" "$bootdir/initrd-$version.img"; do
+    if [ -e "$i" ]; then initrd=$i; break; fi
+done
+
+# the root file system, as Ubuntu's own entry (10_linux) names it
+if [ "x${GRUB_DEVICE_UUID}" = "x" ] || [ "x${GRUB_DISABLE_LINUX_UUID}" = "xtrue" ] \
+   || ! test -e "/dev/disk/by-uuid/${GRUB_DEVICE_UUID}" \
+   || uses_abstraction "${GRUB_DEVICE}" lvm; then
+    root_device=${GRUB_DEVICE}
+else
+    root_device=UUID=${GRUB_DEVICE_UUID}
+fi
+cmdline="${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+if [ "x${GRUB_FS}" = "xbtrfs" ]; then
+    subvol=$(make_system_path_relative_to_its_root /)
+    subvol=${subvol#/}
+    [ -n "$subvol" ] && cmdline="rootflags=subvol=${subvol} ${cmdline}"
+fi
+
+echo "Found Fancy Pencil Workstation: $linux" >&2
+echo "menuentry 'Fancy Pencil Workstation' --class fancypencil --class ubuntu --class gnu-linux --class os \$menuentry_id_option 'fancypencil-workstation' {"
+echo "	set gfxpayload=keep"
+echo "	insmod gzio"
+prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | sed -e 's/^/	/'
+echo "	echo 'Starting Fancy Pencil Workstation...'"
+echo "	linux	$(make_system_path_relative_to_its_root "$linux") root=${root_device} ro ${cmdline} systemd.unit=fancypencil-workstation.target"
+if [ -n "$initrd" ]; then
+    echo "	initrd	$(make_system_path_relative_to_its_root "$initrd")"
+fi
+echo "}"

@@ -146,12 +146,12 @@ T and the backup's name, or (values NIL reason)."
           (values nil (format nil "Copying the new files failed part way.~%~A~%The old version is saved in ~A~%~
 To put it back: tar xzf ~A -C ~A" (last-lines text 3) backup (shell-quote backup) (shell-quote (namestring root))))))))
 
-(defun ask-yes (msg)
+(defun ask-yes (msg &optional (prompt "Install it?"))
   "Yes/No question: a message box in the window, a prompt on the command line."
   (if (and (gui-p) (not (from-lisp-p)))
       (equal (gui-confirm msg) "yes")
       (progn (out (format nil "~A~%" msg))
-             (equal (gkw "Install it? [Yes/No] <Yes>: " '("Yes" "No") "Yes") "Yes"))))
+             (equal (gkw (format nil "~A [Yes/No] <Yes>: " prompt) '("Yes" "No") "Yes") "Yes"))))
 
 (defun update-with-tarball (tarball &key (where "this file"))
   "Unpacks and checks TARBALL, asks, and installs it over this copy."

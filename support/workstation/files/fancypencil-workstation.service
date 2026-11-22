@@ -1,0 +1,28 @@
+# Fancy Pencil, full screen on the first screen (tty1), in the cage kiosk compositor, as the
+# "fancypencil" user, logged in automatically. If Fancy Pencil is closed, it starts again.
+# Ctrl+Alt+F3 gives a text login for maintenance; Ctrl+Alt+F1 comes back.
+[Unit]
+Description=Fancy Pencil Workstation session on tty1
+After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service
+After=dbus.socket systemd-logind.service
+Wants=dbus.socket systemd-logind.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/dev/tty0
+
+[Service]
+Type=simple
+User=fancypencil
+WorkingDirectory=~
+PAMName=fancypencil-workstation
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+ExecStart=/usr/local/lib/fancypencil-workstation/start
+Restart=always
+RestartSec=2

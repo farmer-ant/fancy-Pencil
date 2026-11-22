@@ -151,3 +151,27 @@ Speed: ~A~A.~%"
           (if (set-memory new-heap new-speed)
               (out (format nil "Saved. The memory limit changes the next time Fancy Pencil starts; the speed has changed now.~%"))
               (out (format nil "Saved. The speed has changed now.~%"))))))))
+
+;;; The Fancy Pencil Workstation (support/workstation): the computer starts straight into Fancy
+;;; Pencil, with no desktop, so shutting down and restarting are on Fancy Pencil's File menu.
+
+(defun workstation-p ()
+  "True in the Fancy Pencil Workstation session (FANCYPENCIL_WORKSTATION=1)."
+  (equal (getenv "FANCYPENCIL_WORKSTATION") "1"))
+
+(defun power-off (how)
+  "Offers to save the changed drawings, then shuts the computer down (:poweroff) or restarts it (:reboot)."
+  (when (quit-all-docs)
+    (ignore-errors (funcall 'autosave-forget-all))
+    (out (format nil "~:[Restarting~;Shutting down~] the computer...~%" (eq how :poweroff)))
+    (run-shell (format nil "systemctl ~(~A~)" how))))
+
+(defcmd "SHUTDOWN" ("POWEROFF")
+    "Shuts the computer down, offering to save changed drawings first (File > Shut Down on a Fancy Pencil Workstation)."
+  (when (ask-yes "Shut down the computer?" "Shut down?")
+    (power-off :poweroff)))
+
+(defcmd "RESTARTCOMPUTER" ("REBOOT")
+    "Restarts the computer, offering to save changed drawings first (File > Restart Computer on a Fancy Pencil Workstation)."
+  (when (ask-yes (format nil "Restart the computer?~%~%(Choose Ubuntu in the menu that appears to get the desktop.)") "Restart?")
+    (power-off :reboot)))

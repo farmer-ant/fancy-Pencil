@@ -165,6 +165,12 @@ mcmd .mb.file "Check for Updates..." UPDATE
 mcmd .mb.file "Update from File..." UPDATEFILE
 mcmd .mb.file "Snap Store Page..." SNAPSTORE
 .mb.file add separator
+# a Fancy Pencil Workstation has no desktop: the computer is shut down and restarted from here
+if {[info exists ::env(FANCYPENCIL_WORKSTATION)] && $::env(FANCYPENCIL_WORKSTATION) eq "1"} {
+    mcmd .mb.file "Restart Computer..." RESTARTCOMPUTER
+    mcmd .mb.file "Shut Down..." SHUTDOWN
+    .mb.file add separator
+}
 mcmd .mb.file "Exit" QUIT
 
 mcmd .mb.edit "Undo" U Ctrl+Z
