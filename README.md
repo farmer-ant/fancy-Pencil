@@ -176,7 +176,7 @@ at startup, and `S::STARTUP` is called if defined, just like AutoCAD.
 
 `support/workstation/setup-workstation.sh` (run with `sudo sh`) turns an Ubuntu computer into a
 **Fancy Pencil Workstation**: a GRUB menu entry that starts straight into Fancy Pencil, full screen
-in the `cage` kiosk display server, logged in as a `fancypencil` user, with no desktop. File gets
+on Xorg with Openbox set up as a kiosk (or the `cage` Wayland kiosk with `--cage`), logged in as a `fancypencil` user, with no desktop. File gets
 **Restart Computer** and **Shut Down**; USB sticks are mounted when plugged in; the normal Ubuntu entry
 still starts the desktop. `--default` makes the workstation the first choice; `--remove` takes it out.
 See `support/workstation/README.md`.

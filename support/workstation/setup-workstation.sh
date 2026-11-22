@@ -5,11 +5,13 @@
 #   sudo sh setup-workstation.sh --default  ... and make "Fancy Pencil Workstation" the first choice
 #   sudo sh setup-workstation.sh --remove   take it all out again (the fancypencil user and its
 #                                           drawings are kept)
+#   sudo sh setup-workstation.sh --cage     use the cage Wayland kiosk instead of Xorg + Openbox
 #
 # What it does:
 #   - installs Fancy Pencil (Install Fancy Pencil.deb beside this script, unless it is installed),
 #     and the ODA File Converter for .dwg files if its .deb or AppImage is beside this script
-#   - installs cage (a "one program, full screen" display server), Xwayland and udiskie (USB sticks)
+#   - installs Xorg and Openbox (set up as a kiosk: Fancy Pencil fills the screen, its dialogs on
+#     top), and udiskie (USB sticks); or, with --cage, the cage Wayland kiosk and Xwayland
 #   - makes a user "fancypencil" that is logged in automatically, with ~/Drawings, and lets
 #     Fancy Pencil use four fifths of the computer's memory
 #   - adds the GRUB menu entry "Fancy Pencil Workstation" and shows the menu for 5 seconds at start-up
@@ -32,13 +34,15 @@ if [ ! -d /etc/grub.d ] || [ ! -f /etc/default/grub ] || ! command -v update-gru
     die "this computer doesn't start with GRUB (no /etc/grub.d, /etc/default/grub or update-grub), so nothing was changed"
 fi
 
-mode=install; make_default=no
+mode=install; make_default=no; display=x11
 for a in "$@"; do
     case "$a" in
         --remove) mode=remove ;;
         --default) make_default=yes ;;
+        --cage) display=cage ;;
+        --x11) display=x11 ;;
         -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
-        *) die "unknown option $a (use --default or --remove)" ;;
+        *) die "unknown option $a (use --default, --cage or --remove)" ;;
     esac
 done
 
@@ -56,7 +60,7 @@ if [ "$mode" = remove ]; then
     if [ -f "$backup" ]; then cp "$backup" /etc/default/grub && rm -f "$backup"; fi
     update-grub
     rm -f /etc/systemd/system/fancypencil-workstation.service /etc/systemd/system/fancypencil-workstation.target
-    rm -f /etc/pam.d/fancypencil-workstation
+    rm -f /etc/pam.d/fancypencil-workstation /etc/fancypencil-workstation.conf
     rm -rf "$lib"
     systemctl daemon-reload
     say "Done. The GRUB menu is as it was. The user '$user' and /home/$user (its drawings) are still there;"
@@ -82,9 +86,14 @@ else
     die "put 'Install Fancy Pencil.deb' beside this script (or install it first)"
 fi
 
-# 2. cage, Xwayland, udiskie
-say "Installing cage (the full-screen display server), Xwayland and udiskie (USB sticks)"
-apt-get install -y cage xwayland udiskie
+# 2. the display: Xorg + Openbox (default) or cage; udiskie for USB sticks
+if [ "$display" = cage ]; then
+    say "Installing cage (a full-screen Wayland display server), Xwayland and udiskie (USB sticks)"
+    apt-get install -y cage xwayland udiskie
+else
+    say "Installing Xorg, Openbox (the window manager, set up as a kiosk) and udiskie (USB sticks)"
+    apt-get install -y xserver-xorg xinit x11-xserver-utils openbox udiskie
+fi
 
 # 3. ODA File Converter (.dwg), if it came along
 oda=$(ls "$here"/ODAFileConverter*.deb "$here"/../ODAFileConverter*.deb 2>/dev/null | head -n 1 || true)
@@ -125,7 +134,10 @@ chown -R "$user:$user" "$home/Drawings" "$home/.config"
 # 5. the session
 say "Installing the workstation session"
 install -d "$lib"
-install -m 755 "$files/start" "$files/session" "$lib/"
+install -m 755 "$files/start" "$files/session" "$files/xsession" "$lib/"
+install -m 644 "$files/openbox-rc.xml" "$lib/"
+printf '# Fancy Pencil Workstation (setup-workstation.sh): x11 (Xorg + Openbox) or cage\nDISPLAY_SERVER=%s\n' "$display" \
+    > /etc/fancypencil-workstation.conf
 install -m 644 "$files/fancypencil-workstation.service" "$files/fancypencil-workstation.target" /etc/systemd/system/
 install -m 644 "$files/pam-fancypencil-workstation" /etc/pam.d/fancypencil-workstation
 systemctl daemon-reload
@@ -140,7 +152,7 @@ set_grub GRUB_RECORDFAIL_TIMEOUT 5
 if [ "$make_default" = yes ]; then set_grub GRUB_DEFAULT fancypencil-workstation; fi
 update-grub
 
-say "Done."
+say "Done. (Display: $([ "$display" = cage ] && echo 'cage, Wayland' || echo 'Xorg with Openbox'))"
 echo "   Restart the computer. The GRUB menu shows for 5 seconds:"
 echo "     Ubuntu                     - the desktop, as before"
 echo "     Fancy Pencil Workstation   - straight into Fancy Pencil (File > Shut Down / Restart Computer)"

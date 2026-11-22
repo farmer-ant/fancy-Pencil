@@ -1,0 +1,11 @@
+#!/bin/sh
+# Fancy Pencil Workstation, X11 mode: what xinit runs on the Xorg display. Openbox (set up as a
+# kiosk: no desktop menu, the main window maximized without borders, dialogs on top) manages the
+# windows; when Fancy Pencil ends, so does this session (and the service starts it again).
+lib=/usr/local/lib/fancypencil-workstation
+xset s off -dpms 2>/dev/null || true           # no screen blanking
+if command -v openbox >/dev/null 2>&1; then
+    openbox --config-file "$lib/openbox-rc.xml" &
+    sleep 0.5
+fi
+exec "$lib/session"

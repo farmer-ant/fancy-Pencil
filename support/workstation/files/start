@@ -1,12 +1,22 @@
 #!/bin/sh
-# Fancy Pencil Workstation: starts the cage kiosk compositor with the system's keyboard layout.
-# Run by fancypencil-workstation.service as the fancypencil user.
+# Fancy Pencil Workstation: starts the display - Xorg with Openbox (the default) or the cage
+# kiosk compositor - for the fancypencil user. Run by fancypencil-workstation.service.
 if [ -r /etc/default/keyboard ]; then . /etc/default/keyboard; fi
 export XKB_DEFAULT_LAYOUT="${XKBLAYOUT:-us}"
 export XKB_DEFAULT_MODEL="${XKBMODEL:-pc105}"
 [ -n "$XKBVARIANT" ] && export XKB_DEFAULT_VARIANT="$XKBVARIANT"
 [ -n "$XKBOPTIONS" ] && export XKB_DEFAULT_OPTIONS="$XKBOPTIONS"
-export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=FancyPencil
-# -s: Ctrl+Alt+F1...F12 switch screens (Ctrl+Alt+F3: a text login for maintenance)
-exec cage -s -- /usr/local/lib/fancypencil-workstation/session
+lib=/usr/local/lib/fancypencil-workstation
+# x11 (Xorg + Openbox, the default) or cage (Wayland), as setup-workstation.sh chose
+mode=x11
+[ -r /etc/fancypencil-workstation.conf ] && . /etc/fancypencil-workstation.conf
+[ -n "$DISPLAY_SERVER" ] && mode=$DISPLAY_SERVER
+if [ "$mode" = cage ]; then
+    export XDG_SESSION_TYPE=wayland
+    # -s: Ctrl+Alt+F1...F12 switch screens (Ctrl+Alt+F3: a text login for maintenance)
+    exec cage -s -- "$lib/session"
+fi
+export XDG_SESSION_TYPE=x11
+# Xorg on this screen (tty1), started for this logged-in user; -keeptty keeps the session's terminal
+exec xinit "$lib/xsession" -- /usr/bin/Xorg :0 "vt${XDG_VTNR:-1}" -keeptty -nolisten tcp -noreset

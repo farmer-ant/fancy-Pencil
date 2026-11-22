@@ -31,6 +31,9 @@ On the workstation, Fancy Pencil's **File** menu has **Restart Computer** and **
 
        sudo sh setup-workstation.sh --default
 
+   (Running it again is safe: it updates what's there. `--cage` uses the cage Wayland kiosk
+   instead of Xorg + Openbox.)
+
    (Use `sudo sh ...`: a USB stick doesn't keep the "may run" mark on files.)
 4. Restart, and choose **Fancy Pencil Workstation** in the menu (it shows for 5 seconds).
 
@@ -56,8 +59,15 @@ its drawings are kept (`sudo deluser --remove-home fancypencil` deletes them).
 - `fancypencil-workstation.target`: a systemd target like the desktop's `graphical.target`, without
   the login screen; the GRUB entry starts the computer with `systemd.unit=fancypencil-workstation.target`.
 - `fancypencil-workstation.service`: logs the `fancypencil` user in on the first screen (tty1)
-  and runs `cage`, a Wayland display server that shows one program full screen; Fancy Pencil (Tk,
-  an X11 program) runs in it through Xwayland. `udiskie` mounts USB sticks.
+  and starts the display (`start`, as `/etc/fancypencil-workstation.conf` says):
+  - **x11** (the default): Xorg with Openbox as a kiosk window manager (`xsession`,
+    `openbox-rc.xml`): no desktop menu or window-manager keys, Fancy Pencil's main window maximized
+    without borders, dialogs on top with a title bar to move them by. Fancy Pencil is a Tk (X11)
+    program, and this is the setting Tk is made for.
+  - **cage** (`--cage`): a Wayland display server that shows one program full screen; Fancy Pencil
+    runs in it through Xwayland. The first trial of 0.5.30 froze when Options opened there; 0.5.31
+    no longer waits for a dialog to be reported visible, and never grabs one that isn't.
+  `udiskie` mounts USB sticks.
 - `41_fancypencil-workstation` in `/etc/grub.d/`: makes the menu entry from the newest kernel each
   time `update-grub` runs (Ubuntu runs it after every kernel update). The old `/etc/default/grub` is
   kept as `/etc/default/grub.before-fancypencil-workstation`.

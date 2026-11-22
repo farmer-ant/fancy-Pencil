@@ -1279,8 +1279,21 @@ proc dlg_owner {w} {
 }
 proc safegrab {w} {
     if {![winfo exists $w]} return
-    if {![winfo viewable $w]} { catch {tkwait visibility $w} }
+    # wait for it to show - but only a second: with no window manager (the Fancy Pencil
+    # Workstation's cage, through Xwayland) the "now visible" news may never come, and waiting
+    # for it (tkwait visibility) froze Fancy Pencil with the dialog holding mouse and keyboard
+    for {set i 0} {$i < 20 && [winfo exists $w] && ![winfo viewable $w]} {incr i} {
+        after 50 {set ::safegrab_tick 1}
+        vwait ::safegrab_tick
+    }
+    if {![winfo exists $w]} return
     catch {raise $w}
+    if {![winfo viewable $w]} {
+        # still not on screen: never hold mouse and keyboard for a window nobody can see;
+        # take them when it does appear
+        bind $w <Map> [list apply {{w} { bind $w <Map> {}; catch {focus $w}; catch {grab $w} }} $w]
+        return
+    }
     catch {focus $w}
     if {[catch {grab $w}]} {
         # refused (e.g. a mouse button is still held): try again shortly
