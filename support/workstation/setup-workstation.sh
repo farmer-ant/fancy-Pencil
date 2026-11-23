@@ -92,7 +92,7 @@ if [ "$display" = cage ]; then
     apt-get install -y cage xwayland udiskie
 else
     say "Installing Xorg, Openbox (the window manager, set up as a kiosk) and udiskie (USB sticks)"
-    apt-get install -y xserver-xorg xinit x11-xserver-utils openbox udiskie
+    apt-get install -y xserver-xorg xinit x11-xserver-utils x11-utils openbox udiskie
 fi
 
 # 3. ODA File Converter (.dwg), if it came along
