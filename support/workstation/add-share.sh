@@ -5,6 +5,7 @@
 #   sudo sh add-share.sh //10.0.0.20/drawings          connect it (asks the user name and password)
 #   sudo sh add-share.sh //10.0.0.20/drawings shop     ... and call it "shop"
 #   sudo sh add-share.sh --guest //nas/public          a share that needs no password
+#   sudo sh add-share.sh --anyway //10.0.0.20/drawings set it up even though that computer is off now
 #   sudo sh add-share.sh --list                        the shares connected here
 #   sudo sh add-share.sh --remove shop                 disconnect one
 #
@@ -35,9 +36,9 @@ remove_entry() {  # remove_entry NAME: our two fstab lines for NAME
 }
 unit_of() { systemd-escape --path --suffix="$2" "/mnt/$1" 2>/dev/null || echo "mnt-$1.$2"; }
 
-guest=no
+guest=no; anyway=no
 case "${1:-}" in
-    ""|-h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    ""|-h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     --list) echo "Network shares (add-share.sh):"; list_shares; exit 0 ;;
     --remove)
         [ -n "${2:-}" ] || die "which one?  sudo sh $0 --remove NAME   (see --list)"
@@ -52,7 +53,9 @@ case "${1:-}" in
         say "$n is disconnected. (Nothing on the other computer was changed.)"
         exit 0 ;;
     --guest) guest=yes; shift ;;
+    --anyway) anyway=yes; shift ;;
 esac
+case "${1:-}" in --guest) guest=yes; shift ;; --anyway) anyway=yes; shift ;; esac
 
 # //server/share, smb://server/share or \\server\share
 addr=$(printf '%s' "${1:-}" | sed -e 's|^smb:||' -e 's|\\|/|g' -e 's|/*$||')
@@ -64,6 +67,24 @@ server=$(printf '%s' "$addr" | cut -d/ -f3)
 share=$(printf '%s' "$addr" | cut -d/ -f4-)
 name=$(clean_name "${2:-$(basename "$share")}")
 [ -n "$name" ] || die "no name for it: add one, like  sudo sh $0 $1 drawings"
+
+# is the computer there? (before asking for a password)
+case "$server" in
+    ADDRESS|COMPUTER|SERVER|*\<*|*\>*)
+        die "\"$server\" stands for the other computer's address: put that in, like //10.0.0.31/$share
+   (on that computer, share-folder.sh prints it; in a terminal there,  hostname -I  shows it)" ;;
+esac
+if ! getent hosts "$server" >/dev/null 2>&1 && ! getent ahosts "$server" >/dev/null 2>&1; then
+    [ "$anyway" = yes ] || die "no computer called \"$server\" can be found. Check the address (like 10.0.0.31);
+   on the other computer  hostname -I  shows it."
+fi
+if [ "$anyway" = no ] && command -v bash >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+    if ! timeout 6 bash -c 'exec 3<>"/dev/tcp/$1/445"' sh "$server" 2>/dev/null; then
+        die "$server doesn't answer for shared folders (Samba, port 445). Is it switched on, and is the folder
+   shared there (sudo sh share-folder.sh --list)? A firewall can also be in the way.
+   To set it up anyway (it connects when it can):  sudo sh $0 --anyway $*"
+    fi
+fi
 
 # who the files belong to here: the workstation's user, else the one running sudo
 if id fancypencil >/dev/null 2>&1; then owner=fancypencil; else owner=${SUDO_USER:-root}; fi

@@ -71,10 +71,13 @@ File > Open and Save As under **Network**.
 
        sudo sh add-share.sh //10.0.0.31/drawings
 
-   with the address step 1 printed. It asks for the user name and Samba password, keeps them
+   with the address step 1 printed (on that computer, `hostname -I` shows it too). It checks that
+   the computer answers, then asks for the user name - your login name on that computer, the
+   account that ran share-folder.sh - and the Samba password, keeps them
    readable by root only, and connects the share as `/mnt/drawings`. It is connected when it is
    first opened, so the workstation starts even when the other computer is off, and it comes back
-   after every restart. `--guest` is for shares without a password; `--list` and `--remove NAME`.
+   after every restart. `--guest` is for shares without a password, `--anyway` sets one up while the other computer
+   is off; `--list` and `--remove NAME`.
 
 On an ordinary Ubuntu desktop, a share opened in the Files window (Other Locations, then
 `smb://10.0.0.31/drawings`) shows under Network in Fancy Pencil too.
