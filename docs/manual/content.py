@@ -4,7 +4,7 @@
 # ("callouts", file, width_in, [(x_px, y_px, n)...], caption); ("break",) new page.
 # Inline: **bold**, `mono` (commands, keys, things you type).
 
-VERSION = "0.5.32"
+VERSION = "0.5.33"
 
 CHAPTERS = []
 def ch(*blocks): CHAPTERS.append(list(blocks))
@@ -83,8 +83,23 @@ ch(
  "**Snap Store Page** (File menu, or `SNAPSTORE`): opens Fancy Pencil's page in the Snap Store, `https://snapcraft.io/fancypencil`. The Snap Store edition installs with `sudo snap install fancypencil` and keeps itself up to date (`snap refresh fancypencil` updates it now); it opens and saves DXF only.",
  "**Update by hand**: double-click a newer Install Fancy Pencil.deb and click **Install** (or **Update**). Your settings, toolbars and drawings are kept.",
  "**Remove**: in App Center, **Manage**, find fancypencil and remove it; or type `sudo apt remove fancypencil`.",
- "**Your settings** live in the hidden folder `~/.config/fancypencil`: preferences, recent files, aliases, toolbars and plot settings. Copy it to another computer to bring them along.",
+ "**Your settings** live in the hidden folder `~/.config/fancypencil`: preferences, recent files, aliases, toolbars and plot settings.",
 ]),
+("h2", "Your settings on another computer"),
+("p", "**File > Save My Settings...** (`EXPORTSETTINGS`) packs your own Fancy Pencil into one file, "
+      "`Fancy Pencil Settings <computer> <date>.tar.gz`: options and colors, command aliases, toolbars and "
+      "ribbon, plot settings, named views, your spelling words, fonts you added and `~/.fancypencil.lsp`. "
+      "Carry it on a USB stick (or keep it as a backup). On the other computer, **File > Load My Settings...** "
+      "(`IMPORTSETTINGS`) puts them in - the settings that computer had are saved first in "
+      "`~/.cache/fancypencil/backups` - and the next start shows all of them. Each computer keeps its own "
+      "memory setting and recent-files list. A new Fancy Pencil Workstation takes the file when it is put "
+      "beside `setup-workstation.sh`."),
+("h2", "Drawings on other computers (the network)"),
+("p", "The Open and Save As windows list shared folders under **Network**. On an Ubuntu desktop, open the share "
+      "once in the Files window (**Other Locations**, then type `smb://10.0.0.31/drawings` with the other "
+      "computer's address); it then shows in Fancy Pencil too. A Fancy Pencil Workstation connects shares for "
+      "good with `add-share.sh`, and `share-folder.sh` shares a folder from an Ubuntu computer; both are in "
+      "the Fancy Pencil Workstation folder, and its README explains them."),
 )
 
 # ------------------------------------------------------------------ 3

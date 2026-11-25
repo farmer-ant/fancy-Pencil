@@ -452,6 +452,8 @@ proc tbx_defaults {} {
     set ::tbx(d,modify) right; set ::tbx(line,modify) 0
 }
 proc tbx_save {} {
+    # File > Load My Settings put new files in: don't write this run's layout over them
+    if {[info exists ::settings_frozen]} return
     set out {}
     foreach n $::tbx_names {
         lappend out [list $n $::tbx(d,$n) $::tbx(line,$n) $::tbx(pos,$n) [expr {[info exists ::tbx(g,$n)] ? $::tbx(g,$n) : ""}] $::tbx(last,$n)]

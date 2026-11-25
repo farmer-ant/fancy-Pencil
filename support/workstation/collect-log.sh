@@ -36,6 +36,9 @@ for f in "$h/.local/share/xorg/Xorg.0.log" /var/log/Xorg.0.log; do
     echo "-- $f"
     grep -E "\(EE\)|\(WW\)|Adding input device|Using input driver|systemd-logind|connected|modeset\(|Fatal" "$f" | tail -n 100
 done
+echo; echo "== network shares (add-share.sh)"
+grep -A1 '^# fancypencil-share ' /etc/fstab 2>&1 | sed 's/credentials=[^,]*/credentials=(hidden)/'
+mount -t cifs,nfs,nfs4,autofs 2>&1 | sed 's/credentials=[^,]*/credentials=(hidden)/' | tail -n 20
 echo; echo "== safety copies"; ls -la "$h/.local/share/fancypencil/autosave/" 2>&1
 echo; echo "== memory"; free -m 2>&1; cat "$h/.config/fancypencil/memory.conf" 2>&1
 } > "$tmp" 2>&1

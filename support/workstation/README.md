@@ -14,6 +14,10 @@ On the workstation, Fancy Pencil's **File** menu has **Restart Computer** and **
 - A computer with Ubuntu (made for Ubuntu 26.04; 24.04 and Debian work the same way) that starts
   with GRUB, and an internet connection while setting up.
 - This folder: `setup-workstation.sh`, the `files` folder, and `Install Fancy Pencil.deb`.
+- Your own Fancy Pencil, if you like: on your computer, **File > Save My Settings...** and put the
+  `Fancy Pencil Settings ....tar.gz` it makes in this folder. The workstation then starts with
+  your options, colors, command aliases, toolbars, ribbon, plot settings, fonts and
+  `~/.fancypencil.lsp`.
 - For .dwg files: the ODA File Converter for Ubuntu (`ODAFileConverter_*.deb`), downloaded from
   https://www.opendesign.com/guestfiles/oda_file_converter and put in this folder. (Its licence
   doesn't let us include it.) Without it the workstation opens and saves .dxf.
@@ -44,13 +48,50 @@ On the workstation, Fancy Pencil's **File** menu has **Restart Computer** and **
   File > Open and Save As.
 - Fancy Pencil may use four fifths of the computer's memory (Tools > Options > Memory and speed).
 - File > Check for Updates works as usual.
+- Folders on other computers: see "Drawings on another computer" below.
 - **Maintenance:** Ctrl+Alt+F3 gives a text login (use your own account; Ctrl+Alt+F1 goes back to
   Fancy Pencil), or restart and choose **Ubuntu** for the desktop.
+
+## Drawings on another computer (network shares)
+
+A folder of drawings on another computer - your desktop, a shop file server, a Windows PC or a
+network drive (NAS) - can be opened and saved to from every workstation. It shows in Fancy Pencil's
+File > Open and Save As under **Network**.
+
+1. **On the computer that has the drawings** (if it isn't a file server or NAS already): copy
+   this folder there, open a terminal in it and share the folder:
+
+       sudo sh share-folder.sh "/run/media/jack/more/Fancy Pencil/drawings"
+
+   It installs Samba (Windows file sharing), shares the folder as `drawings` for your account,
+   asks you to choose a Samba password the first time, and prints the line for step 2, with this
+   computer's address. (`--list` shows what is shared, `--remove drawings` stops it.) A folder on a
+   plug-in drive like "more" is shared while that drive is opened, that is while you are logged in.
+2. **On each workstation** (Ctrl+Alt+F3 and your own login, or over ssh), from this folder:
+
+       sudo sh add-share.sh //10.0.0.31/drawings
+
+   with the address step 1 printed. It asks for the user name and Samba password, keeps them
+   readable by root only, and connects the share as `/mnt/drawings`. It is connected when it is
+   first opened, so the workstation starts even when the other computer is off, and it comes back
+   after every restart. `--guest` is for shares without a password; `--list` and `--remove NAME`.
+
+On an ordinary Ubuntu desktop, a share opened in the Files window (Other Locations, then
+`smb://10.0.0.31/drawings`) shows under Network in Fancy Pencil too.
+
+## Your own settings on other computers
+
+**File > Save My Settings...** packs your Fancy Pencil - options and colors, command aliases (.pgp),
+toolbars and ribbon layout, plot settings, named views, spelling words, fonts you added, and
+`~/.fancypencil.lsp` - into one `.tar.gz`. **File > Load My Settings...** on another computer puts
+them in (the settings it had are saved first in `~/.cache/fancypencil/backups/`), and the next
+start shows all of them. Each computer keeps its own memory setting and recent-files list. For a
+new workstation, put the file beside `setup-workstation.sh` (see above).
 
 ## When something is wrong
 
 `collect-log.sh` writes a report (the session, the windows on the screen, the logs of Fancy Pencil and
-Xorg). Run it while the problem shows: Ctrl+Alt+F3, log in with your own account, and
+Xorg, the network shares). Run it while the problem shows: Ctrl+Alt+F3, log in with your own account, and
 `sudo sh collect-log.sh` from this folder - or over SSH from another computer. The report is
 `workstation-report.txt` beside the script and in `/var/tmp`.
 

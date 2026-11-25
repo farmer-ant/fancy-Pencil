@@ -15,6 +15,9 @@
 #   - makes a user "fancypencil" that is logged in automatically, with ~/Drawings, and lets
 #     Fancy Pencil use four fifths of the computer's memory
 #   - adds the GRUB menu entry "Fancy Pencil Workstation" and shows the menu for 5 seconds at start-up
+#   - puts in your own settings if a "Fancy Pencil Settings ....tar.gz" (File > Save My Settings...)
+#     is beside this script
+# Network shares (a folder of drawings on another computer): add-share.sh, after this.
 # The normal "Ubuntu" entry is unchanged: it starts the desktop as before.
 set -e
 
@@ -41,7 +44,7 @@ for a in "$@"; do
         --default) make_default=yes ;;
         --cage) display=cage ;;
         --x11) display=x11 ;;
-        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
         *) die "unknown option $a (use --default, --cage or --remove)" ;;
     esac
 done
@@ -61,6 +64,9 @@ if [ "$mode" = remove ]; then
     update-grub
     rm -f /etc/systemd/system/fancypencil-workstation.service /etc/systemd/system/fancypencil-workstation.target
     rm -f /etc/pam.d/fancypencil-workstation /etc/fancypencil-workstation.conf
+    if grep -q '^# fancypencil-share ' /etc/fstab 2>/dev/null; then
+        echo "   (network shares connected with add-share.sh stay: sudo sh add-share.sh --list / --remove NAME)"
+    fi
     rm -rf "$lib"
     systemctl daemon-reload
     say "Done. The GRUB menu is as it was. The user '$user' and /home/$user (its drawings) are still there;"
@@ -129,7 +135,30 @@ if [ ! -f "$home/.config/fancypencil/memory.conf" ]; then
     printf '# Fancy Pencil memory settings (Options > Memory and speed)\nheap=%s\nspeed=0\n' "$((ram * 4 / 5))" \
         > "$home/.config/fancypencil/memory.conf"
 fi
+# your own Fancy Pencil (File > Save My Settings... on your computer), if its file came along
+settings=$(ls -t "$here"/*"Fancy Pencil Settings"*.tar.gz "$here"/../*"Fancy Pencil Settings"*.tar.gz 2>/dev/null | head -n 1 || true)
+stamp="$home/.config/fancypencil/.settings-from"
+if [ -n "$settings" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$(basename "$settings")" ]; then
+    echo "   (your settings from $(basename "$settings") are in already; a newer file is put in when it's here)"
+elif [ -n "$settings" ]; then
+    say "Putting in your settings from $(basename "$settings")"
+    t=$(mktemp -d)
+    # only Fancy Pencil's own files come out of it (not the other computer's memory setting)
+    tar tzf "$settings" 2>/dev/null | grep -E '^(\./)?(\.config/fancypencil/.*[^/]|\.fancypencil\.lsp)$' \
+        | grep -v -e '\.\./' -e '/memory\.conf$' -e '/recent\.lisp$' > "$t.list" || true
+    if [ -s "$t.list" ] && tar xzf "$settings" -C "$t" --no-same-owner --no-same-permissions -T "$t.list"; then
+        (cd "$t" && find . -type f) | while read -r f; do
+            install -D -m 644 "$t/$f" "$home/${f#./}"
+        done
+        basename "$settings" > "$stamp"
+        echo "   $(wc -l < "$t.list") files: options, aliases, toolbars, ribbon, plot settings, fonts..."
+    else
+        echo "   (couldn't read it - the workstation starts with Fancy Pencil's standard settings)"
+    fi
+    rm -rf "$t" "$t.list"
+fi
 chown -R "$user:$user" "$home/Drawings" "$home/.config"
+if [ -f "$home/.fancypencil.lsp" ]; then chown "$user:$user" "$home/.fancypencil.lsp"; fi
 
 # 5. the session
 say "Installing the workstation session"
@@ -158,5 +187,6 @@ echo "     Ubuntu                     - the desktop, as before"
 echo "     Fancy Pencil Workstation   - straight into Fancy Pencil (File > Shut Down / Restart Computer)"
 [ "$make_default" = yes ] && echo "   Fancy Pencil Workstation is the first choice."
 echo "   Drawings are kept in $home/Drawings; USB sticks appear under /media/$user/."
+echo "   Shared folders on the network:  sudo sh add-share.sh //COMPUTER/SHARE   (see README)"
 echo "   On the workstation, Ctrl+Alt+F3 gives a text login for maintenance (Ctrl+Alt+F1 goes back)."
 echo "   To take it out again:  sudo sh $0 --remove"

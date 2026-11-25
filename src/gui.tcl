@@ -165,6 +165,9 @@ mcmd .mb.file "Check for Updates..." UPDATE
 mcmd .mb.file "Update from File..." UPDATEFILE
 mcmd .mb.file "Snap Store Page..." SNAPSTORE
 .mb.file add separator
+mcmd .mb.file "Save My Settings..." EXPORTSETTINGS
+mcmd .mb.file "Load My Settings..." IMPORTSETTINGS
+.mb.file add separator
 # a Fancy Pencil Workstation has no desktop: the computer is shut down and restarted from here
 if {[info exists ::env(FANCYPENCIL_WORKSTATION)] && $::env(FANCYPENCIL_WORKSTATION) eq "1"} {
     mcmd .mb.file "Restart Computer..." RESTARTCOMPUTER
@@ -4464,15 +4467,21 @@ proc fd_places {} {
     }
     set user [file tail $home]
     catch { set user $::tcl_platform(user) }
+    set net [fd_network]
+    set netdirs [lmap n $net {lindex $n 1}]
     set drives {}
     foreach root [list /run/media/$user /media/$user /mnt] {
         foreach d [lsort -dictionary [glob -nocomplain -type d -directory $root *]] {
-            lappend drives [list [file tail $d] $d]
+            if {[lsearch -exact $netdirs $d] < 0} { lappend drives [list [file tail $d] $d] }
         }
     }
     if {[llength $drives]} {
         lappend out [list "-" "Drives"]
         set out [concat $out $drives]
+    }
+    if {[llength $net]} {
+        lappend out [list "-" "Network"]
+        set out [concat $out $net]
     }
     lappend out [list "Computer" /]
     set rec {}
@@ -4480,6 +4489,43 @@ proc fd_places {} {
     if {[llength $rec]} {
         lappend out [list "-" "Recent folders"]
         set out [concat $out [lrange $rec 0 7]]
+    }
+    return $out
+}
+# shared folders on the network: those in /etc/fstab (a workstation's add-share.sh puts them
+# there, connected when first opened), others mounted now (/proc/mounts), and the ones opened in
+# the desktop's Files window (GNOME keeps them under $XDG_RUNTIME_DIR/gvfs)
+proc fd_network {} {
+    set out {}; set seen {}
+    foreach f {/etc/fstab /proc/mounts} {
+        if {[catch {set fd [open $f]}]} continue
+        set text [read $fd]; close $fd
+        foreach line [split $text \n] {
+            if {[regexp {^\s*#} $line]} continue
+            if {[llength [set w [regexp -all -inline {\S+} $line]]] < 3} continue
+            lassign $w src dir type
+            if {![regexp {^(cifs|smb3|smbfs|nfs|nfs4|fuse\.sshfs|sshfs|davfs|fuse\.rclone)$} $type]} continue
+            set dir [string map {\\040 " "} $dir]; set src [string map {\\040 " "} $src]
+            if {[lsearch -exact $seen $dir] >= 0 || $dir eq "/" || $dir eq "none"} continue
+            lappend seen $dir
+            set server ""
+            if {[regexp {^//([^/]+)/} $src -> server] || [regexp {^(?:[^@]*@)?([^:/]+):} $src -> server]} {}
+            lappend out [list [expr {$server ne "" ? "[file tail $dir] on $server" : [file tail $dir]}] $dir]
+        }
+    }
+    set run ""
+    if {[info exists ::env(XDG_RUNTIME_DIR)]} { set run $::env(XDG_RUNTIME_DIR) }
+    if {$run eq ""} { return $out }
+    foreach d [lsort -dictionary [glob -nocomplain -type d -directory [file join $run gvfs] *]] {
+        set n [file tail $d]
+        set kv {}
+        foreach pair [split [lindex [split $n :] 1] ,] {
+            lassign [split $pair =] k v
+            dict set kv $k [string map {%20 " "} $v]
+        }
+        set host [expr {[dict exists $kv server] ? [dict get $kv server] : ([dict exists $kv host] ? [dict get $kv host] : "")}]
+        set lbl [expr {[dict exists $kv share] ? "[dict get $kv share] on $host" : ($host ne "" ? $host : $n)}]
+        lappend out [list $lbl $d]
     }
     return $out
 }
@@ -5197,6 +5243,7 @@ set ::scr_panels {draw Draw modify Modify annot Annotation layers Layers props P
 foreach {n t} $::scr_panels { set ::scr_on($n) 1 }
 set ::scr_hist 5
 proc scr_save {} {
+    if {[info exists ::settings_frozen]} return
     catch {
         file mkdir [file dirname $::scr_file]
         set fd [open $::scr_file w]

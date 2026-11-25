@@ -1,0 +1,105 @@
+;; File > Save My Settings / Load My Settings (0.5.33): carrying your own Fancy Pencil to another computer.
+;; Run: sbcl --non-interactive --load load.lisp --load tests/test-mysettings.lisp
+(require :sb-posix)
+(in-package :fancy-pencil)
+(defvar *said* nil)
+(setf *ui* :tty *output-fn* (lambda (s) (push s *said*) s))
+(load-aliases) (current-doc)
+(defvar *pass* 0) (defvar *fail* 0)
+(defmacro chk (name form expect)
+  `(let ((v (handler-case ,form (error (c) (format nil "ERROR ~A" c)))))
+     (if (equalp v ,expect) (incf *pass*) (incf *fail*))
+     (format t "~:[FAIL~;ok  ~] ~A: ~S~%" (equalp v ,expect) ,name v)))
+(defun al (s) (alisp-eval-string s))
+(defun said (part) (and (search part (format nil "~{~A~}" (reverse *said*))) t))
+(defun put (path text)
+  (ensure-directories-exist path)
+  (with-open-file (o path :direction :output :if-exists :supersede) (write-string text o)))
+(defun slurp (path)
+  (and (probe-file path) (with-open-file (i path) (let ((s (make-string (file-length i)))) (subseq s 0 (read-sequence s i))))))
+(defvar *real-home* (getenv "HOME"))
+(defun home (h) (run-shell (format nil "mkdir -p ~A" h)) (sb-posix:setenv "HOME" (string-right-trim "/" h) 1))
+
+(run-shell "rm -rf /tmp/fp-set; mkdir -p /tmp/fp-set")
+
+;; ---- the first computer (the Lenovo): a personalized Fancy Pencil
+(home "/tmp/fp-set/lenovo/")
+(chk "nothing of your own yet" (settings-members) nil)
+(setf *said* nil) (al "(command \"exportsettings\" \"/tmp/fp-set/none.tar.gz\")")
+(chk "  ...Save still keeps the options" (list (said "They are: options and colors.") (and (probe-file "/tmp/fp-set/none.tar.gz") t)) '(t t))
+
+(setf (sysvar "BKGCOLOR") "#f6f3ea" (sysvar "CURSORSIZE") 37 (sysvar "PICKBOX") 9)
+(put "/tmp/fp-set/lenovo/.config/fancypencil/fancypencil.pgp" (format nil "ZZL, *LINE~%QQ, *CIRCLE~%"))
+(put "/tmp/fp-set/lenovo/.config/fancypencil/toolbars.tcl" "# my toolbars")
+(put "/tmp/fp-set/lenovo/.config/fancypencil/screen.tcl" "history 9")
+(put "/tmp/fp-set/lenovo/.config/fancypencil/plot.lisp" "(:plotter \"office\")")
+(put "/tmp/fp-set/lenovo/.config/fancypencil/fonts/MyFont.ttf" "font")
+(put "/tmp/fp-set/lenovo/.config/fancypencil/memory.conf" "heap=51200")
+(put "/tmp/fp-set/lenovo/.config/fancypencil/recent.lisp" "(\"/home/jack/x.dwg\")")
+(put "/tmp/fp-set/lenovo/.fancypencil.lsp" "(setq mystart 1)")
+(chk "what is carried (not memory.conf or the recent files)"
+     (progn (save-prefs) (settings-members))
+     '(".config/fancypencil/fancypencil.pgp" ".config/fancypencil/fonts/MyFont.ttf" ".config/fancypencil/plot.lisp"
+       ".config/fancypencil/screen.tcl" ".config/fancypencil/settings.lisp" ".config/fancypencil/toolbars.tcl"
+       ".fancypencil.lsp"))
+(chk "the file's name" (and (search "Fancy Pencil Settings " (settings-file-name)) (search ".tar.gz" (settings-file-name)) t) t)
+(setf *said* nil) (al "(command \"exportsettings\" \"/tmp/fp-set/stick/My Settings.tar.gz\")")
+(chk "saved (the folder is made, spaces are fine)" (and (probe-file "/tmp/fp-set/stick/My Settings.tar.gz") t) t)
+(chk "  ...and it says what is in it" (said "command aliases, plot settings, ribbon and window layout, options and colors, toolbars, start-up Lisp file") t)
+(chk "  ...fonts counted" (said "1 font file") t)
+(chk "a plain tar.gz with home-relative paths"
+     (multiple-value-bind (c text) (run-shell "tar tzf '/tmp/fp-set/stick/My Settings.tar.gz' | sort | tr '\\n' ' '")
+       (declare (ignore c)) text)
+     ".config/fancypencil/fancypencil.pgp .config/fancypencil/fonts/MyFont.ttf .config/fancypencil/plot.lisp .config/fancypencil/screen.tcl .config/fancypencil/settings.lisp .config/fancypencil/toolbars.tcl .fancypencil.lsp ")
+(setf *said* nil) (al "(command \"savesettings\" \"/tmp/fp-set/stick/second\")")
+(chk "a name without .tar.gz gets it" (and (probe-file "/tmp/fp-set/stick/second.tar.gz") t) t)
+
+;; ---- a new computer: Fancy Pencil as it came, plus a setting of its own
+(home "/tmp/fp-set/acer/")
+(setf (sysvar "BKGCOLOR") "#212830" (sysvar "CURSORSIZE") 100 (sysvar "PICKBOX") 5)
+(put "/tmp/fp-set/acer/.config/fancypencil/memory.conf" "heap=6000")
+(put "/tmp/fp-set/acer/.config/fancypencil/toolbars.tcl" "# acer toolbars")
+(setf *said* nil) (al "(command \"importsettings\" \"/tmp/fp-set/stick/My Settings.tar.gz\" \"No\")")
+(chk "Load asks first, and says what's in it" (list (said "command aliases, plot settings") (said "Load them?")) '(t t))
+(chk "  ...No: nothing changed" (list (said "Nothing was changed") (slurp "/tmp/fp-set/acer/.config/fancypencil/toolbars.tcl"))
+     '(t "# acer toolbars"))
+(setf *said* nil) (al "(command \"importsettings\" \"/tmp/fp-set/stick/My Settings.tar.gz\" \"Yes\")")
+(chk "loaded" (said "Your settings are loaded") t)
+(chk "the files are in place"
+     (mapcar (lambda (f) (slurp (concatenate 'string "/tmp/fp-set/acer/" f)))
+             '(".config/fancypencil/toolbars.tcl" ".config/fancypencil/screen.tcl" ".config/fancypencil/fonts/MyFont.ttf" ".fancypencil.lsp"))
+     '("# my toolbars" "history 9" "font" "(setq mystart 1)"))
+(chk "this computer's memory setting is kept" (slurp "/tmp/fp-set/acer/.config/fancypencil/memory.conf") "heap=6000")
+(chk "options applied at once" (list (sysvar "BKGCOLOR") (sysvar "CURSORSIZE") (sysvar "PICKBOX")) '("#f6f3ea" 37 9))
+(chk "aliases applied at once" (list (gethash "ZZL" *aliases*) (gethash "QQ" *aliases*)) '("LINE" "CIRCLE"))
+(chk "the old settings were saved first"
+     (let ((b (directory "/tmp/fp-set/acer/.cache/fancypencil/backups/settings-before-load-*.tar.gz")))
+       (and b (multiple-value-bind (c text) (run-shell (format nil "tar xzOf ~A .config/fancypencil/toolbars.tcl" (shell-quote (namestring (first b)))))
+                (declare (ignore c)) text)))
+     "# acer toolbars")
+(chk "no leftovers in /tmp" (directory "/tmp/fancypencil-settings-in-*/") nil)
+
+;; ---- files that aren't (only) settings
+(put "/tmp/fp-set/evil/.config/fancypencil/screen.tcl" "evil screen")
+(put "/tmp/fp-set/evil/.bashrc" "evil")
+(put "/tmp/fp-set/evil/.config/fancypencil/memory.conf" "heap=999999")
+(run-shell "cd /tmp/fp-set/evil && tar czf ../mixed.tar.gz ./.bashrc ./.config/fancypencil/screen.tcl ./.config/fancypencil/memory.conf .config/fancypencil")
+(run-shell "cd /tmp/fp-set && tar czf odd.tar.gz -P /tmp/fp-set/evil/.bashrc")
+(setf *said* nil) (al "(command \"importsettings\" \"/tmp/fp-set/mixed.tar.gz\" \"Yes\")")
+(chk "a mixed file: only the settings come out (made with ./ and folder entries)"
+     (list (slurp "/tmp/fp-set/acer/.config/fancypencil/screen.tcl") (probe-file "/tmp/fp-set/acer/.bashrc")
+           (slurp "/tmp/fp-set/acer/.config/fancypencil/memory.conf"))
+     '("evil screen" nil "heap=6000"))
+(setf *said* nil) (al "(command \"importsettings\" \"/tmp/fp-set/odd.tar.gz\")")
+(chk "no settings in it: refused" (said "has no Fancy Pencil settings") t)
+(put "/tmp/fp-set/notatar.tar.gz" "hello")
+(setf *said* nil) (al "(command \"importsettings\" \"/tmp/fp-set/notatar.tar.gz\")")
+(chk "not a tar.gz: refused" (said "isn't a Fancy Pencil settings file") t)
+(chk "names that could escape are refused"
+     (mapcar #'settings-member-ok-p '("../x" "/etc/passwd" ".config/fancypencil/../../.bashrc" ".config/fancypencil/memory.conf"
+                                      ".bashrc" ".config/fancypencil/settings.lisp" ".fancypencil.lsp"))
+     '(nil nil nil nil nil t t))
+
+(sb-posix:setenv "HOME" *real-home* 1)
+(format t "~%My Settings tests: ~D passed, ~D failed.~%" *pass* *fail*)
+(sb-ext:exit :code (if (zerop *fail*) 0 1))
