@@ -47,6 +47,13 @@ On the workstation, Fancy Pencil's **File** menu has **Restart Computer** and **
 - **Maintenance:** Ctrl+Alt+F3 gives a text login (use your own account; Ctrl+Alt+F1 goes back to
   Fancy Pencil), or restart and choose **Ubuntu** for the desktop.
 
+## When something is wrong
+
+`collect-log.sh` writes a report (the session, the windows on the screen, the logs of Fancy Pencil and
+Xorg). Run it while the problem shows: Ctrl+Alt+F3, log in with your own account, and
+`sudo sh collect-log.sh` from this folder - or over SSH from another computer. The report is
+`workstation-report.txt` beside the script and in `/var/tmp`.
+
 ## Taking it out
 
     sudo sh setup-workstation.sh --remove
@@ -63,7 +70,8 @@ its drawings are kept (`sudo deluser --remove-home fancypencil` deletes them).
   - **x11** (the default): Xorg with Openbox as a kiosk window manager (`xsession`,
     `openbox-rc.xml`): no desktop menu or window-manager keys, Fancy Pencil's main window maximized
     without borders, dialogs on top with a title bar to move them by. Fancy Pencil is a Tk (X11)
-    program, and this is the setting Tk is made for.
+    program, and this is the setting Tk is made for. (0.5.31's Openbox settings took every left
+    click for themselves - nothing in Fancy Pencil responded to the mouse; 0.5.32 fixes that.)
   - **cage** (`--cage`): a Wayland display server that shows one program full screen; Fancy Pencil
     runs in it through Xwayland. The first trial of 0.5.30 froze when Options opened there; 0.5.31
     no longer waits for a dialog to be reported visible, and never grabs one that isn't.

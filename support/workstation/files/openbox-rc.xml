@@ -23,9 +23,9 @@
   <mouse>
     <dragThreshold>3</dragThreshold>
     <doubleClickTime>300</doubleClickTime>
-    <context name="Frame">
-      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
-    </context>
+    <!-- No plain-button "Frame" bindings: Openbox takes the buttons of a Frame binding for the whole
+         window, before the program in it, so a plain Left there swallowed every click (0.5.31:
+         the menu bar and Options didn't respond). The Client bindings below pass the click on. -->
     <context name="Client">
       <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
       <mousebind button="Middle" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
